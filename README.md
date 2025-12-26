@@ -14,8 +14,6 @@ Lidify is built for music lovers who want the convenience of streaming services 
 
 ## A Note on Native Apps
 
-I got a little ambitious trying to ship both a polished web app AND a native Android app at the same time. Turns out, trying to half-ass two things is worse than whole-assing one thing.
-
 Lidify's web app and PWA are the priority. Once the core experience is solid and properly tested, a native mobile app (likely React Native) is on the roadmap. The PWA works great for most cases for now.
 
 Thanks for your patience while I work through this.
@@ -314,23 +312,24 @@ ALLOWED_ORIGINS=http://localhost:3030,https://lidify.yourdomain.com
 
 Lidify uses several sensitive environment variables. Never commit your `.env` file.
 
-| Variable                 | Purpose                        | Required        |
-| ------------------------ | ------------------------------ | --------------- |
-| `SESSION_SECRET`         | Session encryption (32+ chars) | Yes             |
-| `SETTINGS_ENCRYPTION_KEY`| Encrypts stored credentials    | Recommended     |
-| `SOULSEEK_USERNAME`      | Soulseek login                 | If using Soulseek |
-| `SOULSEEK_PASSWORD`      | Soulseek password              | If using Soulseek |
-| `LIDARR_API_KEY`         | Lidarr integration             | If using Lidarr |
-| `OPENAI_API_KEY`         | AI features                    | Optional        |
-| `LASTFM_API_KEY`         | Artist recommendations         | Optional        |
-| `FANART_API_KEY`         | Artist images                  | Optional        |
+| Variable                  | Purpose                        | Required          |
+| ------------------------- | ------------------------------ | ----------------- |
+| `SESSION_SECRET`          | Session encryption (32+ chars) | Yes               |
+| `SETTINGS_ENCRYPTION_KEY` | Encrypts stored credentials    | Recommended       |
+| `SOULSEEK_USERNAME`       | Soulseek login                 | If using Soulseek |
+| `SOULSEEK_PASSWORD`       | Soulseek password              | If using Soulseek |
+| `LIDARR_API_KEY`          | Lidarr integration             | If using Lidarr   |
+| `OPENAI_API_KEY`          | AI features                    | Optional          |
+| `LASTFM_API_KEY`          | Artist recommendations         | Optional          |
+| `FANART_API_KEY`          | Artist images                  | Optional          |
 
 ### VPN Configuration (Optional)
 
 If using Mullvad VPN for Soulseek:
-- Place WireGuard config in `backend/mullvad/` (gitignored)
-- Never commit VPN credentials or private keys
-- The `*.conf` and `key.txt` patterns are already in .gitignore
+
+-   Place WireGuard config in `backend/mullvad/` (gitignored)
+-   Never commit VPN credentials or private keys
+-   The `*.conf` and `key.txt` patterns are already in .gitignore
 
 ### Generating Secrets
 
@@ -344,9 +343,9 @@ openssl rand -hex 32
 
 ### Network Security
 
-- Lidify is designed for self-hosted LAN use
-- For external access, use a reverse proxy with HTTPS
-- Configure `ALLOWED_ORIGINS` for your domain
+-   Lidify is designed for self-hosted LAN use
+-   For external access, use a reverse proxy with HTTPS
+-   Configure `ALLOWED_ORIGINS` for your domain
 
 ---
 
@@ -681,3 +680,4 @@ If you encounter issues or have questions:
 ---
 
 _Built with love for the self-hosted community._
+
