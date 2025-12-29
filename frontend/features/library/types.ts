@@ -7,6 +7,7 @@ export interface Artist {
   coverArt?: string;
   albumCount?: number;
   trackCount?: number;
+  lastSynced?: string;
 }
 
 export interface Album {
@@ -14,6 +15,7 @@ export interface Album {
   title: string;
   coverArt?: string;
   year?: number;
+  lastSynced?: string;
   artist?: {
     id: string;
     mbid?: string;

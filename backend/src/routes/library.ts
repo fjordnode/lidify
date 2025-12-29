@@ -781,6 +781,7 @@ router.get("/artists", async (req, res) => {
                     mbid: true,
                     name: true,
                     heroUrl: true,
+                    lastSynced: true,
                     albums: {
                         where: {
                             ...(albumLocationFilter
@@ -811,6 +812,7 @@ router.get("/artists", async (req, res) => {
                 heroUrl: coverArt,
                 coverArt, // Alias for frontend consistency
                 albumCount: artist.albums.length,
+                lastSynced: artist.lastSynced,
             };
         });
 
