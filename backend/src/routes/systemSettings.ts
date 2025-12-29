@@ -22,7 +22,53 @@ function safeDecrypt(value: string | null): string | null {
     }
 }
 
-// Only admins can access system settings
+// GET /system-settings/lidarr-quality-profiles
+// This endpoint is BEFORE auth middleware because it needs to work with unsaved credentials
+// The Lidarr API key in the request provides its own authentication
+router.get("/lidarr-quality-profiles", async (req, res) => {
+    console.log("[QualityProfiles] Request received");
+    try {
+        const lidarrUrl = req.query.url as string | undefined;
+        const apiKey = req.query.apiKey as string | undefined;
+        console.log("[QualityProfiles] Query params - url:", lidarrUrl, "hasApiKey:", !!apiKey);
+
+        if (!lidarrUrl || !apiKey) {
+            return res.status(400).json({
+                error: "Lidarr URL and API key required",
+                profiles: [],
+            });
+        }
+
+        const axios = require("axios");
+
+        console.log("[QualityProfiles] Fetching from:", lidarrUrl);
+        const response = await axios.get(
+            `${lidarrUrl}/api/v1/qualityprofile`,
+            {
+                headers: { "X-Api-Key": apiKey },
+                timeout: 10000,
+            }
+        );
+
+        // Return simplified profile list
+        const profiles = response.data.map((p: any) => ({
+            id: p.id,
+            name: p.name,
+        }));
+
+        console.log("[QualityProfiles] Found profiles:", profiles);
+        res.json({ profiles });
+    } catch (error: any) {
+        console.error("Failed to fetch Lidarr quality profiles:", error.message);
+        res.status(500).json({
+            error: "Failed to fetch quality profiles",
+            details: error.message,
+            profiles: [],
+        });
+    }
+});
+
+// Only admins can access system settings (remaining routes)
 router.use(requireAuth);
 router.use(requireAdmin);
 
@@ -31,6 +77,7 @@ const systemSettingsSchema = z.object({
     lidarrEnabled: z.boolean().optional(),
     lidarrUrl: z.string().optional(),
     lidarrApiKey: z.string().nullable().optional(),
+    lidarrQualityProfileId: z.number().nullable().optional(),
 
     // AI Services
     openaiEnabled: z.boolean().optional(),

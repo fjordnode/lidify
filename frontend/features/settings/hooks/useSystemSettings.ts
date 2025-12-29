@@ -7,6 +7,7 @@ const defaultSystemSettings: SystemSettings = {
     lidarrEnabled: true,
     lidarrUrl: "http://localhost:8686",
     lidarrApiKey: "",
+    lidarrQualityProfileId: null,
     openaiEnabled: false,
     openaiApiKey: "",
     openaiModel: "gpt-4",

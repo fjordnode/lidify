@@ -17,6 +17,7 @@ export interface SystemSettings {
     lidarrEnabled: boolean;
     lidarrUrl: string;
     lidarrApiKey: string;
+    lidarrQualityProfileId: number | null;
     // AI Services
     openaiEnabled: boolean;
     openaiApiKey: string;

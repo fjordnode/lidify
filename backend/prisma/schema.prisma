@@ -77,9 +77,10 @@ model SystemSettings {
 
   // === Download Services ===
   // Lidarr
-  lidarrEnabled Boolean @default(true)
-  lidarrUrl     String? @default("http://localhost:8686")
-  lidarrApiKey  String? // Encrypted
+  lidarrEnabled          Boolean @default(true)
+  lidarrUrl              String? @default("http://localhost:8686")
+  lidarrApiKey           String? // Encrypted
+  lidarrQualityProfileId Int?    // Quality profile ID to use for downloads (fetched from Lidarr)
 
   // === AI Services ===
   // OpenAI (for future AI features)

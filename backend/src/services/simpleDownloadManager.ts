@@ -69,9 +69,26 @@ class SimpleDownloadManager {
                     albumMbid
                 );
 
-                if (releaseGroup?.["artist-credit"]?.[0]?.artist?.id) {
-                    artistMbid = releaseGroup["artist-credit"][0].artist.id;
-                    console.log(`   Found artist MBID: ${artistMbid}`);
+                if (releaseGroup?.["artist-credit"]?.[0]?.artist) {
+                    const mbArtist = releaseGroup["artist-credit"][0].artist;
+                    const mbArtistName = mbArtist.name || "";
+                    const mbArtistId = mbArtist.id;
+
+                    // Validate artist name matches before trusting the MBID
+                    // This prevents downloading wrong artist when MusicBrainz data is incorrect
+                    const requestedNorm = artistName.toLowerCase().trim();
+                    const mbNorm = mbArtistName.toLowerCase().trim();
+
+                    if (mbNorm === requestedNorm || mbNorm.includes(requestedNorm) || requestedNorm.includes(mbNorm)) {
+                        artistMbid = mbArtistId;
+                        console.log(`   Found artist MBID: ${artistMbid} (${mbArtistName})`);
+                    } else {
+                        console.warn(`   Artist name mismatch - ignoring MBID`);
+                        console.warn(`   Requested: "${artistName}"`);
+                        console.warn(`   MusicBrainz returned: "${mbArtistName}" (${mbArtistId})`);
+                        console.warn(`   Will use name-based matching instead`);
+                        // Don't set artistMbid - let Lidarr use name-based matching
+                    }
                 } else {
                     console.warn(
                         `   Could not extract artist MBID from release group`

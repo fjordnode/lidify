@@ -4,7 +4,7 @@ import { useAudio } from "@/lib/audio-context";
 import { api } from "@/lib/api";
 import Image from "next/image";
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import {
     Play,
     Pause,
@@ -17,7 +17,10 @@ import {
     Repeat1,
     AudioWaveform,
     Loader2,
+    Volume2,
+    VolumeX,
 } from "lucide-react";
+import { DeviceSelector } from "./DeviceSelector";
 import { formatTime } from "@/utils/formatTime";
 import { cn } from "@/utils/cn";
 import { useIsMobile, useIsTablet } from "@/hooks/useMediaQuery";
@@ -52,7 +55,16 @@ export function OverlayPlayer() {
         startVibeMode,
         stopVibeMode,
         duration: playbackDuration,
+        isActivePlayer,
+        activePlayerState,
+        volume,
+        setVolume,
     } = useAudio();
+
+    // Get display volume - use remote volume when controlling remote device
+    const displayVolume = (!isActivePlayer && activePlayerState?.volume !== undefined)
+        ? activePlayerState.volume
+        : volume;
     
     // Get current track's audio features for vibe comparison
     const currentTrackFeatures = queue[currentIndex]?.audioFeatures || null;
@@ -65,6 +77,26 @@ export function OverlayPlayer() {
     const touchStartX = useRef<number | null>(null);
     const [swipeOffset, setSwipeOffset] = useState(0);
     const [isVibeLoading, setIsVibeLoading] = useState(false);
+
+    // Local volume state for smooth slider interaction
+    const [localVolume, setLocalVolume] = useState(displayVolume * 100);
+    const lastSetVolumeRef = useRef<number | null>(null);
+
+    // Only sync from remote if it's a different value than what we set
+    useEffect(() => {
+        const remoteVol = Math.round(displayVolume * 100);
+        const lastSet = lastSetVolumeRef.current;
+        // Only update if remote changed to something different than what we set
+        if (lastSet === null || Math.abs(remoteVol - lastSet) > 2) {
+            setLocalVolume(remoteVol);
+        }
+    }, [displayVolume]);
+
+    const handleVolumeChange = (value: number) => {
+        setLocalVolume(value);
+        lastSetVolumeRef.current = value;
+        setVolume(value / 100);
+    };
 
     const duration = (() => {
         if (playbackType === "podcast" && currentPodcast?.duration) {
@@ -82,9 +114,16 @@ export function OverlayPlayer() {
         );
     })();
 
-    if (!currentTrack && !currentAudiobook && !currentPodcast) return null;
+    // When controlling a remote device, also show overlay if remote has a track
+    if (!currentTrack && !currentAudiobook && !currentPodcast &&
+        !(activePlayerState?.currentTrack && !isActivePlayer)) return null;
 
+    // When controlling a remote device, use remote state for display
     const displayTime = (() => {
+        // If controlling a remote device, use the remote device's currentTime
+        if (!isActivePlayer && activePlayerState?.currentTime !== undefined) {
+            return activePlayerState.currentTime;
+        }
         if (currentTime > 0) return currentTime;
         if (playbackType === "audiobook" && currentAudiobook?.progress?.currentTime) {
             return currentAudiobook.progress.currentTime;
@@ -95,7 +134,17 @@ export function OverlayPlayer() {
         return currentTime;
     })();
 
-    const progress = duration > 0 ? Math.min(100, Math.max(0, (displayTime / duration) * 100)) : 0;
+    // Use remote duration when controlling a remote device
+    const displayDuration = (!isActivePlayer && activePlayerState?.currentTrack?.duration)
+        ? activePlayerState.currentTrack.duration
+        : duration;
+
+    // Use remote isPlaying state when controlling a remote device
+    const displayIsPlaying = (!isActivePlayer && activePlayerState)
+        ? activePlayerState.isPlaying
+        : isPlaying;
+
+    const progress = displayDuration > 0 ? Math.min(100, Math.max(0, (displayTime / displayDuration) * 100)) : 0;
     const seekEnabled = canSeek;
     const canSkip = playbackType === "track";
 
@@ -105,7 +154,7 @@ export function OverlayPlayer() {
         const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
         const x = clientX - rect.left;
         const percentage = x / rect.width;
-        const time = percentage * duration;
+        const time = percentage * displayDuration;
         seek(time);
     };
 
@@ -190,6 +239,7 @@ export function OverlayPlayer() {
     };
 
     // Get current media info
+    // When controlling a remote device, use activePlayerState for track info
     let title = "";
     let subtitle = "";
     let coverUrl: string | null = null;
@@ -197,15 +247,36 @@ export function OverlayPlayer() {
     let artistLink: string | null = null;
     let mediaLink: string | null = null;
 
-    if (playbackType === "track" && currentTrack) {
-        title = currentTrack.title;
-        subtitle = currentTrack.artist?.name || "Unknown Artist";
-        coverUrl = currentTrack.album?.coverArt
-            ? api.getCoverArtUrl(currentTrack.album.coverArt, 500)
-            : null;
-        albumLink = currentTrack.album?.id ? `/album/${currentTrack.album.id}` : null;
-        artistLink = currentTrack.artist?.id ? `/artist/${currentTrack.artist.mbid || currentTrack.artist.id}` : null;
-        mediaLink = albumLink;
+    // Use remote track info when controlling another device
+    const displayTrack = (!isActivePlayer && activePlayerState?.currentTrack)
+        ? activePlayerState.currentTrack
+        : currentTrack;
+
+    // Check for track playback - either local track type OR remote device has a track
+    const isTrackPlayback = playbackType === "track" || (!isActivePlayer && activePlayerState?.currentTrack);
+    if (isTrackPlayback && displayTrack) {
+        title = displayTrack.title;
+        // Handle both local Track type (has artist object) and remote track (has artist string)
+        subtitle = typeof displayTrack.artist === 'string'
+            ? displayTrack.artist
+            : displayTrack.artist?.name || "Unknown Artist";
+        // Handle coverArt - remote sends coverArt directly, local has album.coverArt
+        // Local Track has album: { coverArt: string }, remote has coverArt: string directly
+        const album = (displayTrack as any).album;
+        const coverArt = (album && typeof album === 'object' && album.coverArt)
+            ? album.coverArt
+            : (displayTrack as any).coverArt;
+        coverUrl = coverArt ? api.getCoverArtUrl(coverArt, 500) : null;
+        // Links only work for local tracks
+        if (!isActivePlayer && activePlayerState?.currentTrack) {
+            albumLink = null;
+            artistLink = null;
+            mediaLink = null;
+        } else if (currentTrack) {
+            albumLink = currentTrack.album?.id ? `/album/${currentTrack.album.id}` : null;
+            artistLink = currentTrack.artist?.id ? `/artist/${currentTrack.artist.mbid || currentTrack.artist.id}` : null;
+            mediaLink = albumLink;
+        }
     } else if (playbackType === "audiobook" && currentAudiobook) {
         title = currentAudiobook.title;
         subtitle = currentAudiobook.author;
@@ -365,7 +436,7 @@ export function OverlayPlayer() {
                         </div>
                         <div className="flex justify-between text-xs text-gray-500 font-medium tabular-nums">
                             <span>{formatTime(displayTime)}</span>
-                            <span>{formatTime(duration)}</span>
+                            <span>{formatTime(displayDuration)}</span>
                         </div>
                     </div>
 
@@ -384,11 +455,11 @@ export function OverlayPlayer() {
                         </button>
 
                         <button
-                            onClick={isPlaying ? pause : resume}
+                            onClick={displayIsPlaying ? pause : resume}
                             className="w-16 h-16 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition-all shadow-xl"
-                            title={isPlaying ? "Pause" : "Play"}
+                            title={displayIsPlaying ? "Pause" : "Play"}
                         >
-                            {isPlaying ? (
+                            {displayIsPlaying ? (
                                 <Pause className="w-7 h-7" />
                             ) : (
                                 <Play className="w-7 h-7 ml-1" />
@@ -465,12 +536,59 @@ export function OverlayPlayer() {
                                 <AudioWaveform className="w-5 h-5" />
                             )}
                         </button>
+
+                        {/* Device Selector for remote playback */}
+                        <DeviceSelector />
+                    </div>
+
+                    {/* Volume Slider - smooth local state */}
+                    <div
+                        className="flex items-center gap-3 mt-6"
+                        onTouchStart={(e) => e.stopPropagation()}
+                        onTouchMove={(e) => e.stopPropagation()}
+                        onTouchEnd={(e) => e.stopPropagation()}
+                    >
+                        <button
+                            onClick={() => {
+                                const newVol = localVolume === 0 ? 100 : 0;
+                                setLocalVolume(newVol);
+                                setVolume(newVol / 100);
+                            }}
+                            className="text-gray-400 hover:text-white transition-colors"
+                            title={localVolume === 0 ? "Unmute" : "Mute"}
+                        >
+                            {localVolume === 0 ? (
+                                <VolumeX className="w-5 h-5" />
+                            ) : (
+                                <Volume2 className="w-5 h-5" />
+                            )}
+                        </button>
+                        <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={localVolume}
+                            onChange={(e) => handleVolumeChange(parseInt(e.target.value))}
+                            className="flex-1 h-1 bg-white/20 rounded-full appearance-none cursor-pointer
+                                [&::-webkit-slider-thumb]:appearance-none
+                                [&::-webkit-slider-thumb]:w-4
+                                [&::-webkit-slider-thumb]:h-4
+                                [&::-webkit-slider-thumb]:rounded-full
+                                [&::-webkit-slider-thumb]:bg-white
+                                [&::-webkit-slider-thumb]:shadow-md
+                                [&::-moz-range-thumb]:w-4
+                                [&::-moz-range-thumb]:h-4
+                                [&::-moz-range-thumb]:rounded-full
+                                [&::-moz-range-thumb]:bg-white
+                                [&::-moz-range-thumb]:border-0"
+                        />
+                        <span className="text-gray-400 text-sm tabular-nums w-10 text-right">
+                            {Math.round(localVolume)}%
+                        </span>
                     </div>
                 </div>
             </div>
-            
-            {/* Safe area padding at bottom */}
-            <div style={{ height: 'env(safe-area-inset-bottom)' }} />
+
         </div>
     );
 }

@@ -8,6 +8,7 @@ import { ConditionalAudioProvider } from "@/components/providers/ConditionalAudi
 import { AuthenticatedLayout } from "@/components/layout/AuthenticatedLayout";
 import { QueryProvider } from "@/lib/query-client";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
+import { Toaster } from "sonner";
 
 const montserrat = Montserrat({
     weight: ["300", "400", "500", "600", "700", "800"],
@@ -55,6 +56,25 @@ export default function RootLayout({
                 className={`${montserrat.variable} antialiased`}
                 style={{ fontFamily: "var(--font-montserrat)" }}
             >
+                {/* Sonner toast container - positioned above player controls */}
+                <Toaster
+                    position="bottom-center"
+                    offset={120}
+                    toastOptions={{
+                        style: {
+                            background: "linear-gradient(135deg, #1a1a2e 0%, #0f0f15 100%)",
+                            border: "2px solid #f5c518",
+                            color: "#fff",
+                            padding: "16px 20px",
+                            fontSize: "16px",
+                            fontWeight: "500",
+                            boxShadow: "0 8px 32px rgba(245, 197, 24, 0.3)",
+                            borderRadius: "12px",
+                        },
+                        className: "sonner-toast-prominent",
+                    }}
+                    richColors
+                />
                 <ServiceWorkerRegistration />
                 <AuthProvider>
                     <QueryProvider>
