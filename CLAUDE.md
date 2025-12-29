@@ -24,12 +24,49 @@ Implementing a Spotify Connect-like remote playback feature that allows controll
 3. All playback commands (play/pause/next/prev/seek/volume) forward to the active player
 4. The controller shows what's playing on the remote device
 
+## Reverse Proxy Compatibility
+
+The frontend includes a custom server (`frontend/server.js`) that proxies WebSocket connections internally, eliminating the need for special reverse proxy configuration.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Docker Container                      │
+│                                                          │
+│  ┌──────────────────┐      ┌──────────────────────────┐ │
+│  │  Next.js + Proxy │      │  Express Backend         │ │
+│  │  (port 3030)     │─────►│  (port 3006)             │ │
+│  │                  │ WS   │  - REST API              │ │
+│  │  /api/socket.io  │proxy │  - Socket.io server      │ │
+│  └──────────────────┘      └──────────────────────────┘ │
+│           ▲                                              │
+└───────────│──────────────────────────────────────────────┘
+            │
+     Reverse Proxy (Traefik/nginx/Caddy)
+     - Only needs standard HTTP proxy to port 3030
+     - No special WebSocket configuration required
+
+```
+
+**How it works:**
+- `frontend/server.js` uses `http-proxy-middleware` to intercept `/api/socket.io` requests
+- WebSocket upgrade requests are proxied to the backend on port 3006
+- Users only need to expose port 3030 - no separate WebSocket routing needed
+
+**Standard reverse proxy config (example for Traefik):**
+```yaml
+labels:
+  - traefik.enable=true
+  - traefik.http.routers.lidify.rule=Host(`lidify.example.com`)
+  - traefik.http.services.lidify.loadbalancer.server.port=3030
+```
+
 ## Files Involved
 
 ### Frontend - Core Context Files
 
 | File | Purpose |
 |------|---------|
+| `frontend/server.js` | Custom Next.js server with WebSocket proxy to backend |
 | `frontend/lib/remote-playback-context.tsx` | WebSocket connection, device list, `activePlayerId` state, `isActivePlayer` flag |
 | `frontend/lib/remote-aware-audio-controls-context.tsx` | Wraps audio controls to forward commands to remote device when not active |
 | `frontend/hooks/useRemotePlaybackIntegration.ts` | Bridges remote commands with audio controls, handles state broadcasting |
