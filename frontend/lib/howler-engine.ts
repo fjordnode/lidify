@@ -431,6 +431,27 @@ class HowlerEngine {
     }
 
     /**
+     * Check if currently loading audio
+     */
+    isCurrentlyLoading(): boolean {
+        return this.isLoading;
+    }
+
+    /**
+     * Check if audio is loaded and ready to play
+     */
+    isLoaded(): boolean {
+        return this.howl !== null && !this.isLoading && this.state.duration > 0;
+    }
+
+    /**
+     * Get current source URL
+     */
+    getCurrentSrc(): string | null {
+        return this.state.currentSrc;
+    }
+
+    /**
      * Subscribe to events
      */
     on(event: HowlerEventType, callback: HowlerEventCallback): void {

@@ -173,13 +173,17 @@ class LidarrService {
                     
                     if (mbArtist) {
                         // Create a minimal Lidarr-compatible artist object
+                        // Get configured quality profile ID from settings
+                        const settings = await getSystemSettings();
+                        const qualityProfileId = settings?.lidarrQualityProfileId || 1;
+
                         const fallbackArtist: LidarrArtist = {
                             id: 0, // Will be assigned when added
                             artistName: mbArtist.name || artistName,
                             foreignArtistId: mbid,
                             artistType: mbArtist.type || "Person",
                             monitored: false,
-                            qualityProfileId: 1,
+                            qualityProfileId,
                             metadataProfileId: 1,
                             rootFolderPath: "/music",
                             tags: [],
@@ -207,13 +211,17 @@ class LidarrService {
                     const mbArtist = mbArtists?.find(a => a.id === mbid) || mbArtists?.[0];
                     
                     if (mbArtist) {
+                        // Get configured quality profile ID from settings
+                        const settings = await getSystemSettings();
+                        const qualityProfileId = settings?.lidarrQualityProfileId || 1;
+
                         const fallbackArtist: LidarrArtist = {
                             id: 0,
                             artistName: mbArtist.name || artistName,
                             foreignArtistId: mbid,
                             artistType: mbArtist.type || "Person",
                             monitored: false,
-                            qualityProfileId: 1,
+                            qualityProfileId,
                             metadataProfileId: 1,
                             rootFolderPath: "/music",
                             tags: [],
@@ -498,12 +506,16 @@ class LidarrService {
                 return exists;
             }
 
+            // Get configured quality profile ID from settings
+            const settings = await getSystemSettings();
+            const qualityProfileId = settings?.lidarrQualityProfileId || 1;
+
             // Add artist - use "existing" monitor option to ensure album catalog is fetched
             // even if we don't want to download all albums
             const artistPayload: any = {
                 ...artistData,
                 rootFolderPath: validRootFolder,
-                qualityProfileId: 1, // Uses default profile - could be made configurable via settings
+                qualityProfileId, // Uses configured profile from Lidify settings
                 metadataProfileId: 1,
                 monitored: true,
                 monitorNewItems: monitorAllAlbums ? "all" : "none",
@@ -526,15 +538,36 @@ class LidarrService {
             if (!searchForMissingAlbums) {
                 console.log(`   Triggering metadata refresh for new artist...`);
                 try {
-                    await this.client.post("/api/v1/command", {
+                    const refreshCmd = await this.client.post("/api/v1/command", {
                         name: "RefreshArtist",
                         artistId: response.data.id,
                     });
+
+                    // Wait for refresh to complete (up to 30 seconds)
+                    const commandId = refreshCmd.data?.id;
+                    if (commandId) {
+                        console.log(`   Waiting for metadata refresh...`);
+                        for (let i = 0; i < 15; i++) {
+                            await new Promise(resolve => setTimeout(resolve, 2000));
+                            try {
+                                const status = await this.client.get(`/api/v1/command/${commandId}`);
+                                if (status.data?.status === "completed") {
+                                    console.log(`   Metadata refresh completed`);
+                                    break;
+                                } else if (status.data?.status === "failed") {
+                                    console.warn(`   Metadata refresh failed`);
+                                    break;
+                                }
+                            } catch (e) {
+                                // Ignore status check errors
+                            }
+                        }
+                    }
                 } catch (refreshError) {
                     console.warn(`   Metadata refresh command failed (non-blocking)`);
                 }
             }
-            
+
             return response.data;
         } catch (error: any) {
             console.error(
@@ -632,12 +665,24 @@ class LidarrService {
             // NEW APPROACH: Add artist first, then find album in their catalog
             // This avoids the broken external album search API
 
-            // Check if artist exists
+            // Check if artist exists (by MBID first, then by name as fallback)
             const existingArtists = await this.client.get("/api/v1/artist");
             let artist = existingArtists.data.find(
                 (a: LidarrArtist) =>
                     artistMbid && a.foreignArtistId === artistMbid
             );
+
+            // Fallback: try to find by name if MBID didn't match
+            if (!artist && artistName) {
+                const normalizedName = artistName.toLowerCase().trim();
+                artist = existingArtists.data.find(
+                    (a: LidarrArtist) =>
+                        a.artistName.toLowerCase().trim() === normalizedName
+                );
+                if (artist) {
+                    console.log(`   Found artist by name match: ${artist.artistName} (ID: ${artist.id})`);
+                }
+            }
 
             let justAddedArtist = false;
 
@@ -1061,6 +1106,13 @@ class LidarrService {
                 return { success: true, message: "Artist not in Lidarr (already removed or never added)" };
             }
 
+            // Check if artist has active downloads - don't delete if so
+            const hasActive = await this.hasActiveDownloads(lidarrArtist.id);
+            if (hasActive) {
+                console.log(`[LIDARR] Skipping delete for ${lidarrArtist.artistName} - has active downloads`);
+                return { success: false, message: "Artist has active downloads in queue" };
+            }
+
             console.log(`[LIDARR] Deleting artist: ${lidarrArtist.artistName} (ID: ${lidarrArtist.id})`);
 
             // Delete the artist from Lidarr (with timeout to prevent hanging)
@@ -1479,7 +1531,37 @@ class LidarrService {
     }
 
     /**
+     * Check if an artist has active downloads in Lidarr's queue
+     */
+    async hasActiveDownloads(lidarrArtistId: number): Promise<boolean> {
+        await this.ensureInitialized();
+
+        if (!this.enabled || !this.client) {
+            return false;
+        }
+
+        try {
+            const response = await this.client.get("/api/v1/queue", {
+                params: {
+                    page: 1,
+                    pageSize: 100,
+                    includeUnknownArtistItems: false,
+                },
+                timeout: 15000,
+            });
+
+            const queueItems = response.data?.records || [];
+            // Check if any queue item belongs to this artist
+            return queueItems.some((item: any) => item.artistId === lidarrArtistId);
+        } catch (error: any) {
+            console.error("[LIDARR] Error checking queue for artist:", error.message);
+            return false; // Assume no downloads if we can't check
+        }
+    }
+
+    /**
      * Delete artist by Lidarr ID (used for cleanup)
+     * Will skip deletion if artist has active downloads in queue
      */
     async deleteArtistById(
         lidarrId: number,
@@ -1492,6 +1574,13 @@ class LidarrService {
         }
 
         try {
+            // Check if artist has active downloads - don't delete if so
+            const hasActive = await this.hasActiveDownloads(lidarrId);
+            if (hasActive) {
+                console.log(`[LIDARR] Skipping delete for artist ${lidarrId} - has active downloads`);
+                return { success: false, message: "Artist has active downloads in queue" };
+            }
+
             await this.client.delete(`/api/v1/artist/${lidarrId}`, {
                 params: {
                     deleteFiles,

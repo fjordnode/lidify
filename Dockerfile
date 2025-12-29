@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Lidify All-in-One Docker Image (Hardened)
 # Contains: Backend, Frontend, PostgreSQL, Redis, Audio Analyzer (Essentia AI)
 # Usage: docker run -d -p 3030:3030 -v /path/to/music:/music lidify/lidify

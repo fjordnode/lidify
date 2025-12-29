@@ -2,7 +2,8 @@
 
 import { useAudioState } from "@/lib/audio-state-context";
 import { useAudioPlayback } from "@/lib/audio-playback-context";
-import { useAudioControls } from "@/lib/audio-controls-context";
+import { useRemoteAwareAudioControls } from "@/lib/remote-aware-audio-controls-context";
+import { useRemotePlayback } from "@/lib/remote-playback-context";
 import { api } from "@/lib/api";
 import Image from "next/image";
 import Link from "next/link";
@@ -24,10 +25,12 @@ import {
     AudioWaveform,
     ChevronUp,
     ChevronDown,
+    Cast,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { KeyboardShortcutsTooltip } from "./KeyboardShortcutsTooltip";
+import { DeviceSelector } from "./DeviceSelector";
 import { EnhancedVibeOverlay } from "./VibeOverlayEnhanced";
 import { cn, isLocalUrl } from "@/utils/cn";
 import { formatTime } from "@/utils/formatTime";
@@ -79,7 +82,13 @@ export function FullPlayer() {
         setUpcoming,
         startVibeMode,
         stopVibeMode,
-    } = useAudioControls();
+        isActivePlayer,
+        activePlayerState,
+    } = useRemoteAwareAudioControls();
+
+    // Get remote playback info for the indicator
+    const { devices, activePlayerId } = useRemotePlayback();
+    const activeDevice = devices.find(d => d.deviceId === activePlayerId);
 
     const [isVibeLoading, setIsVibeLoading] = useState(false);
     const [isVibePanelExpanded, setIsVibePanelExpanded] = useState(false);
@@ -164,14 +173,21 @@ export function FullPlayer() {
         );
     })();
 
-    const hasMedia = !!(currentTrack || currentAudiobook || currentPodcast);
+    // When controlling a remote device, consider media from remote state
+    const hasMedia = !!(currentTrack || currentAudiobook || currentPodcast ||
+        (!isActivePlayer && activePlayerState?.currentTrack));
 
-    // For audiobooks/podcasts, show saved progress even before playback starts
-    // This provides immediate visual feedback of where the user left off
+    // When controlling a remote device, use remote state for display
+    // This syncs the progress bar and time with what's actually playing on the remote
     const displayTime = (() => {
+        // If controlling a remote device, use the remote device's currentTime
+        if (!isActivePlayer && activePlayerState?.currentTime !== undefined) {
+            return activePlayerState.currentTime;
+        }
+
         // If we're actively playing or have seeked, use the live currentTime
         if (currentTime > 0) return currentTime;
-        
+
         // Otherwise, show saved progress for audiobooks/podcasts
         if (playbackType === "audiobook" && currentAudiobook?.progress?.currentTime) {
             return currentAudiobook.progress.currentTime;
@@ -179,11 +195,21 @@ export function FullPlayer() {
         if (playbackType === "podcast" && currentPodcast?.progress?.currentTime) {
             return currentPodcast.progress.currentTime;
         }
-        
+
         return currentTime;
     })();
 
-    const progress = duration > 0 ? Math.min(100, Math.max(0, (displayTime / duration) * 100)) : 0;
+    // Use remote duration when controlling a remote device
+    const displayDuration = (!isActivePlayer && activePlayerState?.currentTrack?.duration)
+        ? activePlayerState.currentTrack.duration
+        : duration;
+
+    // Use remote isPlaying state when controlling a remote device
+    const displayIsPlaying = (!isActivePlayer && activePlayerState)
+        ? activePlayerState.isPlaying
+        : isPlaying;
+
+    const progress = displayDuration > 0 ? Math.min(100, Math.max(0, (displayTime / displayDuration) * 100)) : 0;
 
     const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
         // Don't allow seeking if canSeek is false (uncached podcast)
@@ -194,7 +220,7 @@ export function FullPlayer() {
         const rect = e.currentTarget.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const percentage = x / rect.width;
-        const time = percentage * duration;
+        const time = percentage * displayDuration;
         seek(time);
     };
 
@@ -207,6 +233,8 @@ export function FullPlayer() {
     };
 
     // Get current media info
+    // When controlling a remote device, use activePlayerState for track info
+    // This ensures track name/artwork updates immediately when remote device changes tracks
     let title = "";
     let subtitle = "";
     let coverUrl: string | null = null;
@@ -214,15 +242,37 @@ export function FullPlayer() {
     let artistLink: string | null = null;
     let mediaLink: string | null = null;
 
-    if (playbackType === "track" && currentTrack) {
-        title = currentTrack.title;
-        subtitle = currentTrack.artist?.name || "Unknown Artist";
-        coverUrl = currentTrack.album?.coverArt
-            ? api.getCoverArtUrl(currentTrack.album.coverArt, 100)
-            : null;
-        albumLink = currentTrack.album?.id ? `/album/${currentTrack.album.id}` : null;
-        artistLink = currentTrack.artist?.id ? `/artist/${currentTrack.artist.mbid || currentTrack.artist.id}` : null;
-        mediaLink = albumLink;
+    // Use remote track info when controlling another device
+    const displayTrack = (!isActivePlayer && activePlayerState?.currentTrack)
+        ? activePlayerState.currentTrack
+        : currentTrack;
+
+    // Check for track playback - either local track type OR remote device has a track
+    const isTrackPlayback = playbackType === "track" || (!isActivePlayer && activePlayerState?.currentTrack);
+    if (isTrackPlayback && displayTrack) {
+        title = displayTrack.title;
+        // Handle both local Track type (has artist object) and remote track (has artist string)
+        subtitle = typeof displayTrack.artist === 'string'
+            ? displayTrack.artist
+            : displayTrack.artist?.name || "Unknown Artist";
+        // Handle coverArt - remote sends coverArt directly, local has album.coverArt
+        // Local Track has album: { coverArt: string }, remote has coverArt: string directly
+        const album = (displayTrack as any).album;
+        const coverArt = (album && typeof album === 'object' && album.coverArt)
+            ? album.coverArt
+            : (displayTrack as any).coverArt;
+        coverUrl = coverArt ? api.getCoverArtUrl(coverArt, 100) : null;
+        // Links only work for local tracks (remote doesn't send IDs for navigation)
+        if (!isActivePlayer && activePlayerState?.currentTrack) {
+            // Remote track - no navigation links
+            albumLink = null;
+            artistLink = null;
+            mediaLink = null;
+        } else if (currentTrack) {
+            albumLink = currentTrack.album?.id ? `/album/${currentTrack.album.id}` : null;
+            artistLink = currentTrack.artist?.id ? `/artist/${currentTrack.artist.mbid || currentTrack.artist.id}` : null;
+            mediaLink = albumLink;
+        }
     } else if (playbackType === "audiobook" && currentAudiobook) {
         title = currentAudiobook.title;
         subtitle = currentAudiobook.author;
@@ -277,6 +327,58 @@ export function FullPlayer() {
                         <ChevronUp className="w-3.5 h-3.5" />
                     )}
                 </button>
+            )}
+
+            {/* Remote Control Indicator - shows when controlling another device */}
+            {!isActivePlayer && activeDevice && (
+                <div className="absolute -top-12 left-4 right-4 z-10">
+                    <div className="bg-[#1a1a1a] border border-white/10 rounded-lg px-4 py-2 flex items-center gap-3 shadow-lg">
+                        <div className="flex items-center gap-2 text-emerald-400">
+                            <Cast className="w-4 h-4" />
+                            <span className="text-xs font-medium">
+                                Controlling: {activeDevice.deviceName}
+                            </span>
+                        </div>
+                        {activePlayerState?.currentTrack && (
+                            <>
+                                <div className="h-4 w-px bg-white/10" />
+                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                    {activePlayerState.currentTrack.coverArt && (
+                                        <div className="w-8 h-8 rounded overflow-hidden flex-shrink-0">
+                                            <Image
+                                                src={api.getCoverArtUrl(activePlayerState.currentTrack.coverArt, 50)}
+                                                alt=""
+                                                width={32}
+                                                height={32}
+                                                className="object-cover"
+                                                unoptimized
+                                            />
+                                        </div>
+                                    )}
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-sm text-white truncate">
+                                            {activePlayerState.currentTrack.title}
+                                        </p>
+                                        <p className="text-xs text-gray-400 truncate">
+                                            {activePlayerState.currentTrack.artist}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        {activePlayerState.isPlaying ? (
+                                            <div className="flex items-center gap-0.5">
+                                                <div className="w-0.5 h-3 bg-emerald-400 rounded-full animate-pulse" />
+                                                <div className="w-0.5 h-4 bg-emerald-400 rounded-full animate-pulse delay-75" />
+                                                <div className="w-0.5 h-2 bg-emerald-400 rounded-full animate-pulse delay-150" />
+                                            </div>
+                                        ) : (
+                                            <Pause className="w-3 h-3 text-gray-400" />
+                                        )}
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
             )}
 
             <div className="h-24 bg-black border-t border-white/[0.08]">
@@ -378,7 +480,7 @@ export function FullPlayer() {
                         </button>
 
                         <button
-                            onClick={isBuffering ? undefined : isPlaying ? pause : resume}
+                            onClick={isBuffering ? undefined : displayIsPlaying ? pause : resume}
                             className={cn(
                                 "w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 relative group",
                                 hasMedia && !isBuffering
@@ -388,14 +490,14 @@ export function FullPlayer() {
                                     : "bg-gray-700 text-gray-500 cursor-not-allowed"
                             )}
                             disabled={!hasMedia || isBuffering}
-                            title={isBuffering ? "Buffering..." : isPlaying ? "Pause" : "Play"}
+                            title={isBuffering ? "Buffering..." : displayIsPlaying ? "Pause" : "Play"}
                         >
                             {hasMedia && !isBuffering && (
                                 <div className="absolute inset-0 rounded-full bg-white blur-md opacity-0 group-hover:opacity-50 transition-opacity duration-200" />
                             )}
                             {isBuffering ? (
                                 <Loader2 className="w-5 h-5 animate-spin relative z-10" />
-                            ) : isPlaying ? (
+                            ) : displayIsPlaying ? (
                                 <Pause className="w-5 h-5 relative z-10" />
                             ) : (
                                 <Play className="w-5 h-5 ml-0.5 relative z-10" />
@@ -513,9 +615,9 @@ export function FullPlayer() {
                         <span className={cn(
                             "text-xs font-medium tabular-nums",
                             hasMedia ? "text-gray-400" : "text-gray-600",
-                            duration >= 3600 ? "w-14" : "w-10" // Wider for h:mm:ss format
+                            displayDuration >= 3600 ? "w-14" : "w-10" // Wider for h:mm:ss format
                         )}>
-                            {formatTime(duration)}
+                            {formatTime(displayDuration)}
                         </span>
                     </div>
                 </div>
@@ -543,6 +645,9 @@ export function FullPlayer() {
                             className="w-full h-1 bg-white/[0.15] rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:shadow-white/30 [&::-webkit-slider-thumb]:transition-all [&::-webkit-slider-thumb]:hover:scale-110"
                         />
                     </div>
+
+                    {/* Remote Playback Device Selector */}
+                    <DeviceSelector />
 
                     {/* Keyboard Shortcuts Info */}
                     <KeyboardShortcutsTooltip />

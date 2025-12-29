@@ -23,12 +23,15 @@ import {
     ChevronLeft,
     ChevronUp,
     ChevronDown,
+    Volume2,
+    VolumeX,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/utils/cn";
 import { useState, useRef, useEffect } from "react";
 import { KeyboardShortcutsTooltip } from "./KeyboardShortcutsTooltip";
 import { EnhancedVibeOverlay } from "./VibeOverlayEnhanced";
+import { DeviceSelector } from "./DeviceSelector";
 
 export function MiniPlayer() {
     const {
@@ -60,6 +63,10 @@ export function MiniPlayer() {
         setUpcoming,
         startVibeMode,
         stopVibeMode,
+        isActivePlayer,
+        activePlayerState,
+        volume,
+        setVolume,
     } = useAudio();
     const isMobile = useIsMobile();
     const isTablet = useIsTablet();
@@ -69,8 +76,14 @@ export function MiniPlayer() {
     const [isDismissed, setIsDismissed] = useState(false);
     const [swipeOffset, setSwipeOffset] = useState(0);
     const [isVibePanelExpanded, setIsVibePanelExpanded] = useState(false);
+    const [showVolumeSlider, setShowVolumeSlider] = useState(false);
     const touchStartX = useRef<number | null>(null);
     const lastMediaIdRef = useRef<string | null>(null);
+
+    // Get display volume - use remote volume when controlling remote device
+    const displayVolume = (!isActivePlayer && activePlayerState?.volume !== undefined)
+        ? activePlayerState.volume
+        : volume;
 
     // Get current track's audio features for vibe comparison
     const currentTrackFeatures = queue[currentIndex]?.audioFeatures || null;
@@ -154,23 +167,43 @@ export function MiniPlayer() {
         }
     };
 
-    const hasMedia = !!(currentTrack || currentAudiobook || currentPodcast);
+    // When controlling a remote device, consider media from remote state
+    const hasMedia = !!(currentTrack || currentAudiobook || currentPodcast ||
+        (!isActivePlayer && activePlayerState?.currentTrack));
 
     // Get current media info
+    // When controlling a remote device, use activePlayerState for track info
     let title = "";
     let subtitle = "";
     let coverUrl: string | null = null;
     let mediaLink: string | null = null;
 
-    if (playbackType === "track" && currentTrack) {
-        title = currentTrack.title;
-        subtitle = currentTrack.artist?.name || "Unknown Artist";
-        coverUrl = currentTrack.album?.coverArt
-            ? api.getCoverArtUrl(currentTrack.album.coverArt, 100)
-            : null;
-        mediaLink = currentTrack.album?.id
-            ? `/album/${currentTrack.album.id}`
-            : null;
+    // Use remote track info when controlling another device
+    const displayTrack = (!isActivePlayer && activePlayerState?.currentTrack)
+        ? activePlayerState.currentTrack
+        : currentTrack;
+
+    // Check for track playback - either local track type OR remote device has a track
+    const isTrackPlayback = playbackType === "track" || (!isActivePlayer && activePlayerState?.currentTrack);
+    if (isTrackPlayback && displayTrack) {
+        title = displayTrack.title;
+        // Handle both local Track type (has artist object) and remote track (has artist string)
+        subtitle = typeof displayTrack.artist === 'string'
+            ? displayTrack.artist
+            : displayTrack.artist?.name || "Unknown Artist";
+        // Handle coverArt - remote sends coverArt directly, local has album.coverArt
+        // Local Track has album: { coverArt: string }, remote has coverArt: string directly
+        const album = (displayTrack as any).album;
+        const coverArt = (album && typeof album === 'object' && album.coverArt)
+            ? album.coverArt
+            : (displayTrack as any).coverArt;
+        coverUrl = coverArt ? api.getCoverArtUrl(coverArt, 100) : null;
+        // Links only work for local tracks
+        if (!isActivePlayer && activePlayerState?.currentTrack) {
+            mediaLink = null;
+        } else if (currentTrack) {
+            mediaLink = currentTrack.album?.id ? `/album/${currentTrack.album.id}` : null;
+        }
     } else if (playbackType === "audiobook" && currentAudiobook) {
         title = currentAudiobook.title;
         subtitle = currentAudiobook.author;
@@ -194,8 +227,12 @@ export function MiniPlayer() {
     // Check if controls should be enabled (only for tracks)
     const canSkip = playbackType === "track";
 
-    // Calculate progress percentage
+    // Calculate duration - use remote when controlling a remote device
     const duration = (() => {
+        // If controlling a remote device, use its track duration
+        if (!isActivePlayer && activePlayerState?.currentTrack?.duration) {
+            return activePlayerState.currentTrack.duration;
+        }
         if (playbackType === "podcast" && currentPodcast?.duration) {
             return currentPodcast.duration;
         }
@@ -210,9 +247,20 @@ export function MiniPlayer() {
             0
         );
     })();
+
+    // When controlling a remote device, use remote state for display
+    const displayTime = (!isActivePlayer && activePlayerState?.currentTime !== undefined)
+        ? activePlayerState.currentTime
+        : currentTime;
+
+    // Use remote isPlaying state when controlling a remote device
+    const displayIsPlaying = (!isActivePlayer && activePlayerState)
+        ? activePlayerState.isPlaying
+        : isPlaying;
+
     const progress =
         duration > 0
-            ? Math.min(100, Math.max(0, (currentTime / duration) * 100))
+            ? Math.min(100, Math.max(0, (displayTime / duration) * 100))
             : 0;
 
     // Handle progress bar click
@@ -340,6 +388,42 @@ export function MiniPlayer() {
                     />
                 </div>
 
+                {/* Volume slider - collapsible */}
+                <div
+                    className={cn(
+                        "relative overflow-hidden transition-all duration-200 ease-out",
+                        showVolumeSlider ? "max-h-12 opacity-100" : "max-h-0 opacity-0"
+                    )}
+                >
+                    <div className="flex items-center gap-3 px-4 py-2 bg-black/20">
+                        <VolumeX className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={Math.round(displayVolume * 100)}
+                            onChange={(e) => setVolume(parseInt(e.target.value) / 100)}
+                            className="flex-1 h-1 bg-white/20 rounded-full appearance-none cursor-pointer
+                                [&::-webkit-slider-thumb]:appearance-none
+                                [&::-webkit-slider-thumb]:w-4
+                                [&::-webkit-slider-thumb]:h-4
+                                [&::-webkit-slider-thumb]:rounded-full
+                                [&::-webkit-slider-thumb]:bg-white
+                                [&::-webkit-slider-thumb]:shadow-md
+                                [&::-moz-range-thumb]:w-4
+                                [&::-moz-range-thumb]:h-4
+                                [&::-moz-range-thumb]:rounded-full
+                                [&::-moz-range-thumb]:bg-white
+                                [&::-moz-range-thumb]:border-0"
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                        <Volume2 className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <span className="text-xs text-gray-400 w-8 text-right tabular-nums">
+                            {Math.round(displayVolume * 100)}%
+                        </span>
+                    </div>
+                </div>
+
                 {/* Player content - more spacious padding */}
                 <div
                     className="relative flex items-center gap-3 px-3 py-3 cursor-pointer"
@@ -373,22 +457,36 @@ export function MiniPlayer() {
                         </p>
                     </div>
 
-                    {/* Controls - Vibe & Play/Pause */}
+                    {/* Controls - Volume, Vibe & Play/Pause */}
                     <div
-                        className="flex items-center gap-1.5 flex-shrink-0"
+                        className="flex items-center gap-1 flex-shrink-0"
                         onClick={(e) => e.stopPropagation()}
                     >
+                        {/* Volume Button */}
+                        <button
+                            onClick={() => setShowVolumeSlider(!showVolumeSlider)}
+                            className={cn(
+                                "w-9 h-9 flex items-center justify-center rounded-full transition-colors",
+                                showVolumeSlider
+                                    ? "text-[#f5c518] bg-white/10"
+                                    : "text-white/80 hover:text-white active:bg-white/10"
+                            )}
+                            title="Volume"
+                        >
+                            <Volume2 className="w-5 h-5" />
+                        </button>
+
                         {/* Vibe Button */}
                         <button
                             onClick={handleVibeToggle}
                             disabled={!canSkip || isVibeLoading}
                             className={cn(
-                                "w-10 h-10 flex items-center justify-center rounded-full transition-colors",
+                                "w-9 h-9 flex items-center justify-center rounded-full transition-colors",
                                 !canSkip
                                     ? "text-gray-600"
                                     : vibeMode
                                     ? "text-[#f5c518]"
-                                    : "text-white/80 hover:text-[#f5c518]"
+                                    : "text-white/70 hover:text-[#f5c518]"
                             )}
                             title={
                                 vibeMode
@@ -397,9 +495,9 @@ export function MiniPlayer() {
                             }
                         >
                             {isVibeLoading ? (
-                                <Loader2 className="w-5 h-5 animate-spin" />
+                                <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
-                                <AudioWaveform className="w-5 h-5" />
+                                <AudioWaveform className="w-4 h-4" />
                             )}
                         </button>
 
@@ -407,7 +505,7 @@ export function MiniPlayer() {
                         <button
                             onClick={() => {
                                 if (!isBuffering) {
-                                    if (isPlaying) {
+                                    if (displayIsPlaying) {
                                         pause();
                                     } else {
                                         resume();
@@ -423,14 +521,14 @@ export function MiniPlayer() {
                             title={
                                 isBuffering
                                     ? "Buffering..."
-                                    : isPlaying
+                                    : displayIsPlaying
                                     ? "Pause"
                                     : "Play"
                             }
                         >
                             {isBuffering ? (
                                 <Loader2 className="w-5 h-5 animate-spin" />
-                            ) : isPlaying ? (
+                            ) : displayIsPlaying ? (
                                 <Pause className="w-5 h-5" />
                             ) : (
                                 <Play className="w-5 h-5 ml-0.5" />
@@ -670,7 +768,7 @@ export function MiniPlayer() {
                             onClick={
                                 isBuffering
                                     ? undefined
-                                    : isPlaying
+                                    : displayIsPlaying
                                     ? pause
                                     : resume
                             }
@@ -686,14 +784,14 @@ export function MiniPlayer() {
                             title={
                                 isBuffering
                                     ? "Buffering..."
-                                    : isPlaying
+                                    : displayIsPlaying
                                     ? "Pause"
                                     : "Play"
                             }
                         >
                             {isBuffering ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : isPlaying ? (
+                            ) : displayIsPlaying ? (
                                 <Pause className="w-4 h-4" />
                             ) : (
                                 <Play className="w-4 h-4 ml-0.5" />
@@ -762,6 +860,50 @@ export function MiniPlayer() {
                             )}
                         </button>
 
+                        {/* Volume Control */}
+                        <div className="flex items-center gap-1 ml-1">
+                            <button
+                                onClick={() => setVolume(displayVolume === 0 ? 1 : 0)}
+                                disabled={!hasMedia}
+                                className={cn(
+                                    "rounded p-1.5 transition-colors",
+                                    hasMedia
+                                        ? "text-gray-400 hover:text-white"
+                                        : "text-gray-600 cursor-not-allowed"
+                                )}
+                                title={displayVolume === 0 ? "Unmute" : "Mute"}
+                            >
+                                {displayVolume === 0 ? (
+                                    <VolumeX className="w-3.5 h-3.5" />
+                                ) : (
+                                    <Volume2 className="w-3.5 h-3.5" />
+                                )}
+                            </button>
+                            <input
+                                type="range"
+                                min="0"
+                                max="100"
+                                value={Math.round(displayVolume * 100)}
+                                onChange={(e) => setVolume(parseInt(e.target.value) / 100)}
+                                disabled={!hasMedia}
+                                className={cn(
+                                    "w-16 h-1 rounded-full appearance-none cursor-pointer",
+                                    hasMedia ? "bg-white/20" : "bg-white/10 cursor-not-allowed",
+                                    "[&::-webkit-slider-thumb]:appearance-none",
+                                    "[&::-webkit-slider-thumb]:w-3",
+                                    "[&::-webkit-slider-thumb]:h-3",
+                                    "[&::-webkit-slider-thumb]:rounded-full",
+                                    "[&::-webkit-slider-thumb]:bg-white",
+                                    "[&::-moz-range-thumb]:w-3",
+                                    "[&::-moz-range-thumb]:h-3",
+                                    "[&::-moz-range-thumb]:rounded-full",
+                                    "[&::-moz-range-thumb]:bg-white",
+                                    "[&::-moz-range-thumb]:border-0"
+                                )}
+                                title={`Volume: ${Math.round(displayVolume * 100)}%`}
+                            />
+                        </div>
+
                         {/* Vibe Mode Toggle */}
                         <button
                             onClick={handleVibeToggle}
@@ -786,6 +928,9 @@ export function MiniPlayer() {
                                 <AudioWaveform className="w-3.5 h-3.5" />
                             )}
                         </button>
+
+                        {/* Remote Playback Device Selector */}
+                        <DeviceSelector compact />
 
                         {/* Keyboard Shortcuts */}
                         <KeyboardShortcutsTooltip />

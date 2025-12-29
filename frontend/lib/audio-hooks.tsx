@@ -2,21 +2,25 @@
 
 import { useAudioState } from "./audio-state-context";
 import { useAudioPlayback } from "./audio-playback-context";
-import { useAudioControls } from "./audio-controls-context";
+import { useRemoteAwareAudioControls } from "./remote-aware-audio-controls-context";
 
 /**
  * Unified hook that combines all audio contexts.
  * Use this for backward compatibility with existing code.
  *
+ * NOTE: This hook uses RemoteAwareAudioControls which automatically routes
+ * playback commands (play, pause, next, etc.) to the active player device.
+ * When this device is NOT the active player, commands are forwarded via WebSocket.
+ *
  * For optimal performance, prefer using the individual hooks:
  * - useAudioState() - for rarely changing data (currentTrack, queue, etc.)
  * - useAudioPlayback() - for frequently changing data (currentTime, isPlaying)
- * - useAudioControls() - for actions only (play, pause, next, etc.)
+ * - useRemoteAwareAudioControls() - for remote-aware playback actions
  */
 export function useAudio() {
     const state = useAudioState();
     const playback = useAudioPlayback();
-    const controls = useAudioControls();
+    const controls = useRemoteAwareAudioControls();
 
     return {
         // State
@@ -74,5 +78,9 @@ export function useAudio() {
         // Vibe mode controls
         startVibeMode: controls.startVibeMode,
         stopVibeMode: controls.stopVibeMode,
+
+        // Remote playback state
+        isActivePlayer: controls.isActivePlayer,
+        activePlayerState: controls.activePlayerState,
     };
 }

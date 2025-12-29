@@ -1,4 +1,5 @@
 import express from "express";
+import { createServer } from "http";
 import session from "express-session";
 import RedisStore from "connect-redis";
 import cors from "cors";
@@ -6,6 +7,7 @@ import helmet from "helmet";
 import { config } from "./config";
 import { redisClient } from "./utils/redis";
 import { prisma } from "./utils/db";
+import { initializeWebSocket } from "./websocket/remotePlayback";
 
 import authRoutes from "./routes/auth";
 import onboardingRoutes from "./routes/onboarding";
@@ -36,6 +38,7 @@ import notificationsRoutes from "./routes/notifications";
 import browseRoutes from "./routes/browse";
 import analysisRoutes from "./routes/analysis";
 import releasesRoutes from "./routes/releases";
+import remotePlaybackRoutes from "./routes/remotePlayback";
 import { dataCacheService } from "./services/dataCache";
 import { errorHandler } from "./middleware/errorHandler";
 import {
@@ -48,6 +51,10 @@ import swaggerUi from "swagger-ui-express";
 import { swaggerSpec } from "./config/swagger";
 
 const app = express();
+const httpServer = createServer(app);
+
+// Initialize WebSocket server for remote playback
+const io = initializeWebSocket(httpServer);
 
 // Middleware
 app.use(
@@ -157,6 +164,7 @@ app.use("/api/spotify", apiLimiter, spotifyRoutes);
 app.use("/api/browse", apiLimiter, browseRoutes);
 app.use("/api/analysis", apiLimiter, analysisRoutes);
 app.use("/api/releases", apiLimiter, releasesRoutes);
+app.use("/api/remote-playback", apiLimiter, remotePlaybackRoutes);
 
 // Health check (keep at root for simple container health checks)
 app.get("/health", (req, res) => {
@@ -184,9 +192,12 @@ app.get("/api/docs.json", (req, res) => {
 // Error handler
 app.use(errorHandler);
 
-app.listen(config.port, "0.0.0.0", async () => {
+httpServer.listen(config.port, "0.0.0.0", async () => {
     console.log(
         `Lidify API running on port ${config.port} (accessible on all network interfaces)`
+    );
+    console.log(
+        `Remote playback WebSocket available at /api/socket.io`
     );
 
     // Enable slow query monitoring in development

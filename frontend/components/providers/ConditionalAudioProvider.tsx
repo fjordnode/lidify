@@ -7,6 +7,10 @@ import { AudioControlsProvider } from "@/lib/audio-controls-context";
 import { useAuth } from "@/lib/auth-context";
 import { HowlerAudioElement } from "@/components/player/HowlerAudioElement";
 import { AudioErrorBoundary } from "@/components/providers/AudioErrorBoundary";
+import { RemotePlaybackProvider } from "@/lib/remote-playback-context";
+import { RemoteAwareAudioControlsProvider } from "@/lib/remote-aware-audio-controls-context";
+import { RemotePlaybackIntegration } from "@/components/providers/RemotePlaybackIntegration";
+import { RemoteVolumeCapture } from "@/components/player/RemoteVolumeCapture";
 
 export function ConditionalAudioProvider({
     children,
@@ -27,14 +31,29 @@ export function ConditionalAudioProvider({
     // Split contexts: State -> Playback -> Controls
     // This prevents re-renders from currentTime updates affecting all consumers
     // Wrapped in error boundary to prevent audio errors from crashing the app
+    //
+    // Provider hierarchy for remote playback:
+    // - RemotePlaybackProvider manages WebSocket connection and device list
+    // - HowlerAudioElement MUST be inside RemotePlaybackProvider to check isActivePlayer
+    // - RemoteAwareAudioControlsProvider wraps controls with remote routing
+    // - When device is NOT active player, HowlerAudioElement stays silent
     return (
         <AudioErrorBoundary>
             <AudioStateProvider>
                 <AudioPlaybackProvider>
                     <AudioControlsProvider>
-                        {/* HowlerAudioElement handles both web and native platforms */}
-                        <HowlerAudioElement />
-                        {children}
+                        {/* Remote playback MUST wrap HowlerAudioElement */}
+                        <RemotePlaybackProvider>
+                            {/* HowlerAudioElement checks isActivePlayer before playing */}
+                            <HowlerAudioElement />
+                            {/* Wraps controls with remote routing logic */}
+                            <RemoteAwareAudioControlsProvider>
+                                <RemotePlaybackIntegration />
+                                {/* Captures hardware volume buttons when controlling remote */}
+                                <RemoteVolumeCapture />
+                                {children}
+                            </RemoteAwareAudioControlsProvider>
+                        </RemotePlaybackProvider>
                     </AudioControlsProvider>
                 </AudioPlaybackProvider>
             </AudioStateProvider>

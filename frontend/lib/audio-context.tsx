@@ -1,11 +1,12 @@
 /**
  * Audio Context Re-exports
  *
- * All functionality is split into three separate contexts for better performance:
+ * All functionality is split into separate contexts for better performance:
  *
  * - audio-state-context.tsx - Rarely changing data (currentTrack, queue, etc.)
  * - audio-playback-context.tsx - Frequently changing data (currentTime, isPlaying)
  * - audio-controls-context.tsx - Actions only (play, pause, next, etc.)
+ * - remote-aware-audio-controls-context.tsx - Controls with remote playback routing
  *
  * Import from these files directly for optimal performance.
  * This file provides convenient re-exports for backward compatibility.
@@ -18,11 +19,14 @@ export type { PlayerMode, Track, Audiobook, Podcast, AudioFeatures } from "./aud
 export { AudioStateProvider } from "./audio-state-context";
 export { AudioPlaybackProvider } from "./audio-playback-context";
 export { AudioControlsProvider } from "./audio-controls-context";
+export { RemoteAwareAudioControlsProvider } from "./remote-aware-audio-controls-context";
 
 // Re-export individual hooks
 export { useAudioState } from "./audio-state-context";
 export { useAudioPlayback } from "./audio-playback-context";
 export { useAudioControls } from "./audio-controls-context";
+export { useRemoteAwareAudioControls } from "./remote-aware-audio-controls-context";
 
 // Re-export the unified hook (backward compatibility)
+// Note: useAudio now uses remote-aware controls for proper multi-device playback
 export { useAudio } from "./audio-hooks";

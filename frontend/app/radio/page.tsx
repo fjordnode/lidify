@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Radio, Play, Loader2, Shuffle, ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import { useAudioControls } from "@/lib/audio-controls-context";
+import { useRemoteAwareAudioControls } from "@/lib/remote-aware-audio-controls-context";
 import { Track } from "@/lib/audio-state-context";
 import { toast } from "sonner";
 
@@ -212,7 +212,7 @@ function SectionHeader({ title, description }: { title: string; description?: st
 }
 
 export default function RadioPage() {
-    const { playTracks } = useAudioControls();
+    const { playTracks } = useRemoteAwareAudioControls();
     const [loadingStation, setLoadingStation] = useState<string | null>(null);
     const [genres, setGenres] = useState<GenreCount[]>([]);
     const [decades, setDecades] = useState<DecadeCount[]>([]);

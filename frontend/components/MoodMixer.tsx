@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { api, MoodType, MoodBucketPreset } from "@/lib/api";
-import { useAudioControls } from "@/lib/audio-controls-context";
+import { useRemoteAwareAudioControls } from "@/lib/remote-aware-audio-controls-context";
 import { Track } from "@/lib/audio-state-context";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -107,7 +107,7 @@ const MOOD_ORDER: MoodType[] = [
 ];
 
 export function MoodMixer({ isOpen, onClose }: MoodMixerProps) {
-    const { playTracks } = useAudioControls();
+    const { playTracks } = useRemoteAwareAudioControls();
     const queryClient = useQueryClient();
     const [presets, setPresets] = useState<MoodBucketPreset[]>([]);
     const [loading, setLoading] = useState(true);

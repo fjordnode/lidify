@@ -3,6 +3,7 @@
 import { useAudioState } from "@/lib/audio-state-context";
 import { useAudioPlayback } from "@/lib/audio-playback-context";
 import { useAudioControls } from "@/lib/audio-controls-context";
+import { useRemotePlayback } from "@/lib/remote-playback-context";
 import { api } from "@/lib/api";
 import { howlerEngine } from "@/lib/howler-engine";
 import { audioSeekEmitter } from "@/lib/audio-seek-emitter";
@@ -14,6 +15,7 @@ import {
     useCallback,
     useMemo,
 } from "react";
+import { toast } from "sonner";
 
 function podcastDebugEnabled(): boolean {
     try {
@@ -73,6 +75,13 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
     // Controls context
     const { pause, next } = useAudioControls();
 
+    // Remote playback - check if this device should actually play audio
+    const { isActivePlayer, becomeActivePlayer } = useRemotePlayback();
+
+    // Ref to track isActivePlayer for use in callbacks
+    const isActivePlayerRef = useRef(isActivePlayer);
+    isActivePlayerRef.current = isActivePlayer;
+
     // Refs
     const lastTrackIdRef = useRef<string | null>(null);
     const lastPlayingStateRef = useRef<boolean>(isPlaying);
@@ -90,6 +99,8 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
     const isSeekingRef = useRef<boolean>(false);
     // Track load listeners for cleanup to prevent memory leaks
     const loadListenerRef = useRef<(() => void) | null>(null);
+    // Track autoplay toast to prevent duplicates
+    const autoplayToastIdRef = useRef<string | number | null>(null);
     const loadErrorListenerRef = useRef<(() => void) | null>(null);
     const cachePollingLoadListenerRef = useRef<(() => void) | null>(null);
     // Counter to track seek operations and abort stale ones
@@ -133,8 +144,11 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
             // Handle track advancement based on repeat mode
             if (playbackType === "track") {
                 if (repeatMode === "one") {
-                    howlerEngine.seek(0);
-                    howlerEngine.play();
+                    // Only repeat if this device is the active player
+                    if (isActivePlayerRef.current) {
+                        howlerEngine.seek(0);
+                        howlerEngine.play();
+                    }
                 } else {
                     next();
                 }
@@ -143,23 +157,103 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
             }
         };
 
-        const handleError = (data: { error: any }) => {
-            console.error("[HowlerAudioElement] Playback error:", data.error);
+        // Handle LOAD errors (network issues, 404, corrupt audio) - advance to next track
+        const handleLoadError = (data: { error: any }) => {
+            console.error("[HowlerAudioElement] Load error:", data.error);
             setIsPlaying(false);
             isUserInitiatedRef.current = false;
 
             if (playbackType === "track") {
                 if (queue.length > 1) {
                     console.log(
-                        "[HowlerAudioElement] Track failed, trying next in queue"
+                        "[HowlerAudioElement] Track failed to load, trying next in queue"
                     );
                     lastTrackIdRef.current = null;
                     isLoadingRef.current = false;
                     next();
                 } else {
                     console.log(
-                        "[HowlerAudioElement] Track failed, no more in queue - clearing"
+                        "[HowlerAudioElement] Track failed to load, no more in queue - clearing"
                     );
+                    lastTrackIdRef.current = null;
+                    isLoadingRef.current = false;
+                    setCurrentTrack(null);
+                    setPlaybackType(null);
+                }
+            } else if (playbackType === "audiobook") {
+                setCurrentAudiobook(null);
+                setPlaybackType(null);
+            } else if (playbackType === "podcast") {
+                setCurrentPodcast(null);
+                setPlaybackType(null);
+            }
+        };
+
+        // Handle PLAY errors (autoplay blocked, codec issues) - DON'T auto-advance
+        const handlePlayError = (data: { error: any }) => {
+            const errorMsg = String(data?.error || "");
+            const isAutoplayError = errorMsg.includes("user interaction") ||
+                errorMsg.includes("play()") ||
+                errorMsg.includes("autoplay") ||
+                errorMsg.includes("NotAllowedError");
+
+            console.error("[HowlerAudioElement] Play error:", data.error,
+                isAutoplayError ? "(autoplay blocked - waiting for user interaction)" : "");
+
+            // For autoplay errors, show a toast so user can tap to unlock audio
+            if (isAutoplayError) {
+                setIsPlaying(false);
+                isUserInitiatedRef.current = false;
+
+                // Show toast with play button - dismiss any existing one first
+                if (autoplayToastIdRef.current) {
+                    toast.dismiss(autoplayToastIdRef.current);
+                }
+
+                const trackTitle = currentTrack?.title ||
+                                   currentAudiobook?.title ||
+                                   currentPodcast?.title ||
+                                   "Track";
+
+                console.log("[HowlerAudioElement] Showing autoplay toast for:", trackTitle);
+
+                autoplayToastIdRef.current = toast.info(
+                    "Tap to start playback",
+                    {
+                        description: trackTitle,
+                        duration: 30000,
+                        action: {
+                            label: "▶ Play",
+                            onClick: () => {
+                                console.log("[HowlerAudioElement] User tapped play - unlocking audio");
+                                // Make this device the active player first (for remote playback)
+                                becomeActivePlayer();
+                                // Then start playback
+                                setIsPlaying(true);
+                                howlerEngine.play();
+                                autoplayToastIdRef.current = null;
+                            },
+                        },
+                    }
+                );
+
+                // Don't clear track or advance
+                return;
+            }
+
+            // For other play errors (codec issues, etc.), treat like load error
+            setIsPlaying(false);
+            isUserInitiatedRef.current = false;
+
+            if (playbackType === "track") {
+                if (queue.length > 1) {
+                    console.log(
+                        "[HowlerAudioElement] Track failed to play, trying next in queue"
+                    );
+                    lastTrackIdRef.current = null;
+                    isLoadingRef.current = false;
+                    next();
+                } else {
                     lastTrackIdRef.current = null;
                     isLoadingRef.current = false;
                     setCurrentTrack(null);
@@ -194,8 +288,8 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
         howlerEngine.on("timeupdate", handleTimeUpdate);
         howlerEngine.on("load", handleLoad);
         howlerEngine.on("end", handleEnd);
-        howlerEngine.on("loaderror", handleError);
-        howlerEngine.on("playerror", handleError);
+        howlerEngine.on("loaderror", handleLoadError);
+        howlerEngine.on("playerror", handlePlayError);
         howlerEngine.on("play", handlePlay);
         howlerEngine.on("pause", handlePause);
 
@@ -203,8 +297,8 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
             howlerEngine.off("timeupdate", handleTimeUpdate);
             howlerEngine.off("load", handleLoad);
             howlerEngine.off("end", handleEnd);
-            howlerEngine.off("loaderror", handleError);
-            howlerEngine.off("playerror", handleError);
+            howlerEngine.off("loaderror", handleLoadError);
+            howlerEngine.off("playerror", handlePlayError);
             howlerEngine.off("play", handlePlay);
             howlerEngine.off("pause", handlePause);
         };
@@ -311,9 +405,12 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
             const shouldPlay = lastPlayingStateRef.current || isPlaying;
             const isCurrentlyPlaying = howlerEngine.isPlaying();
 
-            if (shouldPlay && !isCurrentlyPlaying) {
+            // Only play if this device is the active player
+            if (shouldPlay && !isCurrentlyPlaying && isActivePlayerRef.current) {
                 howlerEngine.seek(0);
                 howlerEngine.play();
+            } else if (shouldPlay && !isActivePlayerRef.current) {
+                console.log("[HowlerAudioElement] Blocking same-track play - not active player");
             }
             return;
         }
@@ -409,11 +506,14 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
                 const shouldAutoPlay =
                     lastPlayingStateRef.current || wasHowlerPlayingBeforeLoad;
 
-                if (shouldAutoPlay) {
+                // Only autoplay if this device is the active player
+                if (shouldAutoPlay && isActivePlayerRef.current) {
                     howlerEngine.play();
                     if (!lastPlayingStateRef.current) {
                         setIsPlaying(true);
                     }
+                } else if (shouldAutoPlay && !isActivePlayerRef.current) {
+                    console.log("[HowlerAudioElement] Blocking autoplay - not active player");
                 }
 
                 // Clean up both listeners
@@ -518,17 +618,24 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
     }, [isPlaying]);
 
     // Handle play/pause changes from UI
+    // CRITICAL: Only play if this device is the active player!
     useEffect(() => {
         if (isLoadingRef.current) return;
 
         isUserInitiatedRef.current = true;
 
         if (isPlaying) {
+            // Guard: Only play locally if this device is the active player
+            if (!isActivePlayer) {
+                console.log("[HowlerAudioElement] Blocking local play - not active player");
+                return;
+            }
             howlerEngine.play();
         } else {
+            // Always allow pause (stopping local audio is always safe)
             howlerEngine.pause();
         }
-    }, [isPlaying]);
+    }, [isPlaying, isActivePlayer]);
 
     // Handle volume changes
     useEffect(() => {
@@ -634,18 +741,22 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
 
                             howlerEngine.seek(targetTime);
                             setCurrentTime(targetTime);
-                            howlerEngine.play();
+                            // Only play if this device is the active player
+                            if (isActivePlayerRef.current) {
+                                howlerEngine.play();
+                                setIsPlaying(true);
+                            }
                             podcastDebugLog("post-reload seek+play", {
                                 podcastId,
                                 episodeId,
                                 targetTime,
                                 howlerTime: howlerEngine.getCurrentTime(),
                                 actualTime: howlerEngine.getActualCurrentTime(),
+                                isActivePlayer: isActivePlayerRef.current,
                             });
 
                             setIsBuffering(false);
                             setTargetSeekPosition(null);
-                            setIsPlaying(true);
                         };
 
                         cachePollingLoadListenerRef.current = onLoad;
@@ -805,7 +916,8 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
 
                                         howlerEngine.seek(seekTime);
 
-                                        if (wasPlayingAtSeekStart) {
+                                        // Only play if this device is the active player
+                                        if (wasPlayingAtSeekStart && isActivePlayerRef.current) {
                                             howlerEngine.play();
                                             setIsPlaying(true);
                                         }
@@ -815,7 +927,8 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
                                     howlerEngine.on("load", onLoad);
                                 } else {
                                     // Seek succeeded - resume playback if needed
-                                    if (wasPlayingAtSeekStart && !howlerEngine.isPlaying()) {
+                                    // Only play if this device is the active player
+                                    if (wasPlayingAtSeekStart && !howlerEngine.isPlaying() && isActivePlayerRef.current) {
                                         howlerEngine.play();
                                     }
                                 }
