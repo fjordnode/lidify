@@ -257,6 +257,7 @@ export default function LibraryPage() {
                         >
                             <option value="name">Name (A-Z)</option>
                             <option value="name-desc">Name (Z-A)</option>
+                            <option value="dateAdded">Date Added</option>
                             {activeTab === "albums" && (
                                 <option value="recent">Year (Newest)</option>
                             )}

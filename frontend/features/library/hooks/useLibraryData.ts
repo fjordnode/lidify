@@ -4,7 +4,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
 export type LibraryFilter = "owned" | "discovery" | "all";
-export type SortOption = "name" | "name-desc" | "recent" | "tracks";
+export type SortOption = "name" | "name-desc" | "recent" | "tracks" | "dateAdded";
 
 interface UseLibraryDataProps {
     activeTab: Tab;
@@ -69,6 +69,13 @@ export function useLibraryData({
                         case "tracks":
                             sortedArtists.sort((a, b) => (b.trackCount || 0) - (a.trackCount || 0));
                             break;
+                        case "dateAdded":
+                            sortedArtists.sort((a, b) => {
+                                const dateA = a.lastSynced ? new Date(a.lastSynced).getTime() : 0;
+                                const dateB = b.lastSynced ? new Date(b.lastSynced).getTime() : 0;
+                                return dateB - dateA; // Newest first
+                            });
+                            break;
                     }
                     setArtists(sortedArtists);
                     setPagination({
@@ -95,6 +102,13 @@ export function useLibraryData({
                             break;
                         case "recent":
                             sortedAlbums.sort((a, b) => (b.year || 0) - (a.year || 0));
+                            break;
+                        case "dateAdded":
+                            sortedAlbums.sort((a, b) => {
+                                const dateA = a.lastSynced ? new Date(a.lastSynced).getTime() : 0;
+                                const dateB = b.lastSynced ? new Date(b.lastSynced).getTime() : 0;
+                                return dateB - dateA; // Newest first
+                            });
                             break;
                     }
                     setAlbums(sortedAlbums);
