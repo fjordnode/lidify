@@ -61,13 +61,13 @@ except ImportError as e:
 
 # TensorFlow models via Essentia
 TF_MODELS_AVAILABLE = False
-TensorflowPredictMusiCNN = None
+TensorflowPredictEffnetDiscogs = None
 try:
-    from essentia.standard import TensorflowPredictMusiCNN
+    from essentia.standard import TensorflowPredictEffnetDiscogs
     TF_MODELS_AVAILABLE = True
-    logger.info("TensorflowPredictMusiCNN available - Enhanced mode enabled")
+    logger.info("TensorflowPredictEffnetDiscogs available - Enhanced mode enabled")
 except ImportError as e:
-    logger.warning(f"TensorflowPredictMusiCNN not available: {e}")
+    logger.warning(f"TensorflowPredictEffnetDiscogs not available: {e}")
     logger.info("Falling back to Standard mode")
 
 # Configuration from environment
@@ -76,6 +76,15 @@ DATABASE_URL = os.getenv('DATABASE_URL', '')
 MUSIC_PATH = os.getenv('MUSIC_PATH', '/music')
 BATCH_SIZE = int(os.getenv('BATCH_SIZE', '10'))
 SLEEP_INTERVAL = int(os.getenv('SLEEP_INTERVAL', '5'))
+
+# Large file handling configuration
+# Files larger than MAX_FILE_SIZE_MB will be skipped (0 = no limit)
+# Hi-res FLAC files (24-bit/96kHz+) can be 200-500MB and take too long to analyze
+MAX_FILE_SIZE_MB = int(os.getenv('MAX_FILE_SIZE_MB', '100'))
+# Base timeout per track in seconds (scaled up for larger files)
+BASE_TRACK_TIMEOUT = int(os.getenv('BASE_TRACK_TIMEOUT', '120'))
+# Max timeout per track (even for very large files)
+MAX_TRACK_TIMEOUT = int(os.getenv('MAX_TRACK_TIMEOUT', '600'))
 
 # Auto-scaling workers: use 50% of CPU cores, min 2, max 8
 # Can be overridden with NUM_WORKERS environment variable
@@ -99,23 +108,22 @@ ANALYSIS_PROCESSING = 'audio:analysis:processing'
 # Model paths (pre-packaged in Docker image)
 MODEL_DIR = '/app/models'
 
-# MusiCNN model file paths (official Essentia models from essentia.upf.edu/models/)
-# Note: Valence and arousal are derived from mood models (no direct models exist)
+# Discogs EfficientNet model file paths (official Essentia models from essentia.upf.edu/models/)
+# These are more accurate than the older MusiCNN models
 MODELS = {
-    # Base MusiCNN embedding model (for auto-tagging)
-    'musicnn': os.path.join(MODEL_DIR, 'msd-musicnn-1.pb'),
-    'musicnn_metadata': os.path.join(MODEL_DIR, 'msd-musicnn-1.json'),
-    # Mood classification heads (MusiCNN architecture)
-    # Correct filenames: {task}-msd-musicnn-1.pb
-    'mood_happy': os.path.join(MODEL_DIR, 'mood_happy-msd-musicnn-1.pb'),
-    'mood_sad': os.path.join(MODEL_DIR, 'mood_sad-msd-musicnn-1.pb'),
-    'mood_relaxed': os.path.join(MODEL_DIR, 'mood_relaxed-msd-musicnn-1.pb'),
-    'mood_aggressive': os.path.join(MODEL_DIR, 'mood_aggressive-msd-musicnn-1.pb'),
-    'mood_party': os.path.join(MODEL_DIR, 'mood_party-msd-musicnn-1.pb'),
-    'mood_acoustic': os.path.join(MODEL_DIR, 'mood_acoustic-msd-musicnn-1.pb'),
-    'mood_electronic': os.path.join(MODEL_DIR, 'mood_electronic-msd-musicnn-1.pb'),
-    'danceability': os.path.join(MODEL_DIR, 'danceability-msd-musicnn-1.pb'),
-    'voice_instrumental': os.path.join(MODEL_DIR, 'voice_instrumental-msd-musicnn-1.pb'),
+    # Base Discogs EfficientNet embedding model
+    'effnet': os.path.join(MODEL_DIR, 'discogs-effnet-bs64-1.pb'),
+    # Mood classification heads (Discogs EfficientNet architecture)
+    'mood_happy': os.path.join(MODEL_DIR, 'mood_happy-discogs-effnet-1.pb'),
+    'mood_sad': os.path.join(MODEL_DIR, 'mood_sad-discogs-effnet-1.pb'),
+    'mood_relaxed': os.path.join(MODEL_DIR, 'mood_relaxed-discogs-effnet-1.pb'),
+    'mood_aggressive': os.path.join(MODEL_DIR, 'mood_aggressive-discogs-effnet-1.pb'),
+    # Arousal and Valence (direct models for vibe matching)
+    'mood_arousal': os.path.join(MODEL_DIR, 'mood_arousal-discogs-effnet-1.pb'),
+    'mood_valence': os.path.join(MODEL_DIR, 'mood_valence-discogs-effnet-1.pb'),
+    # Danceability and Voice/Instrumental
+    'danceability': os.path.join(MODEL_DIR, 'danceability-discogs-effnet-1.pb'),
+    'voice_instrumental': os.path.join(MODEL_DIR, 'voice_instrumental-discogs-effnet-1.pb'),
 }
 
 class DatabaseConnection:
@@ -168,7 +176,7 @@ class AudioAnalyzer:
     def __init__(self):
         self.loaders = {}
         self.enhanced_mode = False
-        self.musicnn_model = None  # Base MusiCNN model
+        self.effnet_model = None  # Base Discogs EfficientNet model
         self.prediction_models = {}  # Classification head models
         
         if ESSENTIA_AVAILABLE:
@@ -196,44 +204,41 @@ class AudioAnalyzer:
     
     def _load_ml_models(self):
         """
-        Load MusiCNN TensorFlow models for Enhanced mode.
-        
+        Load Discogs EfficientNet TensorFlow models for Enhanced mode.
+
         Architecture:
-        1. Base MusiCNN model generates embeddings from audio
+        1. Base EfficientNet model generates embeddings from audio
         2. Classification head models take embeddings and output predictions
         """
         if not TF_MODELS_AVAILABLE:
             logger.info("TensorFlow not available - using Standard mode")
             return
-        
+
         try:
             from essentia.standard import TensorflowPredict2D
-            logger.info("Loading MusiCNN models...")
-            
-            # First, load the base MusiCNN embedding model
-            if os.path.exists(MODELS['musicnn']):
-                self.musicnn_model = TensorflowPredictMusiCNN(
-                    graphFilename=MODELS['musicnn'],
-                    output="model/dense/BiasAdd"  # Embedding layer output
+            logger.info("Loading Discogs EfficientNet models...")
+
+            # First, load the base EfficientNet embedding model
+            if os.path.exists(MODELS['effnet']):
+                self.effnet_model = TensorflowPredictEffnetDiscogs(
+                    graphFilename=MODELS['effnet'],
+                    output="PartitionedCall:1"  # Embedding layer output
                 )
-                logger.info("Loaded base MusiCNN model for embeddings")
+                logger.info("Loaded base Discogs EfficientNet model for embeddings")
             else:
-                logger.error(f"Base MusiCNN model not found: {MODELS['musicnn']}")
+                logger.error(f"Base EfficientNet model not found: {MODELS['effnet']}")
                 return
-            
+
             # Load classification head models
             heads_to_load = {
                 'mood_happy': MODELS['mood_happy'],
                 'mood_sad': MODELS['mood_sad'],
                 'mood_relaxed': MODELS['mood_relaxed'],
                 'mood_aggressive': MODELS['mood_aggressive'],
-                'mood_party': MODELS['mood_party'],
-                'mood_acoustic': MODELS['mood_acoustic'],
-                'mood_electronic': MODELS['mood_electronic'],
                 'danceability': MODELS['danceability'],
                 'voice_instrumental': MODELS['voice_instrumental'],
             }
-            
+
             for model_name, model_path in heads_to_load.items():
                 if os.path.exists(model_path):
                     try:
@@ -246,17 +251,16 @@ class AudioAnalyzer:
                         logger.warning(f"Failed to load {model_name}: {e}")
                 else:
                     logger.warning(f"Model not found: {model_path}")
-            
+
             # Enable enhanced mode if we have the key mood models
-            # (valence and arousal are derived from mood predictions)
             required = ['mood_happy', 'mood_sad', 'mood_relaxed', 'mood_aggressive']
             if all(m in self.prediction_models for m in required):
                 self.enhanced_mode = True
-                logger.info(f"ENHANCED MODE ENABLED - {len(self.prediction_models)} MusiCNN classification heads loaded")
+                logger.info(f"ENHANCED MODE ENABLED - {len(self.prediction_models)} Discogs EfficientNet classification heads loaded")
             else:
                 missing = [m for m in required if m not in self.prediction_models]
                 logger.warning(f"Missing required models: {missing} - using Standard mode")
-                
+
         except ImportError as e:
             logger.warning(f"TensorflowPredict2D not available: {e}")
             self.enhanced_mode = False
@@ -435,23 +439,22 @@ class AudioAnalyzer:
     
     def _extract_ml_features(self, audio_16k) -> Dict[str, Any]:
         """
-        Extract features using Essentia MusiCNN + classification heads.
-        
+        Extract features using Essentia Discogs EfficientNet + classification heads.
+
         Architecture:
-        1. TensorflowPredictMusiCNN extracts embeddings from audio
+        1. TensorflowPredictEffnetDiscogs extracts embeddings from audio
         2. TensorflowPredict2D classification heads take embeddings and output predictions
-        
+
         This is the heart of Enhanced mode - real ML predictions for mood.
-        
-        Note: MusiCNN was trained on pop/rock music (Million Song Dataset).
-        For genres outside this distribution (classical, piano, ambient),
-        predictions may be unreliable (all moods show high values).
-        We detect and normalize these cases.
+
+        Note: Discogs EfficientNet was trained on the Discogs dataset (diverse genres).
+        For very niche genres, predictions may still be unreliable.
+        We detect and normalize edge cases.
         """
         result = {}
         
-        if not self.musicnn_model:
-            raise ValueError("MusiCNN model not loaded")
+        if not self.effnet_model:
+            raise ValueError("Discogs EfficientNet model not loaded")
         
         def safe_predict(model, embeddings, model_name: str) -> Tuple[float, float]:
             """
@@ -464,8 +467,12 @@ class AudioAnalyzer:
             try:
                 preds = model(embeddings)
                 # preds shape: [frames, 2] for binary classification
-                # [:, 1] = probability of positive class
-                positive_probs = preds[:, 1]
+                # Discogs-effnet models have INCONSISTENT column ordering per model!
+                # Verified from model metadata JSON files at essentia.upf.edu:
+                #   Column 0 = positive: mood_aggressive, mood_happy, danceability
+                #   Column 1 = positive: mood_sad, mood_relaxed, voice_instrumental
+                positive_col = 0 if model_name in ['mood_aggressive', 'mood_happy', 'danceability'] else 1
+                positive_probs = preds[:, positive_col]
                 raw_value = float(np.mean(positive_probs))
                 variance = float(np.var(positive_probs))
                 # Clamp to valid probability range
@@ -475,10 +482,10 @@ class AudioAnalyzer:
                 logger.warning(f"Prediction failed for {model_name}: {e}")
                 return (0.5, 0.0)
         
-        # Step 1: Get embeddings from base MusiCNN model
-        # Output shape: [frames, 200] - 200-dimensional embedding per frame
-        embeddings = self.musicnn_model(audio_16k)
-        logger.debug(f"MusiCNN embeddings shape: {embeddings.shape}")
+        # Step 1: Get embeddings from base Discogs EfficientNet model
+        # Output shape: [frames, 1280] - 1280-dimensional embedding per frame
+        embeddings = self.effnet_model(audio_16k)
+        logger.debug(f"Discogs EfficientNet embeddings shape: {embeddings.shape}")
         
         # Step 2: Pass embeddings through classification heads
         # Each head outputs [frames, 2] where [:, 1] is probability of positive class
@@ -520,8 +527,8 @@ class AudioAnalyzer:
         logger.info(f"ML Raw Moods: H={raw_values.get('moodHappy')}, S={raw_values.get('moodSad')}, R={raw_values.get('moodRelaxed')}, A={raw_values.get('moodAggressive')}")
         
         # === DETECT UNRELIABLE PREDICTIONS ===
-        # MusiCNN was trained on pop/rock (MSD). For classical/piano/ambient music,
-        # the model often outputs high values for ALL contradictory moods.
+        # For some audio (e.g., very niche genres, ambient, noise),
+        # the model may output high values for ALL contradictory moods.
         # Detect this and normalize to preserve relative ordering.
         core_moods = ['moodHappy', 'moodSad', 'moodRelaxed', 'moodAggressive']
         core_values = [raw_moods[m][0] for m in core_moods if m in raw_moods]
@@ -788,22 +795,41 @@ def _analyze_track_in_process(args: Tuple[str, str]) -> Tuple[str, str, Dict[str
     """
     Analyze a single track in a worker process.
     Returns (track_id, file_path, features_dict or error_dict)
+
+    The result dict may contain:
+    - '_error': Error message (marks as failed)
+    - '_skip': True if file should be permanently skipped (e.g., too large)
+    - '_file_size_mb': File size in MB (for logging/diagnostics)
     """
     global _process_analyzer
     track_id, file_path = args
-    
+
     try:
         # Normalize path separators (Windows paths -> Unix)
         normalized_path = file_path.replace('\\', '/')
         full_path = os.path.join(MUSIC_PATH, normalized_path)
-        
+
         if not os.path.exists(full_path):
             return (track_id, file_path, {'_error': 'File not found'})
-        
+
+        # Check file size before processing
+        file_size_bytes = os.path.getsize(full_path)
+        file_size_mb = file_size_bytes / (1024 * 1024)
+
+        # Skip files that exceed the size limit
+        if MAX_FILE_SIZE_MB > 0 and file_size_mb > MAX_FILE_SIZE_MB:
+            logger.warning(f"Skipping oversized file ({file_size_mb:.1f}MB > {MAX_FILE_SIZE_MB}MB): {file_path}")
+            return (track_id, file_path, {
+                '_error': f'File too large ({file_size_mb:.1f}MB > {MAX_FILE_SIZE_MB}MB limit)',
+                '_skip': True,
+                '_file_size_mb': file_size_mb
+            })
+
         # Run analysis
         features = _process_analyzer.analyze(full_path)
+        features['_file_size_mb'] = file_size_mb
         return (track_id, file_path, features)
-        
+
     except Exception as e:
         logger.error(f"Analysis error for {file_path}: {e}")
         return (track_id, file_path, {'_error': str(e)})
@@ -899,6 +925,8 @@ class AnalysisWorker:
         logger.info(f"  Active workers: {NUM_WORKERS}" + (" (from env)" if os.getenv('NUM_WORKERS') else " (auto)"))
         logger.info(f"  Max retries per track: {MAX_RETRIES}")
         logger.info(f"  Stale processing timeout: {STALE_PROCESSING_MINUTES} minutes")
+        logger.info(f"  Max file size: {MAX_FILE_SIZE_MB}MB" + (" (disabled)" if MAX_FILE_SIZE_MB == 0 else ""))
+        logger.info(f"  Base track timeout: {BASE_TRACK_TIMEOUT}s, max: {MAX_TRACK_TIMEOUT}s")
         logger.info(f"  Essentia available: {ESSENTIA_AVAILABLE}")
         
         self.db.connect()
@@ -1019,9 +1047,9 @@ class AnalysisWorker:
         """Process multiple tracks in parallel using the process pool"""
         if not tracks:
             return
-        
+
         logger.info(f"Processing batch of {len(tracks)} tracks with {NUM_WORKERS} workers...")
-        
+
         # Mark all as processing
         cursor = self.db.get_cursor()
         try:
@@ -1037,36 +1065,76 @@ class AnalysisWorker:
             self.db.rollback()
         finally:
             cursor.close()
-        
+
         # Submit all tracks to the process pool
         start_time = time.time()
         completed = 0
         failed = 0
-        
+        skipped = 0
+
         futures = {self.executor.submit(_analyze_track_in_process, t): t for t in tracks}
-        
-        for future in as_completed(futures, timeout=300):  # 5 min timeout per batch
-            try:
-                track_id, file_path, features = future.result(timeout=60)  # 1 min per track
-                
-                if features.get('_error'):
-                    self._save_failed(track_id, features['_error'])
-                    failed += 1
-                    logger.error(f"✗ Failed: {file_path} - {features['_error']}")
-                else:
-                    self._save_results(track_id, file_path, features)
-                    completed += 1
-                    logger.info(f"✓ Completed: {file_path}")
-            except Exception as e:
-                # Handle timeout or other errors
+
+        # Calculate batch timeout: base + extra time per track
+        # This scales with batch size to allow larger batches more time
+        batch_timeout = max(300, len(tracks) * BASE_TRACK_TIMEOUT)
+        batch_timeout = min(batch_timeout, MAX_TRACK_TIMEOUT * len(tracks))
+
+        try:
+            for future in as_completed(futures, timeout=batch_timeout):
                 track_info = futures[future]
-                self._save_failed(track_info[0], f"Timeout or error: {e}")
-                failed += 1
-                logger.error(f"✗ Failed: {track_info[1]} - {e}")
-        
+                try:
+                    # Per-track timeout scales with expected processing time
+                    # Large files might need more time before the worker even returns
+                    track_id, file_path, features = future.result(timeout=MAX_TRACK_TIMEOUT)
+
+                    if features.get('_error'):
+                        # Check if this is a permanent skip (oversized file, etc.)
+                        is_permanent = features.get('_skip', False)
+                        self._save_failed(track_id, features['_error'], permanent=is_permanent)
+                        if is_permanent:
+                            skipped += 1
+                            logger.warning(f"⊘ Skipped: {file_path} - {features['_error']}")
+                        else:
+                            failed += 1
+                            logger.error(f"✗ Failed: {file_path} - {features['_error']}")
+                    else:
+                        self._save_results(track_id, file_path, features)
+                        completed += 1
+                        size_mb = features.get('_file_size_mb', 0)
+                        if size_mb > 50:
+                            logger.info(f"✓ Completed ({size_mb:.1f}MB): {file_path}")
+                        else:
+                            logger.info(f"✓ Completed: {file_path}")
+
+                except TimeoutError:
+                    # Timeout waiting for result - mark as permanent failure
+                    # These large files will likely timeout again, don't retry
+                    self._save_failed(track_info[0], "Analysis timeout (file too large to process)", permanent=True)
+                    skipped += 1
+                    logger.error(f"⊘ Timeout (permanent): {track_info[1]}")
+
+                except Exception as e:
+                    # Other errors - may be retryable
+                    error_str = str(e)
+                    # Mark memory errors as permanent (won't help to retry)
+                    is_permanent = 'MemoryError' in error_str or 'out of memory' in error_str.lower()
+                    self._save_failed(track_info[0], f"Error: {e}", permanent=is_permanent)
+                    failed += 1
+                    logger.error(f"✗ Failed: {track_info[1]} - {e}")
+
+        except TimeoutError:
+            # Entire batch timed out - mark remaining futures as permanent failures
+            logger.error(f"Batch timeout after {batch_timeout}s - marking remaining tracks as failed")
+            for future in futures:
+                if not future.done():
+                    track_info = futures[future]
+                    self._save_failed(track_info[0], "Batch timeout (file too large)", permanent=True)
+                    skipped += 1
+                    logger.error(f"⊘ Batch timeout: {track_info[1]}")
+
         elapsed = time.time() - start_time
         rate = len(tracks) / elapsed if elapsed > 0 else 0
-        logger.info(f"Batch complete: {completed} succeeded, {failed} failed in {elapsed:.1f}s ({rate:.1f} tracks/sec)")
+        logger.info(f"Batch complete: {completed} succeeded, {failed} failed, {skipped} skipped in {elapsed:.1f}s ({rate:.1f} tracks/sec)")
     
     def _save_results(self, track_id: str, file_path: str, features: Dict[str, Any]):
         """Save analysis results to database"""
@@ -1142,28 +1210,48 @@ class AnalysisWorker:
         finally:
             cursor.close()
     
-    def _save_failed(self, track_id: str, error: str):
-        """Mark track as failed and increment retry count"""
+    def _save_failed(self, track_id: str, error: str, permanent: bool = False):
+        """Mark track as failed and increment retry count.
+
+        Args:
+            track_id: The track ID to mark as failed
+            error: Error message describing the failure
+            permanent: If True, immediately set retry count to MAX_RETRIES
+                      to prevent future retry attempts (for timeouts, oversized files, etc.)
+        """
         cursor = self.db.get_cursor()
         try:
-            cursor.execute("""
-                UPDATE "Track"
-                SET
-                    "analysisStatus" = 'failed',
-                    "analysisError" = %s,
-                    "analysisRetryCount" = COALESCE("analysisRetryCount", 0) + 1
-                WHERE id = %s
-                RETURNING "analysisRetryCount"
-            """, (error[:500], track_id))
-            
-            result = cursor.fetchone()
-            retry_count = result['analysisRetryCount'] if result else 0
-            
-            if retry_count >= MAX_RETRIES:
-                logger.warning(f"Track {track_id} has permanently failed after {retry_count} attempts")
+            if permanent:
+                # Permanently fail this track - don't retry
+                cursor.execute("""
+                    UPDATE "Track"
+                    SET
+                        "analysisStatus" = 'failed',
+                        "analysisError" = %s,
+                        "analysisRetryCount" = %s
+                    WHERE id = %s
+                """, (error[:500], MAX_RETRIES, track_id))
+                logger.warning(f"Track {track_id} permanently failed: {error}")
             else:
-                logger.info(f"Track {track_id} failed (attempt {retry_count}/{MAX_RETRIES}, will retry)")
-            
+                # Normal failure - increment retry count
+                cursor.execute("""
+                    UPDATE "Track"
+                    SET
+                        "analysisStatus" = 'failed',
+                        "analysisError" = %s,
+                        "analysisRetryCount" = COALESCE("analysisRetryCount", 0) + 1
+                    WHERE id = %s
+                    RETURNING "analysisRetryCount"
+                """, (error[:500], track_id))
+
+                result = cursor.fetchone()
+                retry_count = result['analysisRetryCount'] if result else 0
+
+                if retry_count >= MAX_RETRIES:
+                    logger.warning(f"Track {track_id} has permanently failed after {retry_count} attempts")
+                else:
+                    logger.info(f"Track {track_id} failed (attempt {retry_count}/{MAX_RETRIES}, will retry)")
+
             self.db.commit()
         except Exception as e:
             logger.error(f"Failed to mark track as failed: {e}")
