@@ -115,6 +115,27 @@ function randomSample<T>(array: T[], count: number): T[] {
     return shuffled.slice(0, count);
 }
 
+// Helper to enforce artist diversity - max N tracks per artist
+// Shuffles first to avoid insertion-order bias, then limits per artist
+function diversifyByArtist<T extends { album?: { artist?: { id?: string } } }>(
+    tracks: T[],
+    maxPerArtist: number = 2
+): T[] {
+    const shuffled = [...tracks].sort(() => Math.random() - 0.5);
+    const artistCounts = new Map<string, number>();
+    const diverse: T[] = [];
+
+    for (const track of shuffled) {
+        const artistId = track.album?.artist?.id || `unknown-${Math.random()}`;
+        const count = artistCounts.get(artistId) || 0;
+        if (count < maxPerArtist) {
+            diverse.push(track);
+            artistCounts.set(artistId, count + 1);
+        }
+    }
+    return diverse.sort(() => Math.random() - 0.5);
+}
+
 // Helper to get seeded random number for daily consistency
 function getSeededRandom(seed: string): number {
     let hash = 0;
@@ -1095,8 +1116,7 @@ export class ProgrammaticPlaylistService {
                     { energy: { lte: 0.55 } },
                 ],
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 100,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
 
         console.log(`[CHILL MIX] Enhanced mode: Found ${tracks.length} tracks`);
@@ -1108,11 +1128,8 @@ export class ProgrammaticPlaylistService {
                 where: {
                     analysisStatus: "completed",
                     AND: [
-                        // MUST be low-to-moderate energy
                         { energy: { lte: 0.55 } },
-                        // MUST be slow-to-moderate tempo
                         { bpm: { lte: 115 } },
-                        // Plus additional mellow indicator
                         {
                             OR: [
                                 { arousal: { lte: 0.55 } },
@@ -1122,38 +1139,33 @@ export class ProgrammaticPlaylistService {
                         },
                     ],
                 },
-                include: { album: { select: { coverUrl: true } } },
-                take: 100,
+                include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
             });
             console.log(
                 `[CHILL MIX] Standard mode: Found ${tracks.length} tracks`
             );
         }
 
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
+
         console.log(
-            `[CHILL MIX] Total: ${tracks.length} tracks matching criteria`
+            `[CHILL MIX] Total: ${tracks.length} tracks, ${diverseTracks.length} after diversity`
         );
 
-        if (tracks.length < this.MIN_TRACKS_DAILY) {
+        if (diverseTracks.length < this.MIN_TRACKS_DAILY) {
             console.log(
-                `[CHILL MIX] FAILED: Only ${tracks.length} tracks (need ${this.MIN_TRACKS_DAILY})`
+                `[CHILL MIX] FAILED: Only ${diverseTracks.length} diverse tracks (need ${this.MIN_TRACKS_DAILY})`
             );
             return null;
         }
 
-        const seed = getSeededRandom(`chill-${today}`);
-        let random = seed;
-        const shuffled = tracks.sort(() => {
-            random = (random * 9301 + 49297) % 233280;
-            return random / 233280 - 0.5;
-        });
-
         // Determine if daily or weekly based on available tracks
-        const isWeekly = tracks.length >= this.MIN_TRACKS_WEEKLY;
+        const isWeekly = diverseTracks.length >= this.MIN_TRACKS_WEEKLY;
         const trackLimit = isWeekly
             ? this.WEEKLY_TRACK_LIMIT
             : this.DAILY_TRACK_LIMIT;
-        const selectedTracks = shuffled.slice(0, trackLimit);
+        const selectedTracks = diverseTracks.slice(0, trackLimit);
 
         const coverUrls = selectedTracks
             .filter((t) => t.album.coverUrl)
@@ -1214,12 +1226,10 @@ export class ProgrammaticPlaylistService {
                     { arousal: { gte: 0.6 } },
                     { energy: { gte: 0.6 } },
                     { bpm: { gte: 110 } },
-                    // Not too relaxed
                     { moodRelaxed: { lte: 0.4 } },
                 ],
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 100,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
         tracks = enhancedTracks;
         console.log(
@@ -1251,8 +1261,7 @@ export class ProgrammaticPlaylistService {
                         },
                     ],
                 },
-                include: { album: { select: { coverUrl: true } } },
-                take: 100,
+                include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
             });
             const existingIds = new Set(tracks.map((t) => t.id));
             tracks = [
@@ -1310,16 +1319,19 @@ export class ProgrammaticPlaylistService {
             );
         }
 
-        if (tracks.length < 15) {
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
+
+        if (diverseTracks.length < 15) {
             console.log(
-                `[WORKOUT MIX] FAILED: Only ${tracks.length} tracks found`
+                `[WORKOUT MIX] FAILED: Only ${diverseTracks.length} diverse tracks found`
             );
             return null;
         }
 
         const seed = getSeededRandom(`workout-${today}`);
         let random = seed;
-        const shuffled = tracks.sort(() => {
+        const shuffled = diverseTracks.sort(() => {
             random = (random * 9301 + 49297) % 233280;
             return random / 233280 - 0.5;
         });
@@ -1375,10 +1387,9 @@ export class ProgrammaticPlaylistService {
                 trackGenres: {
                     include: {
                         track: {
-                            include: { album: { select: { coverUrl: true } } },
+                            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
                         },
                     },
-                    take: 50,
                 },
             },
         });
@@ -1411,8 +1422,7 @@ export class ProgrammaticPlaylistService {
                     instrumentalness: { gte: 0.5 },
                     energy: { gte: 0.2, lte: 0.7 },
                 },
-                include: { album: { select: { coverUrl: true } } },
-                take: 50,
+                include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
             });
             const existingIds = new Set(tracks.map((t) => t.id));
             tracks = [
@@ -1424,16 +1434,19 @@ export class ProgrammaticPlaylistService {
             );
         }
 
-        if (tracks.length < 15) {
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
+
+        if (diverseTracks.length < 15) {
             console.log(
-                `[FOCUS MIX] FAILED: Only ${tracks.length} tracks found`
+                `[FOCUS MIX] FAILED: Only ${diverseTracks.length} diverse tracks found`
             );
             return null;
         }
 
         const seed = getSeededRandom(`focus-${today}`);
         let random = seed;
-        const shuffled = tracks.sort(() => {
+        const shuffled = diverseTracks.sort(() => {
             random = (random * 9301 + 49297) % 233280;
             return random / 233280 - 0.5;
         });
@@ -1478,8 +1491,7 @@ export class ProgrammaticPlaylistService {
                 energy: { gte: 0.7 },
                 bpm: { gte: 120 },
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 100,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
         tracks = audioTracks;
         console.log(
@@ -1512,16 +1524,19 @@ export class ProgrammaticPlaylistService {
             );
         }
 
-        if (tracks.length < 15) {
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
+
+        if (diverseTracks.length < 15) {
             console.log(
-                `[HIGH ENERGY MIX] FAILED: Only ${tracks.length} tracks found`
+                `[HIGH ENERGY MIX] FAILED: Only ${diverseTracks.length} diverse tracks`
             );
             return null;
         }
 
         const seed = getSeededRandom(`high-energy-${today}`);
         let random = seed;
-        const shuffled = tracks.sort(() => {
+        const shuffled = diverseTracks.sort(() => {
             random = (random * 9301 + 49297) % 233280;
             return random / 233280 - 0.5;
         });
@@ -1559,18 +1574,13 @@ export class ProgrammaticPlaylistService {
                 analysisStatus: "completed",
                 analysisMode: "enhanced",
                 AND: [
-                    // High relaxed mood (ML)
                     { moodRelaxed: { gte: 0.5 } },
-                    // Low aggression (ML)
                     { moodAggressive: { lte: 0.4 } },
-                    // Low-moderate energy
                     { energy: { lte: 0.5 } },
-                    // Slow-moderate tempo
                     { bpm: { lte: 110 } },
                 ],
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 100,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
 
         console.log(
@@ -1584,11 +1594,8 @@ export class ProgrammaticPlaylistService {
                 where: {
                     analysisStatus: "completed",
                     AND: [
-                        // MUST have low energy
                         { energy: { lte: 0.45 } },
-                        // MUST have moderate-slow tempo
                         { bpm: { lte: 110 } },
-                        // Plus at least one additional mellow indicator
                         {
                             OR: [
                                 { arousal: { lte: 0.5 } },
@@ -1598,35 +1605,36 @@ export class ProgrammaticPlaylistService {
                         },
                     ],
                 },
-                include: { album: { select: { coverUrl: true } } },
-                take: 100,
+                include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
             });
             console.log(
                 `[LATE NIGHT MIX] Standard mode: Found ${tracks.length} tracks`
             );
         }
 
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
+
         console.log(
-            `[LATE NIGHT MIX] Total: ${tracks.length} tracks matching criteria`
+            `[LATE NIGHT MIX] Total: ${tracks.length} tracks, ${diverseTracks.length} after diversity`
         );
 
-        // No fallback padding - if not enough truly mellow tracks, don't generate
-        if (tracks.length < this.MIN_TRACKS_DAILY) {
+        if (diverseTracks.length < this.MIN_TRACKS_DAILY) {
             console.log(
-                `[LATE NIGHT MIX] FAILED: Only ${tracks.length} tracks (need ${this.MIN_TRACKS_DAILY})`
+                `[LATE NIGHT MIX] FAILED: Only ${diverseTracks.length} diverse tracks (need ${this.MIN_TRACKS_DAILY})`
             );
             return null;
         }
 
         const seed = getSeededRandom(`late-night-${today}`);
         let random = seed;
-        const shuffled = tracks.sort(() => {
+        const shuffled = diverseTracks.sort(() => {
             random = (random * 9301 + 49297) % 233280;
             return random / 233280 - 0.5;
         });
 
         // Determine if daily or weekly based on available tracks
-        const isWeekly = tracks.length >= this.MIN_TRACKS_WEEKLY;
+        const isWeekly = diverseTracks.length >= this.MIN_TRACKS_WEEKLY;
         const trackLimit = isWeekly
             ? this.WEEKLY_TRACK_LIMIT
             : this.DAILY_TRACK_LIMIT;
@@ -1668,8 +1676,7 @@ export class ProgrammaticPlaylistService {
                 moodHappy: { gte: 0.6 },
                 moodSad: { lte: 0.3 },
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 100,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
         tracks = enhancedTracks;
         console.log(`[HAPPY MIX] Enhanced mode: Found ${tracks.length} tracks`);
@@ -1682,8 +1689,7 @@ export class ProgrammaticPlaylistService {
                     valence: { gte: 0.6 },
                     energy: { gte: 0.5 },
                 },
-                include: { album: { select: { coverUrl: true } } },
-                take: 100,
+                include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
             });
             const existingIds = new Set(tracks.map((t) => t.id));
             tracks = [
@@ -1720,16 +1726,19 @@ export class ProgrammaticPlaylistService {
             );
         }
 
-        if (tracks.length < 15) {
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
+
+        if (diverseTracks.length < 15) {
             console.log(
-                `[HAPPY MIX] FAILED: Only ${tracks.length} tracks found`
+                `[HAPPY MIX] FAILED: Only ${diverseTracks.length} diverse tracks found`
             );
             return null;
         }
 
         const seed = getSeededRandom(`happy-${today}`);
         let random = seed;
-        const shuffled = tracks.sort(() => {
+        const shuffled = diverseTracks.sort(() => {
             random = (random * 9301 + 49297) % 233280;
             return random / 233280 - 0.5;
         });
@@ -1771,8 +1780,7 @@ export class ProgrammaticPlaylistService {
                 moodSad: { gte: 0.5 },
                 moodHappy: { lte: 0.4 },
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 150,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
         console.log(
             `[MELANCHOLY MIX] Enhanced mode: Found ${enhancedTracks.length} tracks`
@@ -1789,8 +1797,7 @@ export class ProgrammaticPlaylistService {
                     valence: { lte: 0.35 },
                     energy: { lte: 0.6 },
                 },
-                include: { album: { select: { coverUrl: true } } },
-                take: 150,
+                include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
             });
             console.log(
                 `[MELANCHOLY MIX] Standard mode: Found ${audioTracks.length} low-valence tracks`
@@ -1849,16 +1856,19 @@ export class ProgrammaticPlaylistService {
             );
         }
 
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
+
         // Require minimum 15 tracks for a meaningful playlist
-        if (tracks.length < 15) {
+        if (diverseTracks.length < 15) {
             console.log(
-                `[MELANCHOLY MIX] FAILED: Only ${tracks.length} tracks found`
+                `[MELANCHOLY MIX] FAILED: Only ${diverseTracks.length} diverse tracks found`
             );
             return null;
         }
 
         // Score and sort by "melancholy-ness" (only for tracks with audio analysis)
-        const sortedTracks = tracks.sort((a, b) => {
+        const sortedTracks = diverseTracks.sort((a, b) => {
             // Lower valence = more melancholy (score should be lower = better)
             const aScore =
                 (a.valence || 0.5) * 2 + // Valence is primary factor
@@ -3208,7 +3218,8 @@ export class ProgrammaticPlaylistService {
         userId: string,
         today: string
     ): Promise<ProgrammaticMix | null> {
-        // Get tracks that haven't been played much
+        // Get ALL tracks that haven't been played
+        // No take/orderBy - fetch entire pool, then randomly sample with diversity
         const tracks = await prisma.track.findMany({
             where: {
                 plays: {
@@ -3223,44 +3234,18 @@ export class ProgrammaticPlaylistService {
                     },
                 },
             },
-            take: 200,
         });
 
-        if (tracks.length < 15) {
-            // Fallback: tracks with few plays
-            const lowPlayTracks = await prisma.track.findMany({
-                include: {
-                    album: { select: { coverUrl: true } },
-                    _count: { select: { plays: true } },
-                },
-                take: 200,
-            });
+        console.log(`[DEEP CUTS] Found ${tracks.length} unplayed tracks in library`);
 
-            const filtered = lowPlayTracks
-                .filter((t) => t._count.plays <= 3)
-                .map((t) => ({ ...t, album: t.album }));
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
 
-            if (filtered.length < 15) return null;
-
-            const shuffled = randomSample(filtered, this.WEEKLY_TRACK_LIMIT);
-            const coverUrls = shuffled
-                .filter((t) => t.album.coverUrl)
-                .slice(0, 4)
-                .map((t) => t.album.coverUrl!);
-
-            return {
-                id: `deep-cuts-${today}`,
-                type: "deep-cuts",
-                name: "Deep Cuts",
-                description: "Hidden gems waiting to be discovered",
-                trackIds: shuffled.map((t) => t.id),
-                coverUrls,
-                trackCount: shuffled.length,
-                color: getMixColor("rediscover"),
-            };
+        if (diverseTracks.length < 15) {
+            return null;
         }
 
-        const shuffled = randomSample(tracks, this.WEEKLY_TRACK_LIMIT);
+        const shuffled = randomSample(diverseTracks, this.WEEKLY_TRACK_LIMIT);
         const coverUrls = shuffled
             .filter((t) => t.album.coverUrl)
             .slice(0, 4)

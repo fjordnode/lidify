@@ -23,6 +23,26 @@ import { enrichSimilarArtist } from "../workers/artistEnrichment";
 import { extractColorsFromImage } from "../utils/colorExtractor";
 import { dataCacheService } from "../services/dataCache";
 
+// Helper to enforce artist diversity - max N tracks per artist
+function diversifyTracksByArtist<T extends { album: { artist?: { id: string } } }>(
+    tracks: T[],
+    maxPerArtist: number = 2
+): T[] {
+    const shuffled = [...tracks].sort(() => Math.random() - 0.5);
+    const artistCounts = new Map<string, number>();
+    const diverse: T[] = [];
+
+    for (const track of shuffled) {
+        const artistId = track.album?.artist?.id || `unknown-${Math.random()}`;
+        const count = artistCounts.get(artistId) || 0;
+        if (count < maxPerArtist) {
+            diverse.push(track);
+            artistCounts.set(artistId, count + 1);
+        }
+    }
+    return diverse.sort(() => Math.random() - 0.5);
+}
+
 const router = Router();
 
 const applyCoverArtCorsHeaders = (res: Response, origin?: string) => {
@@ -692,6 +712,7 @@ router.get("/artists", async (req, res) => {
             limit: limitParam = "500",
             offset: offsetParam = "0",
             filter = "owned", // owned (default), discovery, all
+            sortBy = "name", // name, name-desc, tracks, dateAdded
         } = req.query;
         const limit = parseInt(limitParam as string, 10) || 500; // No max cap - support unlimited pagination
         const offset = parseInt(offsetParam as string, 10) || 0;
@@ -770,12 +791,25 @@ router.get("/artists", async (req, res) => {
                 ? undefined
                 : "LIBRARY";
 
+        // Determine orderBy based on sortBy parameter
+        let orderBy: any = { name: "asc" };
+        switch (sortBy) {
+            case "name-desc":
+                orderBy = { name: "desc" };
+                break;
+            case "dateAdded":
+                orderBy = { lastSynced: "desc" };
+                break;
+            // "tracks" sorting requires post-processing since it's a count
+            // "name" is default
+        }
+
         const [artistsWithAlbums, total] = await Promise.all([
             prisma.artist.findMany({
                 where,
                 skip: offset,
                 take: limit,
-                orderBy: { name: "asc" },
+                orderBy,
                 select: {
                     id: true,
                     mbid: true,
@@ -1578,6 +1612,7 @@ router.get("/albums", async (req, res) => {
             limit: limitParam = "500",
             offset: offsetParam = "0",
             filter = "owned", // owned (default), discovery, all
+            sortBy = "name", // name, name-desc, recent, dateAdded
         } = req.query;
         const limit = parseInt(limitParam as string, 10) || 500; // No max cap - support unlimited pagination
         const offset = parseInt(offsetParam as string, 10) || 0;
@@ -1616,12 +1651,27 @@ router.get("/albums", async (req, res) => {
             }
         }
 
+        // Determine orderBy based on sortBy parameter
+        let orderBy: any = { title: "asc" };
+        switch (sortBy) {
+            case "name-desc":
+                orderBy = { title: "desc" };
+                break;
+            case "recent":
+                orderBy = { year: "desc" };
+                break;
+            case "dateAdded":
+                orderBy = { lastSynced: "desc" };
+                break;
+            // "name" is default (title asc)
+        }
+
         const [albumsData, total] = await Promise.all([
             prisma.album.findMany({
                 where,
                 skip: offset,
                 take: limit,
-                orderBy: { year: "desc" },
+                orderBy,
                 include: {
                     artist: {
                         select: {
@@ -3272,9 +3322,7 @@ router.get("/radio", async (req, res) => {
 
             case "workout":
                 // High-energy workout tracks - multiple strategies
-                let workoutTrackIds: string[] = [];
-
-                // Strategy 1: Audio analysis - high energy AND fast BPM
+                // Fetch with artist info for diversity filtering
                 const energyTracks = await prisma.track.findMany({
                     where: {
                         analysisStatus: "completed",
@@ -3294,12 +3342,15 @@ router.get("/radio", async (req, res) => {
                             },
                         ],
                     },
-                    select: { id: true },
-                    take: limitNum * 2,
+                    include: { album: { select: { artist: { select: { id: true } } } } },
+                    take: 500, // Fetch more for diversity
                 });
-                workoutTrackIds = energyTracks.map((t) => t.id);
+
+                // Apply artist diversity: max 2 tracks per artist
+                const diverseEnergyTracks = diversifyTracksByArtist(energyTracks, 2);
+                let workoutTrackIds: string[] = diverseEnergyTracks.map((t) => t.id);
                 console.log(
-                    `[Radio:workout] Found ${workoutTrackIds.length} tracks via audio analysis`
+                    `[Radio:workout] Found ${energyTracks.length} tracks, ${workoutTrackIds.length} after diversity`
                 );
 
                 // Strategy 2: Genre-based (if not enough from audio)
