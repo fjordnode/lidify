@@ -445,3 +445,253 @@ if (mbNorm === requestedNorm || mbNorm.includes(requestedNorm) || requestedNorm.
 
 1. **Discovery cache can hold stale temp MBIDs** - If an artist shows a temp ID, try hard refresh or wait for cache to expire
 2. **First download attempt may fail** - If MBID lookup or indexer search times out, retry usually works
+
+---
+
+## Audio Analyzer Improvements (Dec 2025)
+
+### Problem
+
+The audio analyzer would get stuck processing large hi-res FLAC files (24-bit/96kHz+, 100-600MB), causing:
+- Batch timeouts (5-minute limit exceeded)
+- All tracks in the batch stuck in "processing" status
+- Infinite retry loops as failed tracks reset on container restart
+
+### Solution
+
+**Files Modified:** `services/audio-analyzer/analyzer.py`
+
+#### 1. File Size Limit
+```python
+MAX_FILE_SIZE_MB = int(os.getenv('MAX_FILE_SIZE_MB', '100'))
+```
+- Files exceeding limit are skipped before processing
+- Marked as permanently failed (won't retry)
+
+#### 2. Permanent Failure Handling
+Tracks are marked as permanent failures (retry count = MAX_RETRIES) for:
+- Oversized files
+- Timeout errors
+- Memory errors
+
+```python
+def _save_failed(self, track_id: str, error: str, permanent: bool = False):
+    if permanent:
+        # Set retry count to MAX_RETRIES immediately
+```
+
+#### 3. Scaled Timeouts
+```python
+BASE_TRACK_TIMEOUT = int(os.getenv('BASE_TRACK_TIMEOUT', '120'))
+MAX_TRACK_TIMEOUT = int(os.getenv('MAX_TRACK_TIMEOUT', '600'))
+```
+
+### Configuration
+
+```yaml
+environment:
+  - MAX_FILE_SIZE_MB=100    # Skip files larger than this (0 = disabled)
+  - BASE_TRACK_TIMEOUT=120  # Base timeout per track in seconds
+  - MAX_TRACK_TIMEOUT=600   # Maximum timeout even for large files
+```
+
+### Log Messages
+
+```
+⊘ Skipped: file.flac - File too large (123.7MB > 100MB limit)
+⊘ Timeout (permanent): file.flac
+✓ Completed (67.7MB): file.flac
+```
+
+---
+
+## ML Mood Analysis Fix (Dec 2025)
+
+### Problem
+
+The "Enhanced mode" ML mood analysis was **never actually working**. All 32K+ tracks were analyzed with "Standard mode" heuristics instead of real ML predictions. This caused:
+- Playlist generators falling back to unreliable heuristics
+- No `moodHappy`, `moodSad`, `moodRelaxed`, `moodAggressive` values in database
+- "Chill Mix" containing death metal, "Happy Vibes" containing black metal
+
+### Root Causes
+
+#### Bug 1: Model Filename Mismatch
+**Dockerfile** downloaded Discogs EfficientNet models:
+```
+discogs-effnet-bs64-1.pb
+mood_happy-discogs-effnet-1.pb
+```
+
+**Analyzer code** looked for MusiCNN models:
+```python
+'musicnn': os.path.join(MODEL_DIR, 'msd-musicnn-1.pb'),  # DOESN'T EXIST
+'mood_happy': os.path.join(MODEL_DIR, 'mood_happy-msd-musicnn-1.pb'),  # DOESN'T EXIST
+```
+
+Result: Model loading silently failed, fell back to Standard mode for ALL tracks.
+
+#### Bug 2: Classification Column Order Inversion
+The Discogs EfficientNet models have **inconsistent column ordering** per model:
+
+| Model | Column 0 | Column 1 | Positive Class |
+|-------|----------|----------|----------------|
+| mood_aggressive | aggressive | not_aggressive | **Column 0** |
+| mood_happy | happy | non_happy | **Column 0** |
+| mood_sad | non_sad | sad | **Column 1** |
+| mood_relaxed | non_relaxed | relaxed | **Column 1** |
+| danceability | danceable | not_danceable | **Column 0** |
+| voice_instrumental | instrumental | voice | **Column 1** |
+
+Original code assumed column 1 was always positive:
+```python
+positive_probs = preds[:, 1]  # WRONG for half the models
+```
+
+### Solution
+
+**File Modified:** `services/audio-analyzer/analyzer.py`
+
+#### Fix 1: Correct Model Paths
+```python
+MODELS = {
+    'effnet': os.path.join(MODEL_DIR, 'discogs-effnet-bs64-1.pb'),
+    'mood_happy': os.path.join(MODEL_DIR, 'mood_happy-discogs-effnet-1.pb'),
+    # ... etc
+}
+```
+
+#### Fix 2: Use TensorflowPredictEffnetDiscogs
+```python
+from essentia.standard import TensorflowPredictEffnetDiscogs
+self.effnet_model = TensorflowPredictEffnetDiscogs(
+    graphFilename=MODELS['effnet'],
+    output="PartitionedCall:1"
+)
+```
+
+#### Fix 3: Per-Model Column Selection
+```python
+# Column order verified from model metadata JSON files at essentia.upf.edu
+positive_col = 0 if model_name in ['mood_aggressive', 'mood_happy', 'danceability'] else 1
+positive_probs = preds[:, positive_col]
+```
+
+### Verification
+
+After fix, metal tracks correctly classified:
+```
+Manowar - Thor (The Powerhead):
+  mood_aggressive: 0.964 (was 0.036 before fix)
+  mood_happy: 0.279
+  mood_relaxed: 0.034
+```
+
+### Re-Analysis Required
+
+All existing tracks need re-analysis to populate ML mood fields:
+```sql
+UPDATE "Track" SET "analysisStatus" = 'pending', "analysisMode" = NULL
+WHERE "analysisMode" = 'standard';
+```
+
+### Why This Wasn't Caught
+
+1. **Silent fallback**: Standard mode ran without obvious errors
+2. **Plausible outputs**: Heuristic valence/arousal values looked reasonable
+3. **Buried error logs**: "Base MusiCNN model not found" error lost in startup noise
+4. **Working playlists**: Generators fell back to Standard mode queries
+
+---
+
+## Playlist Diversity Fix (Dec 2025)
+
+### Problem
+
+"Made for You" playlists were dominated by artists imported early (e.g., 90% AC/DC). Root causes:
+1. Prisma queries without `orderBy` return by insertion order (primary key)
+2. `take: 200` limits pool to first 200 matching tracks
+3. No artist diversity enforcement
+
+### Solution
+
+**Files Modified:**
+- `backend/src/services/programmaticPlaylists.ts`
+- `backend/src/routes/library.ts`
+
+#### 1. Diversity Helper Function
+```typescript
+function diversifyByArtist<T extends { album?: { artist?: { id?: string } } }>(
+    tracks: T[],
+    maxPerArtist: number = 2
+): T[] {
+    const shuffled = [...tracks].sort(() => Math.random() - 0.5);
+    const artistCounts = new Map<string, number>();
+    const diverse: T[] = [];
+
+    for (const track of shuffled) {
+        const artistId = track.album?.artist?.id || `unknown-${Math.random()}`;
+        const count = artistCounts.get(artistId) || 0;
+        if (count < maxPerArtist) {
+            diverse.push(track);
+            artistCounts.set(artistId, count + 1);
+        }
+    }
+    return diverse.sort(() => Math.random() - 0.5);
+}
+```
+
+#### 2. Query Changes
+All fixed generators now:
+- Include artist ID: `include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } }`
+- **Remove `take` and `orderBy`** - fetch ALL matching tracks from entire library
+- Apply diversity: `diversifyByArtist(tracks, 2)` - shuffles randomly + limits per artist
+
+**Why no `take` limit?**
+Using `take: 300` with `orderBy: { id: 'desc' }` just swaps "always oldest" for "always newest" - still biased. Fetching all matching tracks (e.g., 32K unplayed) and randomly sampling gives true variety.
+
+```typescript
+// Before (biased to newest 300):
+const tracks = await prisma.track.findMany({
+    where: { ... },
+    take: 300,
+    orderBy: { id: 'desc' },
+});
+
+// After (entire library pool):
+const tracks = await prisma.track.findMany({
+    where: { ... },
+    // No take, no orderBy
+});
+const diverse = diversifyByArtist(tracks, 2);  // Shuffles + limits per artist
+```
+
+### Fixed Generators
+
+| Generator | Status |
+|-----------|--------|
+| `generateDeepCuts` | ✅ Fixed |
+| `generateChillMix` | ✅ Fixed |
+| `generateWorkoutMix` | ✅ Fixed |
+| `generateHighEnergyMix` | ✅ Fixed |
+| `generateLateNightMix` | ✅ Fixed |
+| `generatePartyMix` | ⏳ Pending (complex - uses Genre table) |
+| `generateFocusMix` | ⏳ Pending |
+| `generateHappyMix` | ⏳ Pending |
+| `generateMelancholyMix` | ⏳ Pending |
+| Others... | ⏳ Pending |
+
+### Radio Mode (library.ts)
+
+Also fixed `diversifyTracksByArtist` helper added for workout radio and other radio modes.
+
+### Cache Clearing
+
+After deploying changes, clear Redis cache to regenerate playlists:
+```bash
+docker exec lidify /usr/bin/redis-cli FLUSHALL
+```
+
+### Last.fm Enrichment
+
+**Disabled** - The Last.fm mood tag enrichment was found to have only ~1% hit rate (most tracks return "no tags"). The Essentia-generated mood tags from audio analysis provide much better coverage (14K+ tracks tagged as groovy, dance, moody, etc.).
