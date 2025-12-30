@@ -54,30 +54,10 @@ export function useLibraryData({
                     limit: itemsPerPage,
                     offset,
                     filter,
+                    sortBy,
                 });
-                // Only update if this is still the current request
                 if (currentRequestId === requestIdRef.current) {
-                    // Sort client-side since backend sorts by name asc only
-                    let sortedArtists = [...response.artists];
-                    switch (sortBy) {
-                        case "name":
-                            sortedArtists.sort((a, b) => a.name.localeCompare(b.name));
-                            break;
-                        case "name-desc":
-                            sortedArtists.sort((a, b) => b.name.localeCompare(a.name));
-                            break;
-                        case "tracks":
-                            sortedArtists.sort((a, b) => (b.trackCount || 0) - (a.trackCount || 0));
-                            break;
-                        case "dateAdded":
-                            sortedArtists.sort((a, b) => {
-                                const dateA = a.lastSynced ? new Date(a.lastSynced).getTime() : 0;
-                                const dateB = b.lastSynced ? new Date(b.lastSynced).getTime() : 0;
-                                return dateB - dateA; // Newest first
-                            });
-                            break;
-                    }
-                    setArtists(sortedArtists);
+                    setArtists(response.artists);
                     setPagination({
                         total: response.total,
                         offset: response.offset,
@@ -89,29 +69,10 @@ export function useLibraryData({
                     limit: itemsPerPage,
                     offset,
                     filter,
+                    sortBy,
                 });
                 if (currentRequestId === requestIdRef.current) {
-                    // Sort client-side since backend sorts by year desc only
-                    let sortedAlbums = [...response.albums];
-                    switch (sortBy) {
-                        case "name":
-                            sortedAlbums.sort((a, b) => a.title.localeCompare(b.title));
-                            break;
-                        case "name-desc":
-                            sortedAlbums.sort((a, b) => b.title.localeCompare(a.title));
-                            break;
-                        case "recent":
-                            sortedAlbums.sort((a, b) => (b.year || 0) - (a.year || 0));
-                            break;
-                        case "dateAdded":
-                            sortedAlbums.sort((a, b) => {
-                                const dateA = a.lastSynced ? new Date(a.lastSynced).getTime() : 0;
-                                const dateB = b.lastSynced ? new Date(b.lastSynced).getTime() : 0;
-                                return dateB - dateA; // Newest first
-                            });
-                            break;
-                    }
-                    setAlbums(sortedAlbums);
+                    setAlbums(response.albums);
                     setPagination({
                         total: response.total,
                         offset: response.offset,
@@ -124,17 +85,7 @@ export function useLibraryData({
                     offset,
                 });
                 if (currentRequestId === requestIdRef.current) {
-                    // Sort client-side
-                    let sortedTracks = [...response.tracks];
-                    switch (sortBy) {
-                        case "name":
-                            sortedTracks.sort((a, b) => a.title.localeCompare(b.title));
-                            break;
-                        case "name-desc":
-                            sortedTracks.sort((a, b) => b.title.localeCompare(a.title));
-                            break;
-                    }
-                    setTracks(sortedTracks);
+                    setTracks(response.tracks);
                     setPagination({
                         total: response.total,
                         offset: response.offset,

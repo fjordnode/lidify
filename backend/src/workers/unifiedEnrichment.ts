@@ -19,7 +19,7 @@ import { config } from "../config";
 
 // Configuration
 const ARTIST_BATCH_SIZE = 10;
-const TRACK_BATCH_SIZE = 20;
+const TRACK_BATCH_SIZE = 50; // Increased from 20 for faster enrichment
 const ENRICHMENT_INTERVAL_MS = 30 * 1000; // 30 seconds
 
 let isRunning = false;
@@ -220,8 +220,10 @@ async function runEnrichmentCycle(fullMode: boolean): Promise<{
         // Step 1: Enrich artists (blocking - required for step 2)
         artistsProcessed = await enrichArtistsBatch();
 
-        // Step 2: Enrich track tags from Last.fm (blocking - quick API calls)
-        tracksProcessed = await enrichTrackTagsBatch();
+        // Step 2: Last.fm track tags - DISABLED
+        // Essentia audio analysis already provides better mood tags from actual audio
+        // Last.fm coverage is poor (~98% of tracks have no tags)
+        // tracksProcessed = await enrichTrackTagsBatch();
 
         // Step 3: Queue audio analysis (NON-BLOCKING)
         // Just adds to Redis queue - actual processing happens in audio-analyzer container
@@ -293,14 +295,25 @@ async function enrichArtistsBatch(): Promise<number> {
 async function enrichTrackTagsBatch(): Promise<number> {
     // Note: Nested orderBy on relations doesn't work with isEmpty filtering in Prisma
     // Track tag enrichment doesn't depend on artist enrichment status, so we just order by recency
-    // Match both empty array AND null (newly scanned tracks have null, not [])
-    const tracks = await prisma.track.findMany({
-        where: {
-            OR: [
-                { lastfmTags: { equals: [] } },
-                { lastfmTags: { isEmpty: true } },
-            ],
-        },
+    // Use raw SQL to properly match NULL, empty array, or isEmpty
+    // Prisma's array filters don't handle NULL correctly
+    const tracks = await prisma.$queryRaw<
+        Array<{ id: string; title: string; albumId: string }>
+    >`
+        SELECT t.id, t.title, t."albumId"
+        FROM "Track" t
+        WHERE t."lastfmTags" IS NULL
+           OR t."lastfmTags" = '{}'
+           OR array_length(t."lastfmTags", 1) IS NULL
+        ORDER BY t."fileModified" DESC
+        LIMIT ${TRACK_BATCH_SIZE}
+    `;
+
+    if (tracks.length === 0) return 0;
+
+    // Fetch full track data with relations for the IDs we found
+    const fullTracks = await prisma.track.findMany({
+        where: { id: { in: tracks.map((t) => t.id) } },
         include: {
             album: {
                 include: {
@@ -308,15 +321,11 @@ async function enrichTrackTagsBatch(): Promise<number> {
                 },
             },
         },
-        take: TRACK_BATCH_SIZE,
-        orderBy: [{ fileModified: "desc" }],
     });
 
-    if (tracks.length === 0) return 0;
+    console.log(`[Track Tags] Processing ${fullTracks.length} tracks...`);
 
-    console.log(`[Track Tags] Processing ${tracks.length} tracks...`);
-
-    for (const track of tracks) {
+    for (const track of fullTracks) {
         try {
             const artistName = track.album.artist.name;
             const trackInfo = await lastFmService.getTrackInfo(
@@ -357,7 +366,7 @@ async function enrichTrackTagsBatch(): Promise<number> {
         }
     }
 
-    return tracks.length;
+    return fullTracks.length;
 }
 
 /**
