@@ -55,7 +55,7 @@ export async function getSystemSettings(forceRefresh = false) {
         lidarrApiKey: safeDecrypt(settings.lidarrApiKey, 'lidarrApiKey'),
         nzbgetPassword: safeDecrypt(settings.nzbgetPassword, 'nzbgetPassword'),
         qbittorrentPassword: safeDecrypt(settings.qbittorrentPassword, 'qbittorrentPassword'),
-        openaiApiKey: safeDecrypt(settings.openaiApiKey, 'openaiApiKey'),
+        // Note: openrouterApiKey is not stored in DB - it's from OPENROUTER_API_KEY env var
         lastfmApiKey: safeDecrypt(settings.lastfmApiKey, 'lastfmApiKey'),
         lastfmApiSecret: safeDecrypt(settings.lastfmApiSecret, 'lastfmApiSecret'),
         fanartApiKey: safeDecrypt(settings.fanartApiKey, 'fanartApiKey'),

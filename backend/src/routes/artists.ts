@@ -4,11 +4,367 @@ import { musicBrainzService } from "../services/musicbrainz";
 import { fanartService } from "../services/fanart";
 import { deezerService } from "../services/deezer";
 import { redisClient } from "../utils/redis";
+import { openRouterService, SimilarArtistRecommendation, ChatMessage } from "../services/openrouter";
+import crypto from "crypto";
+import { prisma } from "../utils/db";
 
 const router = Router();
 
 // Cache TTL for discovery content (shorter since it's not owned)
 const DISCOVERY_CACHE_TTL = 24 * 60 * 60; // 24 hours
+const AI_SIMILAR_CACHE_TTL = 7 * 24 * 60 * 60; // 7 days
+
+// Interface for enriched similar artist
+interface EnrichedSimilarArtist extends SimilarArtistRecommendation {
+    inLibrary: boolean;
+    libraryId: string | null;
+    image: string | null;
+}
+
+// GET /artists/ai-similar/:artistId - Get AI-powered similar artist recommendations
+router.get("/ai-similar/:artistId", async (req, res) => {
+    try {
+        const { artistId } = req.params;
+        const cacheKey = `ai-similar:${artistId}`;
+
+        console.log(`[AI Similar] Request for artist: ${artistId}`);
+
+        // Check if OpenRouter is available
+        const isAvailable = await openRouterService.isAvailable();
+        console.log(`[AI Similar] OpenRouter available: ${isAvailable}`);
+        if (!isAvailable) {
+            return res.status(503).json({
+                error: "AI recommendations not available",
+                message: "OpenRouter is not configured. Enable it in Settings > AI & Enhancement Services.",
+            });
+        }
+
+        // Check Redis cache first
+        try {
+            const cached = await redisClient.get(cacheKey);
+            if (cached) {
+                console.log(`[AI Similar] Cache hit for artist: ${artistId}`);
+                return res.json(JSON.parse(cached));
+            }
+        } catch (err) {
+            // Redis errors are non-critical
+        }
+
+        // Get artist info - first try library, then discovery
+        let artist: any = null;
+        let source: "library" | "discovery" = "library";
+
+        // Check if it's a database ID (UUID or CUID) or name/mbid
+        // UUID format: 550e8400-e29b-41d4-a716-446655440000
+        // CUID format: cmjotvfy7019011cvh80ihq9o (starts with 'c', 25 chars)
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(artistId);
+        const isCUID = /^c[a-z0-9]{24}$/i.test(artistId);
+        const isDatabaseId = isUUID || isCUID;
+        console.log(`[AI Similar] Artist ID type: UUID=${isUUID}, CUID=${isCUID}, isDatabaseId=${isDatabaseId}`);
+
+        if (isDatabaseId) {
+            // Try to find in library first
+            const libraryArtist = await prisma.artist.findUnique({
+                where: { id: artistId },
+                select: {
+                    name: true,
+                    genres: true, // JSON field with array of genre strings
+                    albums: { select: { title: true, year: true } },
+                },
+            });
+
+            if (libraryArtist) {
+                // genres is stored as JSON array of strings
+                const genreArray = Array.isArray(libraryArtist.genres)
+                    ? libraryArtist.genres
+                    : [];
+                artist = {
+                    name: libraryArtist.name,
+                    genres: genreArray as string[],
+                    albums: libraryArtist.albums.map((a) => ({
+                        name: a.title,
+                        year: a.year,
+                    })),
+                };
+            }
+        }
+
+        // If not in library, try discovery (using Last.fm)
+        if (!artist) {
+            source = "discovery";
+            const nameOrMbid = decodeURIComponent(artistId);
+
+            try {
+                const lastFmInfo = await lastFmService.getArtistInfo(nameOrMbid);
+                if (lastFmInfo) {
+                    artist = {
+                        name: lastFmInfo.name || nameOrMbid,
+                        genres: lastFmInfo.tags?.tag?.map((t: any) => t.name) || [],
+                        albums: [], // We don't have album info from Last.fm in this context
+                    };
+                }
+            } catch (err) {
+                // Last.fm lookup failed, use just the name
+                artist = {
+                    name: nameOrMbid,
+                    genres: [],
+                    albums: [],
+                };
+            }
+        }
+
+        if (!artist) {
+            console.log(`[AI Similar] Artist not found for ID: ${artistId}`);
+            return res.status(404).json({ error: "Artist not found" });
+        }
+        console.log(`[AI Similar] Found artist: ${artist.name} (source: ${source})`);
+
+        // Get user's library artists for "in library" detection
+        const libraryArtists = await prisma.artist.findMany({
+            select: { id: true, name: true },
+        });
+        const libraryArtistNames = libraryArtists.map((a) => a.name);
+
+        console.log(`[AI Similar] Fetching recommendations for: ${artist.name}`);
+
+        // Get AI recommendations
+        const recommendations = await openRouterService.getSimilarArtists({
+            artistName: artist.name,
+            genres: artist.genres,
+            albums: artist.albums,
+            userLibraryArtists: libraryArtistNames,
+        });
+
+        // Enrich with library status and images
+        const enriched: EnrichedSimilarArtist[] = await Promise.all(
+            recommendations.map(async (rec) => {
+                const libraryMatch = libraryArtists.find(
+                    (a) => a.name.toLowerCase() === rec.artistName.toLowerCase()
+                );
+
+                // Try to get an image from Deezer
+                let image: string | null = null;
+                try {
+                    image = await deezerService.getArtistImage(rec.artistName);
+                } catch (err) {
+                    // Silently fail - image is optional
+                }
+
+                return {
+                    ...rec,
+                    inLibrary: !!libraryMatch,
+                    libraryId: libraryMatch?.id || null,
+                    image,
+                };
+            })
+        );
+
+        const response = {
+            artistName: artist.name,
+            source,
+            recommendations: enriched,
+            generatedAt: new Date().toISOString(),
+        };
+
+        // Cache the response
+        try {
+            await redisClient.setEx(
+                cacheKey,
+                AI_SIMILAR_CACHE_TTL,
+                JSON.stringify(response)
+            );
+            console.log(`[AI Similar] Cached recommendations for: ${artist.name}`);
+        } catch (err) {
+            // Redis errors are non-critical
+        }
+
+        res.json(response);
+    } catch (error: any) {
+        console.error("[AI Similar] Error:", error);
+        res.status(500).json({
+            error: "Failed to get AI recommendations",
+            message: error.message,
+        });
+    }
+});
+
+// Conversation TTL (1 hour of inactivity)
+const CONVERSATION_TTL = 60 * 60;
+
+// POST /artists/ai-chat/:artistId - Conversational AI recommendations
+router.post("/ai-chat/:artistId", async (req, res) => {
+    try {
+        const { artistId } = req.params;
+        const { message, conversationId } = req.body;
+
+        console.log(`[AI Chat] Request for artist: ${artistId}, convId: ${conversationId || 'new'}`);
+
+        // Check if OpenRouter is available
+        const isAvailable = await openRouterService.isAvailable();
+        if (!isAvailable) {
+            return res.status(503).json({
+                error: "AI chat not available",
+                message: "OpenRouter is not configured. Enable it in Settings > AI & Enhancement Services.",
+            });
+        }
+
+        // Get or create conversation ID
+        const convId = conversationId || crypto.randomUUID();
+        const convKey = `ai-chat:${convId}`;
+
+        // Get existing conversation from Redis
+        let conversationData: {
+            artistId: string;
+            artistName: string;
+            genres: string[];
+            albums: Array<{ name: string; year: number | null }>;
+            messages: ChatMessage[];
+        } | null = null;
+
+        try {
+            const cached = await redisClient.get(convKey);
+            if (cached) {
+                conversationData = JSON.parse(cached);
+                // Verify the conversation is for the same artist
+                if (conversationData?.artistId !== artistId) {
+                    conversationData = null; // Reset if artist changed
+                }
+            }
+        } catch (err) {
+            // Redis errors are non-critical
+        }
+
+        // If no conversation, look up artist info
+        if (!conversationData) {
+            // Check if it's a database ID
+            const isCUID = /^c[a-z0-9]{20,}$/i.test(artistId);
+            const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(artistId);
+            const isDatabaseId = isCUID || isUUID;
+
+            let artistInfo: { name: string; genres: string[]; albums: Array<{ name: string; year: number | null }> } | null = null;
+
+            if (isDatabaseId) {
+                const libraryArtist = await prisma.artist.findUnique({
+                    where: { id: artistId },
+                    select: {
+                        name: true,
+                        genres: true,
+                        albums: { select: { title: true, year: true } },
+                    },
+                });
+
+                if (libraryArtist) {
+                    const genreArray = Array.isArray(libraryArtist.genres) ? libraryArtist.genres : [];
+                    artistInfo = {
+                        name: libraryArtist.name,
+                        genres: genreArray as string[],
+                        albums: libraryArtist.albums.map((a) => ({ name: a.title, year: a.year })),
+                    };
+                }
+            }
+
+            if (!artistInfo) {
+                // Try discovery via Last.fm
+                const nameOrMbid = decodeURIComponent(artistId);
+                try {
+                    const lastFmInfo = await lastFmService.getArtistInfo(nameOrMbid);
+                    if (lastFmInfo) {
+                        artistInfo = {
+                            name: lastFmInfo.name || nameOrMbid,
+                            genres: lastFmInfo.tags?.tag?.map((t: any) => t.name) || [],
+                            albums: [],
+                        };
+                    }
+                } catch (err) {
+                    artistInfo = { name: nameOrMbid, genres: [], albums: [] };
+                }
+            }
+
+            if (!artistInfo) {
+                return res.status(404).json({ error: "Artist not found" });
+            }
+
+            conversationData = {
+                artistId,
+                artistName: artistInfo.name,
+                genres: artistInfo.genres,
+                albums: artistInfo.albums,
+                messages: [],
+            };
+        }
+
+        // Get user's library artists
+        const libraryArtists = await prisma.artist.findMany({
+            select: { id: true, name: true },
+        });
+        const libraryArtistNames = libraryArtists.map((a) => a.name);
+
+        // Call OpenRouter with conversation context
+        const aiResponse = await openRouterService.chatAboutArtist({
+            artistName: conversationData.artistName,
+            genres: conversationData.genres,
+            albums: conversationData.albums,
+            userLibraryArtists: libraryArtistNames,
+            messages: conversationData.messages,
+            userMessage: message,
+        });
+
+        // Update conversation history
+        if (message) {
+            conversationData.messages.push({ role: "user", content: message });
+        } else if (conversationData.messages.length === 0) {
+            conversationData.messages.push({ role: "user", content: "Recommend similar artists to explore." });
+        }
+        conversationData.messages.push({
+            role: "assistant",
+            content: JSON.stringify({ text: aiResponse.text, recommendations: aiResponse.recommendations }),
+        });
+
+        // Save conversation to Redis
+        try {
+            await redisClient.setEx(convKey, CONVERSATION_TTL, JSON.stringify(conversationData));
+        } catch (err) {
+            // Redis errors are non-critical
+        }
+
+        // Enrich recommendations with library status and images
+        const enriched: EnrichedSimilarArtist[] = await Promise.all(
+            aiResponse.recommendations.map(async (rec) => {
+                const libraryMatch = libraryArtists.find(
+                    (a) => a.name.toLowerCase() === rec.artistName.toLowerCase()
+                );
+
+                let image: string | null = null;
+                try {
+                    image = await deezerService.getArtistImage(rec.artistName);
+                } catch (err) {
+                    // Silently fail
+                }
+
+                return {
+                    ...rec,
+                    inLibrary: !!libraryMatch,
+                    libraryId: libraryMatch?.id || null,
+                    image,
+                };
+            })
+        );
+
+        res.json({
+            conversationId: convId,
+            artistName: conversationData.artistName,
+            text: aiResponse.text,
+            recommendations: enriched,
+            model: aiResponse.model,
+        });
+    } catch (error: any) {
+        console.error("[AI Chat] Error:", error);
+        res.status(500).json({
+            error: "Failed to get AI response",
+            message: error.message,
+        });
+    }
+});
 
 // GET /artists/preview/:artistName/:trackTitle - Get Deezer preview URL for a track
 router.get("/preview/:artistName/:trackTitle", async (req, res) => {
@@ -21,13 +377,17 @@ router.get("/preview/:artistName/:trackTitle", async (req, res) => {
             `Getting preview for "${decodedTrack}" by ${decodedArtist}`
         );
 
-        const previewUrl = await deezerService.getTrackPreview(
+        const previewInfo = await deezerService.getTrackPreviewWithInfo(
             decodedArtist,
             decodedTrack
         );
 
-        if (previewUrl) {
-            res.json({ previewUrl });
+        if (previewInfo) {
+            res.json({
+                previewUrl: previewInfo.previewUrl,
+                albumTitle: previewInfo.albumTitle,
+                albumCover: previewInfo.albumCover,
+            });
         } else {
             res.status(404).json({ error: "Preview not found" });
         }
@@ -325,6 +685,7 @@ router.get("/discover/:nameOrMbid", async (req, res) => {
         );
 
         const response = {
+            id: mbid || artistName, // For consistency with library artists
             mbid,
             name: artistName,
             image,

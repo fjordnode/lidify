@@ -695,3 +695,171 @@ docker exec lidify /usr/bin/redis-cli FLUSHALL
 ### Last.fm Enrichment
 
 **Disabled** - The Last.fm mood tag enrichment was found to have only ~1% hit rate (most tracks return "no tags"). The Essentia-generated mood tags from audio analysis provide much better coverage (14K+ tracks tagged as groovy, dance, moody, etc.).
+
+---
+
+## AI Similar Artists Feature (Dec 2025)
+
+### Overview
+
+AI-powered artist recommendations using OpenRouter (multi-provider LLM gateway), with conversational refinement.
+
+### OpenRouter Migration (Dec 31, 2025)
+
+**Migrated from OpenAI direct to OpenRouter** for access to 200+ models from multiple providers (OpenAI, Anthropic, Google, Meta, DeepSeek, etc.).
+
+**Files Changed:**
+- `backend/src/services/openai.ts` → `backend/src/services/openrouter.ts` - Renamed and updated
+- `backend/src/config.ts` - `OPENAI_API_KEY` → `OPENROUTER_API_KEY`
+- `backend/prisma/schema.prisma` - `openaiEnabled/openaiModel` → `openrouterEnabled/openrouterModel`
+- `docker-compose.yml` - Environment variable renamed
+- All frontend references updated
+
+**Database Migration:**
+```sql
+-- Migration: 20251231000000_rename_openai_to_openrouter
+ALTER TABLE "SystemSettings" ADD COLUMN "openrouterEnabled" BOOLEAN DEFAULT false;
+ALTER TABLE "SystemSettings" ADD COLUMN "openrouterModel" TEXT DEFAULT 'openai/gpt-4o-mini';
+-- Copies data from old columns, then drops them
+```
+
+### Features
+
+**Core:**
+- Button on artist page opens slide-over panel
+- 6-8 AI-generated similar artist recommendations
+- Shows artist photo (from Deezer), reason, recommended album
+- "In Library" badge for artists already in collection
+- Click recommendation → searches for artist (uses search to get proper MBID)
+
+**Conversational Refinement:**
+- Chat input for follow-up requests ("more electronic", "female vocalists")
+- Conversation history with message bubbles
+- Redis stores conversation (1hr TTL)
+- SessionStorage caches conversation per artist (survives page refresh)
+
+**UI Enhancements:**
+- **Regenerate button** - Refresh icon in header clears cache and fetches fresh recommendations
+- **Model label** - Small monospace text below header shows which model served the results (e.g., `deepseek/deepseek-chat-v3-0324`)
+- **Searchable model dropdown** - Settings page has searchable dropdown with all 200+ OpenRouter models
+
+### Settings
+
+OpenRouter must be enabled in Settings → AI & Enhancement Services:
+- Enable OpenRouter toggle (grayed out if API key not configured)
+- Select model from searchable dropdown (GPT-4o Mini, DeepSeek, Claude, Gemini, etc.)
+
+**Environment Variable:**
+```bash
+# In docker-compose.yml or .env
+OPENROUTER_API_KEY=sk-or-v1-...
+```
+
+Get your API key at: https://openrouter.ai/keys
+
+### Recommended Models
+
+| Model | Cost/rec | Notes |
+|-------|----------|-------|
+| `deepseek/deepseek-chat-v3-0324` | ~$0.0004 | Best value, excellent quality |
+| `google/gemini-2.0-flash-001` | ~$0.002 | Fast, good knowledge |
+| `openai/gpt-4o-mini` | ~$0.001 | Reliable, good JSON formatting |
+| `anthropic/claude-3-haiku` | ~$0.001 | Fast reasoning |
+
+### Key Implementation Details
+
+**Artist ID handling for recommendations:**
+```typescript
+// ArtistActionBar passes fallback chain
+artistId={artist.id || artist.mbid || artist.name}
+```
+
+**Discovery artists navigate to search:**
+```typescript
+// Non-library recommendations go through search for proper MBID
+router.push(`/search?q=${encodeURIComponent(artist.artistName)}`);
+```
+
+**Mobile keyboard fix:**
+```typescript
+// Only auto-focus input on desktop to avoid keyboard popup on mobile
+if (isOpen && messages.length > 0 && window.innerWidth >= 768) {
+    inputRef.current?.focus();
+}
+```
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/system-settings/openrouter-status` | GET | Check if API key is configured |
+| `/api/system-settings/openrouter-models` | GET | Fetch available models from OpenRouter |
+| `/api/system-settings/test-openrouter` | POST | Test connection with selected model |
+| `/api/artists/ai-chat/:artistId` | POST | Get AI recommendations (returns `model` in response) |
+
+---
+
+## Bug Fixes (Dec 2025)
+
+### Lidarr Queue Cleanup Bug
+
+**Problem:** Completed downloads were being deleted before import.
+
+**Cause:** `clearLidarrQueue()` in `simpleDownloadManager.ts` treated `importPending` as a failure state. Downloads at 100% waiting for import were removed.
+
+**Fix:** Removed `importPending` from failure conditions:
+```typescript
+// Before (WRONG - deleted completed downloads)
+item.trackedDownloadState === "importPending" ||
+
+// After (correct)
+// Only: failed, error, importFailed, or warnings with messages
+```
+
+### Artist URL Using Temp MBID
+
+**Problem:** Recently added artists got URLs like `/artist/temp-1767141916598-...` which led nowhere.
+
+**Cause:** Frontend used `artist.mbid || artist.id` - temp MBIDs are truthy so they were used instead of database ID.
+
+**Fix:** Changed all artist links to use `artist.id` (CUID) instead:
+```typescript
+// Before
+href={`/artist/${artist.mbid || artist.id}`}
+
+// After
+href={`/artist/${artist.id}`}
+```
+
+**Files fixed:**
+- `frontend/features/library/components/ArtistsGrid.tsx`
+- `frontend/features/home/components/ArtistsGrid.tsx`
+- `frontend/app/artists/page.tsx`
+- `frontend/features/search/components/LibraryTracksList.tsx`
+- `frontend/features/home/components/ContinueListening.tsx`
+- `frontend/components/player/OverlayPlayer.tsx`
+- `frontend/components/player/FullPlayer.tsx`
+- `frontend/features/album/components/AlbumHero.tsx`
+
+### Popular Tracks Album Display
+
+**Enhancement:** Show album name instead of artist name (redundant on artist page).
+
+**Additional:** When playing Deezer preview, album info from Deezer is displayed:
+- `backend/src/services/deezer.ts` - Added `getTrackPreviewWithInfo()` returning album title/cover
+- `backend/src/routes/artists.ts` - Preview endpoint returns album info
+- `frontend/features/artist/hooks/usePreviewPlayer.ts` - Stores album info per track
+- `frontend/features/artist/components/PopularTracks.tsx` - Shows Deezer album after preview
+
+---
+
+## Known Issues / TODO
+
+### Playback Position Persistence
+
+**Current:** Playback position resets to start on page reload.
+
+**TODO:** Add localStorage persistence:
+- Save `currentTime` on time updates (throttled)
+- Restore position when track loads
+- Clear on track change/completion

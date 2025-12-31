@@ -87,9 +87,10 @@ export const config = {
         apiKey: process.env.LASTFM_API_KEY || "c1797de6bf0b7e401b623118120cd9e1",
     },
 
-    // OpenAI - reads from database
-    openai: {
-        apiKey: process.env.OPENAI_API_KEY || "", // Fallback to DB
+    // OpenRouter - API key from environment variable only (security best practice)
+    // OpenRouter provides access to many LLM providers (OpenAI, Anthropic, Google, etc.) via single API
+    openrouter: {
+        apiKey: process.env.OPENROUTER_API_KEY || "",
     },
 
     // Deezer - reads from database

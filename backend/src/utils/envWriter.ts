@@ -53,7 +53,7 @@ export async function writeEnvFile(
         Lidarr: ["LIDARR_ENABLED", "LIDARR_URL", "LIDARR_API_KEY"],
         "Last.fm": ["LASTFM_API_KEY", "LASTFM_API_SECRET"],
         "Fanart.tv": ["FANART_API_KEY"],
-        OpenAI: ["OPENAI_API_KEY"],
+        OpenRouter: ["OPENROUTER_API_KEY"],
         Audiobookshelf: ["AUDIOBOOKSHELF_URL", "AUDIOBOOKSHELF_API_KEY"],
         Soulseek: ["SLSKD_SOULSEEK_USERNAME", "SLSKD_SOULSEEK_PASSWORD"],
         "VPN (Mullvad)": [

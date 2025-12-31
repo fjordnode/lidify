@@ -29,6 +29,18 @@ export interface MoodMixParams {
     limit?: number;
 }
 
+// OpenRouter model from API
+export interface OpenRouterModel {
+    id: string;
+    name: string;
+    description?: string;
+    pricing: {
+        prompt: string;
+        completion: string;
+    };
+    context_length: number;
+}
+
 // New Mood Bucket Types (simplified mood system)
 export type MoodType =
     | "happy"
@@ -687,10 +699,21 @@ class ApiClient {
         });
     }
 
-    async testOpenai(apiKey: string, model: string) {
-        return this.request<any>("/system-settings/test-openai", {
+    // Check if OpenRouter API key is configured via environment variable
+    async getOpenRouterStatus(): Promise<{ configured: boolean }> {
+        return this.request<{ configured: boolean }>("/system-settings/openrouter-status");
+    }
+
+    // Fetch available models from OpenRouter
+    async getOpenRouterModels(): Promise<{ models: OpenRouterModel[] }> {
+        return this.request<{ models: OpenRouterModel[] }>("/system-settings/openrouter-models");
+    }
+
+    // Test OpenRouter connection (uses API key from environment variable)
+    async testOpenRouter(model: string) {
+        return this.request<any>("/system-settings/test-openrouter", {
             method: "POST",
-            body: JSON.stringify({ apiKey, model }),
+            body: JSON.stringify({ model }),
         });
     }
 
@@ -928,11 +951,51 @@ class ApiClient {
     }
 
     async getTrackPreview(artistName: string, trackTitle: string) {
-        return this.request<{ previewUrl: string }>(
+        return this.request<{
+            previewUrl: string;
+            albumTitle?: string;
+            albumCover?: string | null;
+        }>(
             `/artists/preview/${encodeURIComponent(
                 artistName
             )}/${encodeURIComponent(trackTitle)}`
         );
+    }
+
+    async getAISimilarArtists(artistId: string) {
+        return this.request<{
+            artistName: string;
+            source: "library" | "discovery";
+            recommendations: Array<{
+                artistName: string;
+                reason: string;
+                startWith?: string;
+                inLibrary: boolean;
+                libraryId: string | null;
+                image: string | null;
+            }>;
+            generatedAt: string;
+        }>(`/artists/ai-similar/${encodeURIComponent(artistId)}`);
+    }
+
+    async chatWithAI(artistId: string, message?: string, conversationId?: string) {
+        return this.request<{
+            conversationId: string;
+            artistName: string;
+            text: string;
+            recommendations: Array<{
+                artistName: string;
+                reason: string;
+                startWith?: string;
+                inLibrary: boolean;
+                libraryId: string | null;
+                image: string | null;
+            }>;
+            model?: string;
+        }>(`/artists/ai-chat/${encodeURIComponent(artistId)}`, {
+            method: "POST",
+            body: JSON.stringify({ message, conversationId }),
+        });
     }
 
     async testDeezer(apiKey?: string) {

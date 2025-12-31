@@ -83,11 +83,9 @@ model SystemSettings {
   lidarrQualityProfileId Int?    // Quality profile ID to use for downloads (fetched from Lidarr)
 
   // === AI Services ===
-  // OpenAI (for future AI features)
-  openaiEnabled Boolean @default(false)
-  openaiApiKey  String? // Encrypted
-  openaiModel   String? @default("gpt-4")
-  openaiBaseUrl String? // For custom endpoints
+  // OpenRouter (multi-provider LLM gateway)
+  openrouterEnabled Boolean @default(false)
+  openrouterModel   String? @default("openai/gpt-4o-mini")
 
   // Fanart.tv (for high-quality images - optional)
   fanartEnabled Boolean @default(false)

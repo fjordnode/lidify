@@ -191,7 +191,7 @@ export default function SettingsPage() {
                             settings={systemSettings}
                             onUpdate={updateSystemSettings}
                             onTest={handleTestService}
-                            isTesting={testingServices.openai || testingServices.fanart || false}
+                            isTesting={testingServices.openrouter || testingServices.fanart || false}
                         />
 
                         {/* Storage */}

@@ -22,6 +22,30 @@ function safeDecrypt(value: string | null): string | null {
     }
 }
 
+// GET /system-settings/openrouter-status
+// Returns whether OpenRouter is configured (API key is set via environment variable)
+// This endpoint is BEFORE auth middleware so the settings page can check availability
+router.get("/openrouter-status", async (req, res) => {
+    const { openRouterService } = await import("../services/openrouter");
+    res.json({
+        configured: openRouterService.isConfigured(),
+    });
+});
+
+// GET /system-settings/openrouter-models
+// Fetches available models from OpenRouter API
+// This endpoint is BEFORE auth middleware for simplicity
+router.get("/openrouter-models", async (req, res) => {
+    try {
+        const { openRouterService } = await import("../services/openrouter");
+        const models = await openRouterService.getModels();
+        res.json({ models });
+    } catch (error: any) {
+        console.error("[OpenRouter] Failed to fetch models:", error.message);
+        res.status(500).json({ error: "Failed to fetch models", models: [] });
+    }
+});
+
 // GET /system-settings/lidarr-quality-profiles
 // This endpoint is BEFORE auth middleware because it needs to work with unsaved credentials
 // The Lidarr API key in the request provides its own authentication
@@ -79,11 +103,9 @@ const systemSettingsSchema = z.object({
     lidarrApiKey: z.string().nullable().optional(),
     lidarrQualityProfileId: z.number().nullable().optional(),
 
-    // AI Services
-    openaiEnabled: z.boolean().optional(),
-    openaiApiKey: z.string().nullable().optional(),
-    openaiModel: z.string().optional(),
-    openaiBaseUrl: z.string().nullable().optional(),
+    // AI Services (API key set via OPENROUTER_API_KEY environment variable)
+    openrouterEnabled: z.boolean().optional(),
+    openrouterModel: z.string().optional(),
 
     fanartEnabled: z.boolean().optional(),
     fanartApiKey: z.string().nullable().optional(),
@@ -133,8 +155,8 @@ router.get("/", async (req, res) => {
                     id: "default",
                     lidarrEnabled: true,
                     lidarrUrl: "http://localhost:8686",
-                    openaiEnabled: false,
-                    openaiModel: "gpt-4",
+                    openrouterEnabled: false,
+                    openrouterModel: "openai/gpt-4o-mini",
                     fanartEnabled: false,
                     audiobookshelfEnabled: false,
                     audiobookshelfUrl: "http://localhost:13378",
@@ -151,10 +173,10 @@ router.get("/", async (req, res) => {
 
         // Decrypt sensitive fields before sending to client
         // Use safeDecrypt to handle corrupted encrypted values gracefully
+        // Note: openrouterApiKey is NOT sent - it's only configured via OPENROUTER_API_KEY env var
         const decryptedSettings = {
             ...settings,
             lidarrApiKey: safeDecrypt(settings.lidarrApiKey),
-            openaiApiKey: safeDecrypt(settings.openaiApiKey),
             fanartApiKey: safeDecrypt(settings.fanartApiKey),
             audiobookshelfApiKey: safeDecrypt(settings.audiobookshelfApiKey),
             soulseekPassword: safeDecrypt(settings.soulseekPassword),
@@ -180,12 +202,11 @@ router.post("/", async (req, res) => {
         );
 
         // Encrypt sensitive fields
+        // Note: openrouterApiKey is NOT stored - it's only configured via OPENROUTER_API_KEY env var
         const encryptedData: any = { ...data };
 
         if (data.lidarrApiKey)
             encryptedData.lidarrApiKey = encrypt(data.lidarrApiKey);
-        if (data.openaiApiKey)
-            encryptedData.openaiApiKey = encrypt(data.openaiApiKey);
         if (data.fanartApiKey)
             encryptedData.fanartApiKey = encrypt(data.fanartApiKey);
         if (data.audiobookshelfApiKey)
@@ -226,13 +247,13 @@ router.post("/", async (req, res) => {
         }
 
         // Write to .env file for Docker containers
+        // Note: OPENROUTER_API_KEY is NOT written - it must be set externally for security
         try {
             await writeEnvFile({
                 LIDARR_ENABLED: data.lidarrEnabled ? "true" : "false",
                 LIDARR_URL: data.lidarrUrl || null,
                 LIDARR_API_KEY: data.lidarrApiKey || null,
                 FANART_API_KEY: data.fanartApiKey || null,
-                OPENAI_API_KEY: data.openaiApiKey || null,
                 AUDIOBOOKSHELF_URL: data.audiobookshelfUrl || null,
                 AUDIOBOOKSHELF_API_KEY: data.audiobookshelfApiKey || null,
                 SOULSEEK_USERNAME: data.soulseekUsername || null,
@@ -451,38 +472,48 @@ router.post("/test-lidarr", async (req, res) => {
     }
 });
 
-// POST /system-settings/test-openai
-router.post("/test-openai", async (req, res) => {
+// POST /system-settings/test-openrouter
+// Tests the OpenRouter connection using the OPENROUTER_API_KEY environment variable
+router.post("/test-openrouter", async (req, res) => {
     try {
-        const { apiKey, model } = req.body;
+        const { config } = await import("../config");
+        const { model } = req.body;
 
+        const apiKey = config.openrouter.apiKey;
         if (!apiKey) {
-            return res.status(400).json({ error: "API key is required" });
+            return res.status(400).json({
+                error: "OpenRouter API key not configured",
+                details: "Set OPENROUTER_API_KEY environment variable"
+            });
         }
 
         const axios = require("axios");
         const response = await axios.post(
-            "https://api.openai.com/v1/chat/completions",
+            "https://openrouter.ai/api/v1/chat/completions",
             {
-                model: model || "gpt-3.5-turbo",
+                model: model || "openai/gpt-4o-mini",
                 messages: [{ role: "user", content: "Test" }],
                 max_tokens: 5,
             },
             {
-                headers: { Authorization: `Bearer ${apiKey}` },
+                headers: {
+                    Authorization: `Bearer ${apiKey}`,
+                    "HTTP-Referer": "https://lidify.app",
+                    "X-Title": "Lidify Music",
+                },
                 timeout: 10000,
             }
         );
 
         res.json({
             success: true,
-            message: "OpenAI connection successful",
+            message: "OpenRouter connection successful",
             model: response.data.model,
         });
     } catch (error: any) {
-        console.error("OpenAI test error:", error.message);
+        console.error("OpenRouter test error:", error.message);
         res.status(500).json({
-            error: "Failed to connect to OpenAI",
+            error: "Failed to connect to OpenRouter",
             details: error.response?.data?.error?.message || error.message,
         });
     }

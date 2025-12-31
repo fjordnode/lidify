@@ -8,9 +8,8 @@ const defaultSystemSettings: SystemSettings = {
     lidarrUrl: "http://localhost:8686",
     lidarrApiKey: "",
     lidarrQualityProfileId: null,
-    openaiEnabled: false,
-    openaiApiKey: "",
-    openaiModel: "gpt-4",
+    openrouterEnabled: false,
+    openrouterModel: "openai/gpt-4o-mini",
     fanartEnabled: false,
     fanartApiKey: "",
     audiobookshelfEnabled: false,
@@ -159,11 +158,9 @@ export function useSystemSettings() {
                         systemSettings.lidarrApiKey
                     );
                     break;
-                case "openai":
-                    result = await api.testOpenai(
-                        systemSettings.openaiApiKey,
-                        systemSettings.openaiModel
-                    );
+                case "openrouter":
+                    // API key is from environment variable, only send model
+                    result = await api.testOpenRouter(systemSettings.openrouterModel);
                     break;
                 case "fanart":
                     result = await api.testFanart(systemSettings.fanartApiKey);
