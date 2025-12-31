@@ -48,7 +48,7 @@ const ArtistCardItem = memo(
         return (
             <div className="relative group">
                 <PlayableCard
-                    href={`/artist/${artist.mbid || artist.id}`}
+                    href={`/artist/${artist.id}`}
                     coverArt={getArtistImageSrc(artist.coverArt)}
                     title={artist.name}
                     subtitle={`${artist.albumCount || 0} albums`}

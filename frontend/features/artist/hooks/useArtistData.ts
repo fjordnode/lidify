@@ -25,15 +25,36 @@ export function useArtistData() {
         queryKey: queryKeys.artist(id || ""),
         queryFn: async () => {
             if (!id) throw new Error("Artist ID is required");
-            try {
-                return await api.getArtist(id);
-            } catch (error) {
+
+            // Check if ID looks like a database ID (CUID or UUID) vs artist name
+            const isCUID = /^c[a-z0-9]{20,}$/i.test(id);
+            const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+            const isDatabaseId = isCUID || isUUID;
+
+            console.log(`[useArtistData] Fetching artist: "${id}", isDatabaseId: ${isDatabaseId}`);
+
+            // For database IDs, try library first then discovery
+            // For names/MBIDs, go straight to discovery
+            if (isDatabaseId) {
+                try {
+                    console.log(`[useArtistData] Trying library for: ${id}`);
+                    return await api.getArtist(id);
+                } catch (error) {
+                    // Library lookup failed, try discovery (might be an MBID)
+                    console.log(`[useArtistData] Library failed, trying discovery for: ${id}`);
+                    return await api.getArtistDiscovery(id);
+                }
+            } else {
+                // It's an artist name, use discovery directly
+                console.log(`[useArtistData] Using discovery for artist name: ${id}`);
                 return await api.getArtistDiscovery(id);
             }
         },
         enabled: !!id,
-        staleTime: 10 * 60 * 1000,
-        retry: 1,
+        staleTime: 5 * 60 * 1000, // 5 minutes
+        gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
+        retry: 2,
+        refetchOnMount: true,
     });
 
     // Refetch when downloads complete (active count decreases)

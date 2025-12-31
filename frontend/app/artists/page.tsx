@@ -66,7 +66,7 @@ export default function ArtistsPage() {
             <div className="relative max-w-7xl mx-auto px-8 pb-24">
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                     {artists.map((artist) => (
-                        <Link key={artist.id} href={`/artist/${artist.mbid || artist.id}`}>
+                        <Link key={artist.id} href={`/artist/${artist.id}`}>
                             <div className="bg-gradient-to-br from-[#121212] to-[#121212] hover:from-[#181818] hover:to-[#1a1a1a] transition-all duration-300 p-4 rounded-lg group cursor-pointer border border-white/5 hover:border-white/10 hover:scale-105 hover:shadow-2xl">
                                 <div className="aspect-square bg-[#181818] rounded-full mb-4 flex items-center justify-center overflow-hidden shadow-lg">
                                     {artist.coverArt ? (

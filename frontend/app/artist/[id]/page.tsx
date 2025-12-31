@@ -34,7 +34,7 @@ export default function ArtistPage() {
   // Action hooks
   const { playAll, shufflePlay } = useArtistActions();
   const { downloadArtist, downloadAlbum } = useDownloadActions();
-  const { previewTrack, previewPlaying, handlePreview } = usePreviewPlayer();
+  const { previewTrack, previewPlaying, previewAlbumInfo, handlePreview } = usePreviewPlayer();
 
   // Separate owned and available albums
   const ownedAlbums = albums.filter((a) => a.owned);
@@ -198,6 +198,7 @@ export default function ArtistPage() {
               onPlayTrack={handlePlayTrack}
               previewTrack={previewTrack}
               previewPlaying={previewPlaying}
+              previewAlbumInfo={previewAlbumInfo}
               onPreview={(track: any, e: React.MouseEvent) =>
                 handlePreview(track, artist.name, e)
               }

@@ -274,7 +274,7 @@ export function OverlayPlayer() {
             mediaLink = null;
         } else if (currentTrack) {
             albumLink = currentTrack.album?.id ? `/album/${currentTrack.album.id}` : null;
-            artistLink = currentTrack.artist?.id ? `/artist/${currentTrack.artist.mbid || currentTrack.artist.id}` : null;
+            artistLink = currentTrack.artist?.id ? `/artist/${currentTrack.artist.id}` : null;
             mediaLink = albumLink;
         }
     } else if (playbackType === "audiobook" && currentAudiobook) {

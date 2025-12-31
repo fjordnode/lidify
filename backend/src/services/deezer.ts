@@ -166,9 +166,25 @@ class DeezerService {
      * Get a preview URL for a track
      */
     async getTrackPreview(artistName: string, trackName: string): Promise<string | null> {
-        const cacheKey = `preview:${artistName.toLowerCase()}:${trackName.toLowerCase()}`;
+        const info = await this.getTrackPreviewWithInfo(artistName, trackName);
+        return info?.previewUrl || null;
+    }
+
+    async getTrackPreviewWithInfo(artistName: string, trackName: string): Promise<{
+        previewUrl: string;
+        albumTitle: string;
+        albumCover: string | null;
+    } | null> {
+        const cacheKey = `preview-info:${artistName.toLowerCase()}:${trackName.toLowerCase()}`;
         const cached = await this.getCached(cacheKey);
-        if (cached) return cached === "null" ? null : cached;
+        if (cached) {
+            if (cached === "null") return null;
+            try {
+                return JSON.parse(cached);
+            } catch {
+                // Invalid cache, refetch
+            }
+        }
 
         try {
             const response = await axios.get(`${DEEZER_API}/search/track`, {
@@ -177,10 +193,19 @@ class DeezerService {
             });
 
             const track = response.data?.data?.[0];
-            const previewUrl = track?.preview || null;
+            if (!track?.preview) {
+                await this.setCache(cacheKey, "null");
+                return null;
+            }
 
-            await this.setCache(cacheKey, previewUrl || "null");
-            return previewUrl;
+            const result = {
+                previewUrl: track.preview,
+                albumTitle: track.album?.title || "Unknown Album",
+                albumCover: track.album?.cover_medium || track.album?.cover || null,
+            };
+
+            await this.setCache(cacheKey, JSON.stringify(result));
+            return result;
         } catch (error: any) {
             console.error(`Deezer track preview error for ${artistName} - ${trackName}:`, error.message);
             return null;

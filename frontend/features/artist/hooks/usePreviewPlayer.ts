@@ -4,9 +4,15 @@ import { toast } from "sonner";
 import { Track } from "../types";
 import { howlerEngine } from "@/lib/howler-engine";
 
+interface PreviewAlbumInfo {
+    title: string;
+    cover: string | null;
+}
+
 export function usePreviewPlayer() {
     const [previewTrack, setPreviewTrack] = useState<string | null>(null);
     const [previewPlaying, setPreviewPlaying] = useState(false);
+    const [previewAlbumInfo, setPreviewAlbumInfo] = useState<Record<string, PreviewAlbumInfo>>({});
     const previewAudioRef = useRef<HTMLAudioElement | null>(null);
     const mainPlayerWasPausedRef = useRef(false);
     const previewRequestIdRef = useRef(0);
@@ -80,6 +86,17 @@ export function usePreviewPlayer() {
                     if (howlerEngine.isPlaying()) {
                         howlerEngine.pause();
                         mainPlayerWasPausedRef.current = true;
+                    }
+
+                    // Store album info from Deezer
+                    if (response.albumTitle) {
+                        setPreviewAlbumInfo(prev => ({
+                            ...prev,
+                            [track.id]: {
+                                title: response.albumTitle!,
+                                cover: response.albumCover || null,
+                            }
+                        }));
                     }
 
                     // Create new audio element
@@ -178,5 +195,5 @@ export function usePreviewPlayer() {
         };
     }, []);
 
-    return { previewTrack, previewPlaying, handlePreview };
+    return { previewTrack, previewPlaying, previewAlbumInfo, handlePreview };
 }

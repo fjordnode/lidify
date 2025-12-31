@@ -3,6 +3,7 @@ import { cn } from "@/utils/cn";
 import type { Artist } from "../types";
 import type { Album } from "../types";
 import type { ArtistSource } from "../types";
+import { AISimilarArtists } from "./AISimilarArtists";
 
 const LIDIFY_YELLOW = "#ecb200";
 
@@ -103,6 +104,12 @@ export function ArtistActionBar({
                     </span>
                 </button>
             )}
+
+            {/* AI Recommendations Button */}
+            <AISimilarArtists
+                artistId={artist.id || artist.mbid || artist.name}
+                artistName={artist.name}
+            />
         </div>
     );
 }

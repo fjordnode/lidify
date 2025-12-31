@@ -1497,15 +1497,15 @@ class SimpleDownloadManager {
             console.log(`   Found ${records.length} items in queue`);
 
             // Filter for failed/warning status items
+            // NOTE: importPending is NOT a failure - it means download complete, waiting for import
             const failedItems = records.filter(
                 (item: any) =>
-                    item.status === "warning" ||
                     item.status === "failed" ||
-                    item.trackedDownloadStatus === "warning" ||
                     item.trackedDownloadStatus === "error" ||
-                    item.trackedDownloadState === "importPending" ||
                     item.trackedDownloadState === "importFailed" ||
-                    (item.statusMessages && item.statusMessages.length > 0)
+                    // Only treat warnings with status messages as failures
+                    ((item.status === "warning" || item.trackedDownloadStatus === "warning") &&
+                        item.statusMessages && item.statusMessages.length > 0)
             );
 
             if (failedItems.length === 0) {

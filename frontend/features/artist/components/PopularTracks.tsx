@@ -5,6 +5,11 @@ import Image from "next/image";
 import { api } from "@/lib/api";
 import type { Track, Artist } from "../types";
 
+interface PreviewAlbumInfo {
+    title: string;
+    cover: string | null;
+}
+
 interface PopularTracksProps {
     tracks: Track[];
     artist: Artist;
@@ -13,6 +18,7 @@ interface PopularTracksProps {
     onPlayTrack: (track: Track) => void;
     previewTrack: string | null;
     previewPlaying: boolean;
+    previewAlbumInfo?: Record<string, PreviewAlbumInfo>;
     onPreview: (track: Track, e: React.MouseEvent) => void;
 }
 
@@ -24,6 +30,7 @@ export const PopularTracks: React.FC<PopularTracksProps> = ({
     onPlayTrack,
     previewTrack,
     previewPlaying,
+    previewAlbumInfo,
     onPreview,
 }) => {
     const formatDuration = (seconds: number) => {
@@ -132,7 +139,11 @@ export const PopularTracks: React.FC<PopularTracksProps> = ({
                                         )}
                                     </div>
                                     <p className="text-xs text-gray-400 truncate">
-                                        {artist.name}
+                                        {/* Use Deezer album info if available, otherwise fall back to track data */}
+                                        {previewAlbumInfo?.[track.id]?.title ||
+                                         (track.album?.title && track.album.title !== "Unknown Album"
+                                            ? track.album.title
+                                            : null)}
                                     </p>
                                 </div>
                             </div>
