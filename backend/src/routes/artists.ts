@@ -21,6 +21,31 @@ interface EnrichedSimilarArtist extends SimilarArtistRecommendation {
     image: string | null;
 }
 
+// GET /artists/image/:artistName - Get just the artist image (lightweight)
+router.get("/image/:artistName", async (req, res) => {
+    try {
+        const artistName = decodeURIComponent(req.params.artistName);
+        const cacheKey = `artist-image:${artistName.toLowerCase()}`;
+
+        // Check cache first
+        const cached = await redisClient.get(cacheKey);
+        if (cached) {
+            return res.json({ image: cached === "null" ? null : cached });
+        }
+
+        // Fetch from Deezer (fast)
+        const image = await deezerService.getArtistImage(artistName);
+
+        // Cache for 7 days
+        await redisClient.setEx(cacheKey, 7 * 24 * 60 * 60, image || "null");
+
+        res.json({ image });
+    } catch (error: any) {
+        console.error("[Artist Image] Error:", error.message);
+        res.json({ image: null });
+    }
+});
+
 // GET /artists/ai-similar/:artistId - Get AI-powered similar artist recommendations
 router.get("/ai-similar/:artistId", async (req, res) => {
     try {

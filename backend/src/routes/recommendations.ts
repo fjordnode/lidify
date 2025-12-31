@@ -541,10 +541,18 @@ router.get("/ai-weekly", async (req, res) => {
             }
         }
 
-        // Sort by play count and format for AI
-        const topArtists = Array.from(artistStats.values())
+        // Sort by play count, then randomly sample from top 20 for variety
+        const allArtistsSorted = Array.from(artistStats.values())
             .sort((a, b) => b.playCount - a.playCount)
-            .slice(0, 10)
+            .slice(0, 20); // Take top 20 candidates
+
+        // Randomly sample 10 from top 20 (weighted by play count)
+        const shuffled = [...allArtistsSorted].sort(() => Math.random() - 0.5);
+        const selectedArtists = shuffled.slice(0, Math.min(10, shuffled.length));
+
+        // Re-sort selected by play count for display
+        const topArtists = selectedArtists
+            .sort((a, b) => b.playCount - a.playCount)
             .map(a => ({
                 name: a.name,
                 playCount: a.playCount,
@@ -561,37 +569,24 @@ router.get("/ai-weekly", async (req, res) => {
         console.log(`[AI Weekly] User ${userId}: ${recentPlays.length} plays, ${topArtists.length} top artists in last ${daysNum} days`);
         console.log(`[AI Weekly] Top artist: ${topArtists[0]?.name} (${topArtists[0]?.playCount} plays)`);
 
-        // Call AI to recommend songs based on listening
-        const { deezerService } = await import("../services/deezer");
-        const aiTracks = await openRouterService.getTracksFromListening({
+        // Call AI to recommend artists based on listening
+        console.log(`[AI Weekly] Calling AI for artist recommendations...`);
+        const aiArtists = await openRouterService.getArtistsFromListening({
             topArtists,
             libraryArtists: libraryArtistNames,
         });
+        console.log(`[AI Weekly] Got ${aiArtists.length} artist recommendations from AI`);
+        if (aiArtists.length > 0) {
+            console.log(`[AI Weekly] Sample artist:`, JSON.stringify(aiArtists[0]));
+        }
 
-        // Fetch Deezer previews for each track
-        const tracksWithPreviews = await Promise.all(
-            aiTracks.map(async (track) => {
-                try {
-                    const info = await deezerService.getTrackPreviewWithInfo(
-                        track.artistName,
-                        track.trackTitle
-                    );
-                    return {
-                        ...track,
-                        previewUrl: info?.previewUrl || null,
-                        albumCover: info?.albumCover || null,
-                    };
-                } catch {
-                    return { ...track, previewUrl: null, albumCover: null };
-                }
-            })
-        );
-
+        // Return AI artists - Deezer photos and top tracks fetched on-demand by frontend
         res.json({
             period: `${daysNum} days`,
             totalPlays: recentPlays.length,
             topArtists: topArtists.slice(0, 5),
-            tracks: tracksWithPreviews,
+            artists: aiArtists,
+            generatedAt: new Date().toISOString(),
         });
     } catch (error: any) {
         console.error("[AI Weekly] Error:", error);

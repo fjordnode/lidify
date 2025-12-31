@@ -195,9 +195,9 @@ class ApiClient {
      */
     async request<T>(
         endpoint: string,
-        options: RequestInit & { silent404?: boolean } = {}
+        options: RequestInit & { silent404?: boolean; timeout?: number } = {}
     ): Promise<T> {
-        const { silent404, ...fetchOptions } = options;
+        const { silent404, timeout, ...fetchOptions } = options;
         const headers: HeadersInit = {
             "Content-Type": "application/json",
             ...fetchOptions.headers,
@@ -213,37 +213,54 @@ class ApiClient {
         // All API endpoints are prefixed with /api
         const url = `${this.getBaseUrl()}/api${endpoint}`;
 
-        const response = await fetch(url, {
-            ...fetchOptions,
-            headers,
-            credentials: "include", // Still send cookies for backward compatibility
-        });
+        // Create abort controller for timeout
+        const controller = new AbortController();
+        const timeoutId = timeout ? setTimeout(() => controller.abort(), timeout) : null;
 
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({
-                error: response.statusText,
-            }));
+        try {
+            const response = await fetch(url, {
+                ...fetchOptions,
+                headers,
+                signal: controller.signal,
+                credentials: "include", // Still send cookies for backward compatibility
+            });
 
-            // Only log non-404 errors (404s are often expected)
-            if (!(silent404 && response.status === 404)) {
-                console.error(`[API] Request failed: ${url}`, error);
-            }
+            if (timeoutId) clearTimeout(timeoutId);
 
-            if (response.status === 401) {
-                const err = new Error("Not authenticated");
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({
+                    error: response.statusText,
+                }));
+
+                // Only log non-404 errors (404s are often expected)
+                if (!(silent404 && response.status === 404)) {
+                    console.error(`[API] Request failed: ${url}`, error);
+                }
+
+                if (response.status === 401) {
+                    const err = new Error("Not authenticated");
+                    (err as any).status = response.status;
+                    (err as any).data = error;
+                    throw err;
+                }
+
+                const err = new Error(error.error || "An error occurred");
                 (err as any).status = response.status;
                 (err as any).data = error;
                 throw err;
             }
 
-            const err = new Error(error.error || "An error occurred");
-            (err as any).status = response.status;
-            (err as any).data = error;
+            const data = await response.json();
+            return data;
+        } catch (err: any) {
+            if (timeoutId) clearTimeout(timeoutId);
+            if (err.name === 'AbortError') {
+                const timeoutErr = new Error('Request timed out');
+                (timeoutErr as any).status = 408;
+                throw timeoutErr;
+            }
             throw err;
         }
-
-        const data = await response.json();
-        return data;
     }
 
     // Generic POST method for convenience
@@ -519,20 +536,18 @@ class ApiClient {
         );
     }
 
-    async getAIWeeklyTracks(days = 7) {
+    async getAIWeeklyArtists(days = 7) {
         return this.request<{
             period: string;
             totalPlays: number;
             topArtists: Array<{ name: string; playCount: number; genres: string[] }>;
-            tracks: Array<{
+            artists: Array<{
                 artistName: string;
-                trackTitle: string;
                 reason: string;
-                previewUrl: string | null;
-                albumCover: string | null;
-                deezerArtistId: number | null;
+                startWith?: string;
             }>;
-        }>(`/recommendations/ai-weekly?days=${days}`);
+            generatedAt: string;
+        }>(`/recommendations/ai-weekly?days=${days}`, { timeout: 90000 }); // 90 second timeout for AI call
     }
 
     async getSimilarArtists(seedArtistId: string, limit = 20) {
@@ -957,6 +972,13 @@ class ApiClient {
     async getArtistDiscovery(nameOrMbid: string) {
         return this.request<any>(
             `/artists/discover/${encodeURIComponent(nameOrMbid)}`
+        );
+    }
+
+    // Get just artist image (lightweight, for thumbnails)
+    async getArtistImage(artistName: string) {
+        return this.request<{ image: string | null }>(
+            `/artists/image/${encodeURIComponent(artistName)}`
         );
     }
 

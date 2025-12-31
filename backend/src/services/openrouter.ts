@@ -499,7 +499,7 @@ Include 6-8 recommendations. If the user's message doesn't warrant new recommend
             .map(a => `${a.name} (${a.playCount} plays, ${a.genres.slice(0, 3).join(", ") || "various"})`)
             .join("\n");
 
-        const prompt = `Based on this listening history, recommend 15 songs the user would enjoy.
+        const prompt = `Based on this listening history, recommend 15 songs the user would enjoy discovering.
 
 RECENT LISTENING:
 ${listeningProfile}
@@ -508,10 +508,11 @@ USER'S LIBRARY ARTISTS (for context):
 ${libraryArtists.slice(0, 50).join(", ")}
 
 GUIDELINES:
-1. Mix songs from artists similar to their taste
-2. Include both well-known tracks and hidden gems
-3. Consider the genres they clearly enjoy
-4. Recommend songs they can discover and explore
+1. Prioritize songs from artists NOT in their library - help them discover new music
+2. Mix well-known hits with hidden gems from artists similar to their taste
+3. Match the genres and energy levels they clearly enjoy
+4. Use accurate, real song titles that exist - no hallucinated tracks
+5. Include a variety of artists - don't repeat the same artist more than twice
 
 Return ONLY valid JSON:
 {
