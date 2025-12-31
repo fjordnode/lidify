@@ -519,6 +519,22 @@ class ApiClient {
         );
     }
 
+    async getAIWeeklyTracks(days = 7) {
+        return this.request<{
+            period: string;
+            totalPlays: number;
+            topArtists: Array<{ name: string; playCount: number; genres: string[] }>;
+            tracks: Array<{
+                artistName: string;
+                trackTitle: string;
+                reason: string;
+                previewUrl: string | null;
+                albumCover: string | null;
+                deezerArtistId: number | null;
+            }>;
+        }>(`/recommendations/ai-weekly?days=${days}`);
+    }
+
     async getSimilarArtists(seedArtistId: string, limit = 20) {
         return this.request<{ recommendations: any[] }>(
             `/recommendations?seedArtistId=${seedArtistId}&limit=${limit}`

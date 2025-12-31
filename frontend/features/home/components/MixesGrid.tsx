@@ -4,6 +4,7 @@ import { MixCard } from "@/components/MixCard";
 import { Mix } from "../types";
 import { memo } from "react";
 import { HorizontalCarousel, CarouselItem } from "@/components/ui/HorizontalCarousel";
+import { AIWeeklyCard } from "./AIWeeklyCard";
 
 interface MixesGridProps {
     mixes: Mix[];
@@ -12,6 +13,10 @@ interface MixesGridProps {
 const MixesGrid = memo(function MixesGrid({ mixes }: MixesGridProps) {
     return (
         <HorizontalCarousel>
+            {/* AI Weekly - first card */}
+            <CarouselItem>
+                <AIWeeklyCard />
+            </CarouselItem>
             {mixes.map((mix, index) => (
                 <CarouselItem key={mix.id}>
                     <MixCard mix={mix} index={index} />
