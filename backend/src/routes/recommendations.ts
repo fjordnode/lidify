@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireAuth, requireAuthOrToken } from "../middleware/auth";
 import { prisma } from "../utils/db";
 import { lastFmService } from "../services/lastfm";
+import { openRouterService } from "../services/openrouter";
 
 const router = Router();
 
@@ -462,6 +463,141 @@ router.get("/tracks", async (req, res) => {
         console.error("Get track recommendations error:", error);
         res.status(500).json({
             error: "Failed to get track recommendations",
+        });
+    }
+});
+
+// GET /recommendations/ai-weekly
+// AI-generated artist recommendations based on listening history
+router.get("/ai-weekly", async (req, res) => {
+    try {
+        const userId = req.user!.id;
+        const { days = "7" } = req.query;
+        const daysNum = parseInt(days as string, 10);
+
+        // Check if OpenRouter is available
+        const isAvailable = await openRouterService.isAvailable();
+        if (!isAvailable) {
+            return res.status(503).json({
+                error: "AI recommendations not available",
+                message: "OpenRouter is not configured. Enable it in Settings.",
+            });
+        }
+
+        // Get plays from the past N days
+        const since = new Date();
+        since.setDate(since.getDate() - daysNum);
+
+        const recentPlays = await prisma.play.findMany({
+            where: {
+                userId,
+                playedAt: { gte: since },
+            },
+            include: {
+                track: {
+                    include: {
+                        album: {
+                            include: {
+                                artist: true,
+                            },
+                        },
+                        trackGenres: {
+                            include: { genre: true },
+                        },
+                    },
+                },
+            },
+        });
+
+        if (recentPlays.length < 5) {
+            return res.status(400).json({
+                error: "Not enough listening history",
+                message: `Only ${recentPlays.length} plays in the last ${daysNum} days. Need at least 5.`,
+            });
+        }
+
+        // Aggregate by artist with play counts and genres
+        const artistStats = new Map<string, {
+            name: string;
+            playCount: number;
+            genres: Set<string>;
+        }>();
+
+        for (const play of recentPlays) {
+            const artist = play.track.album.artist;
+            const existing = artistStats.get(artist.id);
+
+            const trackGenres = play.track.trackGenres.map(tg => tg.genre.name);
+
+            if (existing) {
+                existing.playCount++;
+                trackGenres.forEach(g => existing.genres.add(g));
+            } else {
+                artistStats.set(artist.id, {
+                    name: artist.name,
+                    playCount: 1,
+                    genres: new Set(trackGenres),
+                });
+            }
+        }
+
+        // Sort by play count and format for AI
+        const topArtists = Array.from(artistStats.values())
+            .sort((a, b) => b.playCount - a.playCount)
+            .slice(0, 10)
+            .map(a => ({
+                name: a.name,
+                playCount: a.playCount,
+                genres: Array.from(a.genres),
+            }));
+
+        // Get user's library artists for context
+        const libraryArtists = await prisma.artist.findMany({
+            select: { name: true },
+            take: 200,
+        });
+        const libraryArtistNames = libraryArtists.map(a => a.name);
+
+        console.log(`[AI Weekly] User ${userId}: ${recentPlays.length} plays, ${topArtists.length} top artists in last ${daysNum} days`);
+        console.log(`[AI Weekly] Top artist: ${topArtists[0]?.name} (${topArtists[0]?.playCount} plays)`);
+
+        // Call AI to recommend songs based on listening
+        const { deezerService } = await import("../services/deezer");
+        const aiTracks = await openRouterService.getTracksFromListening({
+            topArtists,
+            libraryArtists: libraryArtistNames,
+        });
+
+        // Fetch Deezer previews for each track
+        const tracksWithPreviews = await Promise.all(
+            aiTracks.map(async (track) => {
+                try {
+                    const info = await deezerService.getTrackPreviewWithInfo(
+                        track.artistName,
+                        track.trackTitle
+                    );
+                    return {
+                        ...track,
+                        previewUrl: info?.previewUrl || null,
+                        albumCover: info?.albumCover || null,
+                    };
+                } catch {
+                    return { ...track, previewUrl: null, albumCover: null };
+                }
+            })
+        );
+
+        res.json({
+            period: `${daysNum} days`,
+            totalPlays: recentPlays.length,
+            topArtists: topArtists.slice(0, 5),
+            tracks: tracksWithPreviews,
+        });
+    } catch (error: any) {
+        console.error("[AI Weekly] Error:", error);
+        res.status(500).json({
+            error: "Failed to generate AI recommendations",
+            message: error.message,
         });
     }
 });

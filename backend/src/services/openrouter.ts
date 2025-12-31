@@ -481,6 +481,146 @@ Include 6-8 recommendations. If the user's message doesn't warrant new recommend
     }
 
     /**
+     * Get track recommendations based on listening history
+     */
+    async getTracksFromListening(params: {
+        topArtists: Array<{ name: string; playCount: number; genres: string[] }>;
+        libraryArtists: string[];
+    }): Promise<Array<{ artistName: string; trackTitle: string; reason: string }>> {
+        const { topArtists, libraryArtists } = params;
+
+        const apiKey = config.openrouter.apiKey;
+        if (!apiKey) throw new Error("OpenRouter API key not configured.");
+
+        const settings = await getSystemSettings();
+        const model = settings?.openrouterModel || "openai/gpt-4o-mini";
+
+        const listeningProfile = topArtists
+            .map(a => `${a.name} (${a.playCount} plays, ${a.genres.slice(0, 3).join(", ") || "various"})`)
+            .join("\n");
+
+        const prompt = `Based on this listening history, recommend 15 songs the user would enjoy.
+
+RECENT LISTENING:
+${listeningProfile}
+
+USER'S LIBRARY ARTISTS (for context):
+${libraryArtists.slice(0, 50).join(", ")}
+
+GUIDELINES:
+1. Mix songs from artists similar to their taste
+2. Include both well-known tracks and hidden gems
+3. Consider the genres they clearly enjoy
+4. Recommend songs they can discover and explore
+
+Return ONLY valid JSON:
+{
+  "tracks": [
+    { "artistName": "Artist", "trackTitle": "Song Title", "reason": "Brief reason (10 words max)" }
+  ]
+}`;
+
+        try {
+            const response = await this.createClient().post("/chat/completions", {
+                model,
+                messages: [
+                    { role: "system", content: "You recommend songs based on listening habits. Respond with valid JSON only." },
+                    { role: "user", content: prompt },
+                ],
+                max_tokens: 1500,
+                temperature: 0.7,
+            });
+
+            const content = response.data.choices[0].message.content.trim();
+            let jsonContent = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+            const result = JSON.parse(jsonContent);
+            return result.tracks || [];
+        } catch (error: any) {
+            console.error("[OpenRouter] getTracksFromListening error:", error.message);
+            throw new Error("Failed to get track recommendations");
+        }
+    }
+
+    /**
+     * Get artist recommendations based on listening history
+     */
+    async getArtistsFromListening(params: {
+        topArtists: Array<{ name: string; playCount: number; genres: string[] }>;
+        libraryArtists: string[];
+    }): Promise<SimilarArtistRecommendation[]> {
+        const { topArtists, libraryArtists } = params;
+
+        const apiKey = config.openrouter.apiKey;
+        if (!apiKey) {
+            throw new Error("OpenRouter API key not configured.");
+        }
+
+        const settings = await getSystemSettings();
+        const model = settings?.openrouterModel || "openai/gpt-4o-mini";
+
+        // Format listening data
+        const listeningProfile = topArtists
+            .map(a => `${a.name} (${a.playCount} plays, genres: ${a.genres.slice(0, 3).join(", ") || "unknown"})`)
+            .join("\n");
+
+        const prompt = `Based on this user's recent listening history, recommend 8 NEW artists they would enjoy.
+
+RECENT LISTENING (past week):
+${listeningProfile}
+
+USER'S LIBRARY (${libraryArtists.length} artists - DO NOT recommend these):
+${libraryArtists.slice(0, 100).join(", ")}${libraryArtists.length > 100 ? "..." : ""}
+
+GUIDELINES:
+1. Recommend artists SIMILAR to their listening but NOT in their library
+2. Consider the genres and styles they clearly enjoy
+3. Mix well-known names with lesser-known gems
+4. Explain WHY each artist fits their taste
+5. Suggest a good album to start with
+
+Return ONLY valid JSON:
+{
+  "recommendations": [
+    {
+      "artistName": "Artist Name",
+      "reason": "Why they'd like this based on their listening (1-2 sentences)",
+      "startWith": "Best album to start with"
+    }
+  ]
+}`;
+
+        try {
+            const client = this.createClient();
+            const response = await client.post("/chat/completions", {
+                model,
+                messages: [
+                    {
+                        role: "system",
+                        content: "You are a music curator recommending new artists based on listening habits. Always respond with valid JSON only.",
+                    },
+                    { role: "user", content: prompt },
+                ],
+                max_tokens: 1500,
+                temperature: 0.7,
+            });
+
+            const content = response.data.choices[0].message.content.trim();
+            let jsonContent = content;
+            if (content.startsWith("```json")) {
+                jsonContent = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+            } else if (content.startsWith("```")) {
+                jsonContent = content.replace(/```\n?/g, "").trim();
+            }
+
+            const result = JSON.parse(jsonContent);
+            return result.recommendations || [];
+        } catch (error: any) {
+            console.error("[OpenRouter] getArtistsFromListening error:", error.response?.data || error.message);
+            throw new Error("Failed to get AI artist recommendations");
+        }
+    }
+
+    /**
      * Check if OpenRouter is configured and available
      * Returns true if: API key is set in env AND feature is enabled in settings
      */
