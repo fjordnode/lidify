@@ -13,6 +13,7 @@
 
 import { Request, Response, NextFunction } from "express";
 import { createHash } from "crypto";
+import rateLimit from "express-rate-limit";
 import { prisma } from "../utils/db";
 import bcrypt from "bcrypt";
 import { decrypt } from "../utils/encryption";
@@ -190,15 +191,26 @@ export async function requireSubsonicAuth(
 }
 
 /**
- * Optional: Rate limiting specifically for Subsonic API
- * Subsonic clients often make many rapid requests
+ * Rate limiting for Subsonic API authentication
+ * Limits failed auth attempts to prevent brute force attacks
  */
-export function subsonicRateLimiter(
-    req: Request,
-    res: Response,
-    next: NextFunction
-): void {
-    // For now, no rate limiting on Subsonic API
-    // Clients like Supersonic cache aggressively
-    next();
-}
+export const subsonicRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 30, // 30 attempts per 15 min (higher than web login - clients retry aggressively)
+    skipSuccessfulRequests: true, // Only count failed attempts
+    message: {
+        "subsonic-response": {
+            status: "failed",
+            version: "1.16.1",
+            error: { code: 41, message: "Too many failed attempts. Try again later." }
+        }
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => {
+        // Rate limit by IP + username to prevent distributed attacks on single account
+        const ip = req.ip || 'unknown';
+        const username = (req.query.u as string) || '';
+        return `subsonic:${ip}:${username}`;
+    },
+});
