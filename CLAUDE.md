@@ -977,6 +977,28 @@ docker exec lidify ls -la /app/cache/covers/ | head -20
 
 When Client A works and Client B doesn't with the same API, check **how each client stores and uses the data**, not just whether you're sending it. Symfonium's internal SQLite schema revealed it derives album metadata from songs, which wasn't obvious from the API spec alone.
 
+### Subsonic Authentication Setup
+
+**Setting the password:**
+1. Go to Settings → Subsonic in Lidify web UI
+2. Enter a password and click Save
+3. Password is stored AES-256 encrypted (not plaintext)
+
+**Connecting from Symfonium/Feishin:**
+- **Server URL:** `https://lidify.example.com/rest` (or with `/rest` appended)
+- **Username:** Your Lidify username
+- **Password:** The Subsonic password you set (not your Lidify login password)
+- **Auth method:** Token auth (modern/secure) - disable "Legacy auth" if prompted
+
+**Supported auth methods:**
+1. **Token auth** (recommended): `t=md5(password+salt)&s=salt`
+2. **Plain password**: `p=password` (verified against bcrypt hash)
+
+**Files:**
+- `backend/src/middleware/subsonicAuth.ts` - Auth middleware
+- `backend/src/routes/auth.ts` - `/auth/subsonic-password` endpoints (GET/POST/DELETE)
+- `frontend/features/settings/components/sections/APIKeysSection.tsx` - Settings UI
+
 ---
 
 ## Known Issues / TODO
