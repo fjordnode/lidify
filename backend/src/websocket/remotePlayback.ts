@@ -1,8 +1,48 @@
 import { Server as SocketIOServer, Socket } from "socket.io";
 import { Server as HTTPServer } from "http";
+import jwt from "jsonwebtoken";
+import { z } from "zod";
 import { redisClient } from "../utils/redis";
 import { prisma } from "../utils/db";
 import { config } from "../config";
+
+// Validation schemas for WebSocket messages
+const playbackCommandSchema = z.object({
+    targetDeviceId: z.string().min(1).max(100),
+    command: z.enum(["play", "pause", "next", "prev", "seek", "volume", "setQueue", "playTrack"]),
+    payload: z.record(z.unknown()).optional(),
+});
+
+const deviceRegisterSchema = z.object({
+    deviceId: z.string().min(1).max(100),
+    deviceName: z.string().min(1).max(100),
+});
+
+const playbackStateSchema = z.object({
+    deviceId: z.string().min(1).max(100),
+    isPlaying: z.boolean(),
+    currentTrack: z.object({
+        id: z.string(),
+        title: z.string(),
+        artist: z.string(),
+        album: z.string(),
+        coverArt: z.string().optional(),
+        duration: z.number(),
+    }).nullable(),
+    currentTime: z.number(),
+    volume: z.number().min(0).max(1),
+    queue: z.array(z.unknown()).optional(),
+    queueIndex: z.number().optional(),
+});
+
+// JWT secret (same as auth middleware)
+const JWT_SECRET = process.env.JWT_SECRET || process.env.SESSION_SECRET;
+
+interface JWTPayload {
+    userId: string;
+    username: string;
+    role: string;
+}
 
 // Types for remote playback
 interface PlaybackDevice {
@@ -101,7 +141,25 @@ export function initializeWebSocket(httpServer: HTTPServer): SocketIOServer {
                 }
             }
 
-            // Try session auth (for web clients)
+            // Try JWT token auth (for web clients - primary method)
+            const jwtToken = socket.handshake.auth.token;
+            if (jwtToken && JWT_SECRET) {
+                try {
+                    const decoded = jwt.verify(jwtToken, JWT_SECRET) as JWTPayload;
+                    const user = await prisma.user.findUnique({
+                        where: { id: decoded.userId },
+                    });
+                    if (user) {
+                        (socket as any).user = user;
+                        return next();
+                    }
+                } catch (jwtError) {
+                    // JWT invalid/expired, continue to other auth methods
+                    console.log("[WebSocket] JWT auth failed, trying other methods");
+                }
+            }
+
+            // Try session auth (for web clients with express-session)
             const sessionId = socket.handshake.auth.sessionId;
             if (sessionId) {
                 const sessionData = await redisClient.get(`sess:${sessionId}`);
@@ -118,18 +176,10 @@ export function initializeWebSocket(httpServer: HTTPServer): SocketIOServer {
                     }
                 }
             }
-
-            // Try userId directly (for internal use, validate with existing session)
-            const userId = socket.handshake.auth.userId;
-            if (userId) {
-                const user = await prisma.user.findUnique({
-                    where: { id: userId },
-                });
-                if (user) {
-                    (socket as any).user = user;
-                    return next();
-                }
-            }
+            // All WebSocket connections must use one of:
+            // 1. API key (for mobile/external clients)
+            // 2. JWT token (for web clients - primary method)
+            // 3. Session ID (for web clients with express-session)
 
             next(new Error("Authentication required"));
         } catch (error) {
@@ -151,7 +201,14 @@ export function initializeWebSocket(httpServer: HTTPServer): SocketIOServer {
         socket.join(`user:${user.id}`);
 
         // Handle device registration
-        socket.on("device:register", (data: { deviceId: string; deviceName: string }) => {
+        socket.on("device:register", (rawData: unknown) => {
+            const parseResult = deviceRegisterSchema.safeParse(rawData);
+            if (!parseResult.success) {
+                socket.emit("playback:error", { message: "Invalid device registration data" });
+                return;
+            }
+            const data = parseResult.data;
+
             const device: PlaybackDevice = {
                 socketId: socket.id,
                 deviceId: data.deviceId,
@@ -172,7 +229,14 @@ export function initializeWebSocket(httpServer: HTTPServer): SocketIOServer {
         });
 
         // Handle playback state updates from a device
-        socket.on("playback:state", (state: PlaybackStateUpdate) => {
+        socket.on("playback:state", (rawState: unknown) => {
+            const parseResult = playbackStateSchema.safeParse(rawState);
+            if (!parseResult.success) {
+                // State updates are frequent - just ignore invalid ones silently
+                return;
+            }
+            const state = parseResult.data;
+
             const device = getDevice(state.deviceId);
             if (device && device.userId === user.id) {
                 device.isPlaying = state.isPlaying;
@@ -191,7 +255,14 @@ export function initializeWebSocket(httpServer: HTTPServer): SocketIOServer {
         });
 
         // Handle remote control commands
-        socket.on("playback:command", (command: PlaybackCommand) => {
+        socket.on("playback:command", (rawCommand: unknown) => {
+            const parseResult = playbackCommandSchema.safeParse(rawCommand);
+            if (!parseResult.success) {
+                socket.emit("playback:error", { message: "Invalid command format" });
+                return;
+            }
+            const command = parseResult.data;
+
             const targetDevice = getDevice(command.targetDeviceId);
             if (!targetDevice || targetDevice.userId !== user.id) {
                 socket.emit("playback:error", { message: "Device not found or not authorized" });

@@ -10,12 +10,21 @@ let hasWarnedAboutDefaultKey = false;
 
 /**
  * Get the encryption key from environment, properly sized for AES-256
- * Falls back to a default key for development but logs a warning
+ * In production, requires SETTINGS_ENCRYPTION_KEY to be set
+ * Falls back to a default key ONLY in development
  */
 function getEncryptionKey(): Buffer {
     let key = process.env.SETTINGS_ENCRYPTION_KEY;
 
     if (!key || key === DEFAULT_ENCRYPTION_KEY) {
+        // In production, require a proper encryption key
+        if (process.env.NODE_ENV === "production") {
+            throw new Error(
+                "[SECURITY] SETTINGS_ENCRYPTION_KEY must be set in production. " +
+                "Generate a secure 32-character key and add it to your environment variables."
+            );
+        }
+
         if (!hasWarnedAboutDefaultKey) {
             console.warn(
                 "[SECURITY] Using default encryption key. Set SETTINGS_ENCRYPTION_KEY in production."

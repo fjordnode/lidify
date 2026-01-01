@@ -11,6 +11,7 @@ import {
 } from "react";
 import { io, Socket } from "socket.io-client";
 import { useAuth } from "./auth-context";
+import { api } from "./api";
 
 // Types
 export interface RemoteDevice {
@@ -265,10 +266,13 @@ export function RemotePlaybackProvider({ children }: { children: ReactNode }) {
 
         console.log("[RemotePlayback] Connecting to WebSocket...");
 
+        // Get JWT token for authentication
+        const token = api.getToken();
+
         const socket = io(wsUrl, {
             path: "/api/socket.io",
             auth: {
-                userId: user.id,
+                token: token, // Use JWT token for secure auth
             },
             transports: ["websocket", "polling"],
             reconnection: true,

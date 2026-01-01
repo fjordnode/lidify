@@ -73,10 +73,10 @@ router.post("/login", async (req, res) => {
         // Check if 2FA is enabled
         if (user.twoFactorEnabled && user.twoFactorSecret) {
             if (!token) {
+                // SECURITY: Don't leak userId - frontend re-sends credentials with 2FA token
                 return res.status(200).json({
                     requires2FA: true,
                     message: "2FA token required",
-                    userId: user.id, // Send userId for next 2FA request
                 });
             }
 
@@ -557,8 +557,8 @@ router.post("/subsonic-password", requireAuth, async (req, res) => {
     try {
         const { password } = req.body;
 
-        if (!password || typeof password !== "string" || password.length < 4) {
-            return res.status(400).json({ error: "Password must be at least 4 characters" });
+        if (!password || typeof password !== "string" || password.length < 8) {
+            return res.status(400).json({ error: "Password must be at least 8 characters" });
         }
 
         if (password.length > 128) {

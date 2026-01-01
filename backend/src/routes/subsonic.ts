@@ -1363,6 +1363,20 @@ router.get("/getCoverArt.view", async (req: Request, res: Response) => {
             const nativePath = imageUrl.replace("native:", "");
             const coverCachePath = path.join(coverCacheDir, nativePath);
 
+            // SECURITY: Prevent path traversal attacks
+            const resolvedPath = path.resolve(coverCachePath);
+            const resolvedCacheDir = path.resolve(coverCacheDir);
+            if (!resolvedPath.startsWith(resolvedCacheDir + path.sep)) {
+                console.warn(`[Subsonic] Path traversal attempt blocked: ${nativePath}`);
+                return sendSubsonicError(
+                    res,
+                    SubsonicErrorCode.NOT_FOUND,
+                    "Invalid cover art path",
+                    format,
+                    req.query.callback as string
+                );
+            }
+
             if (fs.existsSync(coverCachePath)) {
                 const ext = path.extname(nativePath).toLowerCase();
                 const contentType = ext === '.png' ? 'image/png' :
@@ -1400,6 +1414,44 @@ router.get("/getCoverArt.view", async (req: Request, res: Response) => {
 
         // Download, cache, and serve external URL
         try {
+            // SECURITY: Block internal/private URLs to prevent SSRF
+            try {
+                const parsedUrl = new URL(imageUrl);
+                const hostname = parsedUrl.hostname.toLowerCase();
+
+                // Block private/internal addresses
+                if (
+                    hostname === 'localhost' ||
+                    hostname === '127.0.0.1' ||
+                    hostname === '::1' ||
+                    hostname === '0.0.0.0' ||
+                    hostname.startsWith('10.') ||
+                    hostname.startsWith('192.168.') ||
+                    hostname.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\./) ||
+                    hostname.endsWith('.local') ||
+                    hostname.endsWith('.internal') ||
+                    parsedUrl.protocol === 'file:'
+                ) {
+                    console.warn(`[Subsonic] SSRF attempt blocked: ${imageUrl}`);
+                    return sendSubsonicError(
+                        res,
+                        SubsonicErrorCode.NOT_FOUND,
+                        "Invalid cover art URL",
+                        format,
+                        req.query.callback as string
+                    );
+                }
+            } catch (urlError) {
+                // Invalid URL format
+                return sendSubsonicError(
+                    res,
+                    SubsonicErrorCode.NOT_FOUND,
+                    "Invalid cover art URL",
+                    format,
+                    req.query.callback as string
+                );
+            }
+
             const imageResponse = await axios.get(imageUrl, {
                 responseType: 'arraybuffer',
                 timeout: 10000,
