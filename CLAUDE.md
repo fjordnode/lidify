@@ -853,6 +853,132 @@ href={`/artist/${artist.id}`}
 
 ---
 
+## Subsonic API - Symfonium Compatibility (Jan 2026)
+
+### Overview
+
+Fixed two major issues preventing Symfonium (Android music app) from working correctly with Lidify's Subsonic API, while Ultrasonic worked fine with the same server.
+
+### Issue 1: "Last Played" Sorting Broken
+
+**Symptom:** Sorting albums by "Last Played" in Symfonium produced alphabetical order instead of actual play history. "Recently Added" worked correctly.
+
+**Root Cause Investigation:**
+
+Analyzing Symfonium's debug logs revealed:
+```sql
+UPDATE albums SET last_played = (SELECT MAX(songs.last_played) FROM songs WHERE songs.album_id = albums._id)
+```
+
+Symfonium **derives** `albums.last_played` from `MAX(songs.last_played)` - it doesn't read the album's `played` field directly. The server was sending `played` on albums but NOT on songs.
+
+**The Fix:**
+
+Added `played` and `playCount` fields to all song responses.
+
+**Files Modified:**
+- `backend/src/utils/subsonicResponse.ts` - `formatTrackForSubsonic()` now accepts optional `playData` parameter
+- `backend/src/routes/subsonic.ts` - All song endpoints now query Play table and pass data:
+  - `search3.view` - Batch queries play data for all songs
+  - `getAlbum.view` - Queries play data for album tracks
+  - `getSong.view` - Queries play data for single track
+  - `getRandomSongs.view` - Queries play data for random tracks
+  - `getPlaylist.view` - Queries play data for playlist tracks
+  - `getTopSongs.view` - Queries play data for top songs
+
+**Code Pattern:**
+```typescript
+// Query play data for songs
+const songIds = songs.map(s => s.id);
+const songPlayData = songIds.length > 0 ? await prisma.$queryRaw<Array<{ trackId: string; lastPlayed: Date; playCount: bigint }>>`
+    SELECT p."trackId", MAX(p."playedAt") as "lastPlayed", COUNT(p.id) as "playCount"
+    FROM "Play" p
+    WHERE p."trackId" = ANY(${songIds})
+    GROUP BY p."trackId"
+` : [];
+const songLastPlayed = new Map(songPlayData.map(d => [d.trackId, d.lastPlayed]));
+const songPlayCount = new Map(songPlayData.map(d => [d.trackId, Number(d.playCount)]));
+
+// Pass to formatter
+formatTrackForSubsonic(track, {
+    played: songLastPlayed.get(track.id),
+    playCount: songPlayCount.get(track.id) || 0,
+})
+```
+
+### Issue 2: Album/Artist Artwork Missing
+
+**Symptom:** Artwork visible in Lidify web but missing in Symfonium.
+
+**Root Cause:** `getCoverArt.view` was doing `res.redirect(imageUrl)` to external URLs. Many Subsonic clients don't handle redirects well. Additionally, local covers stored as `native:xxx.jpg` weren't being resolved.
+
+**The Fix:**
+
+1. **Handle `native:` covers** - Serve local files directly from `/covers/` directory
+2. **Proxy external URLs** - Fetch and pipe through instead of redirecting
+3. **Cache external artwork** - Save to disk on first request, serve from cache thereafter
+
+**File Modified:** `backend/src/routes/subsonic.ts` - `getCoverArt.view` endpoint
+
+**Implementation:**
+```typescript
+// Handle native (local) cover files
+if (imageUrl.startsWith("native:")) {
+    const nativePath = imageUrl.replace("native:", "");
+    const coverCachePath = path.join(coverCacheDir, nativePath);
+    if (fs.existsSync(coverCachePath)) {
+        res.set('Content-Type', 'image/jpeg');
+        return fs.createReadStream(coverCachePath).pipe(res);
+    }
+}
+
+// For external URLs, check cache first
+const cacheFileName = `ext-${entityId}.jpg`;
+const cachedFilePath = path.join(coverCacheDir, cacheFileName);
+
+if (fs.existsSync(cachedFilePath)) {
+    const stats = fs.statSync(cachedFilePath);
+    const ageMs = Date.now() - stats.mtimeMs;
+    if (ageMs < 7 * 24 * 60 * 60 * 1000) {  // 7 days
+        return fs.createReadStream(cachedFilePath).pipe(res);
+    }
+}
+
+// Download, cache, and serve
+const imageResponse = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+fs.writeFileSync(cachedFilePath, imageResponse.data);
+res.send(imageResponse.data);
+```
+
+**Cache Behavior:**
+- Native covers: Already local, served directly (fast)
+- External URLs: Cached to `/covers/ext-{entityId}.jpg` for 7 days
+- First sync is slow (downloads all artwork), subsequent access is instant
+
+### Debugging Tips
+
+**Check what endpoints Symfonium calls:**
+```bash
+grep -o 'rest/[a-zA-Z0-9]*\.view' debug.log | sort | uniq -c | sort -rn
+```
+
+**Verify song responses include `played`:**
+```bash
+docker logs lidify 2>&1 | grep -A2 "search3"
+# Look for: "played":"2026-01-01T..." in song objects
+```
+
+**Check cover art caching:**
+```bash
+docker exec lidify ls -la /app/cache/covers/ | head -20
+```
+
+### Key Insight
+
+When Client A works and Client B doesn't with the same API, check **how each client stores and uses the data**, not just whether you're sending it. Symfonium's internal SQLite schema revealed it derives album metadata from songs, which wasn't obvious from the API spec alone.
+
+---
+
 ## Known Issues / TODO
 
 ### Playback Position Persistence
