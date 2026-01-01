@@ -1,318 +1,130 @@
 import React, { useEffect, useState } from 'react';
-import { useAPIKeys } from '@/features/settings/hooks/useAPIKeys';
-import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
-import { Copy, Trash2 } from 'lucide-react';
+import { Trash2, Eye, EyeOff } from 'lucide-react';
 import { InlineStatus, StatusType } from "@/components/ui/InlineStatus";
+import { api } from "@/lib/api";
 
 export const APIKeysSection: React.FC = () => {
-  const {
-    apiKeys,
-    loadingApiKeys,
-    generatedApiKey,
-    showCreateApiKeyDialog,
-    setShowCreateApiKeyDialog,
-    loadApiKeys,
-    createApiKey,
-    revokeApiKey,
-    clearGeneratedKey,
-  } = useAPIKeys();
-
-  const [newApiKeyName, setNewApiKeyName] = useState('');
-  const [confirmRevoke, setConfirmRevoke] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [createStatus, setCreateStatus] = useState<StatusType>("idle");
-  const [createMessage, setCreateMessage] = useState("");
-  const [revokeStatus, setRevokeStatus] = useState<StatusType>("idle");
-  const [revokeMessage, setRevokeMessage] = useState("");
+  const [subsonicPassword, setSubsonicPassword] = useState('');
+  const [hasSubsonicPassword, setHasSubsonicPassword] = useState(false);
+  const [showSubsonicPassword, setShowSubsonicPassword] = useState(false);
+  const [subsonicStatus, setSubsonicStatus] = useState<StatusType>("idle");
+  const [subsonicMessage, setSubsonicMessage] = useState("");
+  const [savingSubsonic, setSavingSubsonic] = useState(false);
 
   useEffect(() => {
-    loadApiKeys();
+    api.request<{ hasPassword: boolean }>('/auth/subsonic-password')
+      .then(data => setHasSubsonicPassword(data.hasPassword))
+      .catch(() => {});
   }, []);
 
-  const handleCreateApiKey = async () => {
-    if (!newApiKeyName.trim()) {
-      setCreateStatus("error");
-      setCreateMessage("Name required");
+  const handleSaveSubsonicPassword = async () => {
+    if (!subsonicPassword.trim()) {
+      setSubsonicStatus("error");
+      setSubsonicMessage("Password required");
+      return;
+    }
+    if (subsonicPassword.length < 4) {
+      setSubsonicStatus("error");
+      setSubsonicMessage("Min 4 characters");
       return;
     }
 
-    setCreating(true);
-    setCreateStatus("loading");
-    const result = await createApiKey(newApiKeyName);
-    if (result.success) {
-      setCreateStatus("success");
-      setCreateMessage("Created");
-      setNewApiKeyName('');
-      setShowCreateApiKeyDialog(false);
-    } else {
-      setCreateStatus("error");
-      setCreateMessage(result.error || "Failed");
+    setSavingSubsonic(true);
+    setSubsonicStatus("loading");
+    try {
+      await api.request('/auth/subsonic-password', {
+        method: 'POST',
+        body: JSON.stringify({ password: subsonicPassword }),
+      });
+      setSubsonicStatus("success");
+      setSubsonicMessage("Saved");
+      setHasSubsonicPassword(true);
+      setSubsonicPassword('');
+    } catch (err: any) {
+      setSubsonicStatus("error");
+      setSubsonicMessage(err?.message || "Failed");
     }
-    setCreating(false);
+    setSavingSubsonic(false);
   };
 
-  const handleRevokeApiKey = async () => {
-    if (!confirmRevoke) return;
-    
-    setRevokeStatus("loading");
-    const result = await revokeApiKey(confirmRevoke);
-    if (result.success) {
-      setRevokeStatus("success");
-      setRevokeMessage("Revoked");
-      setConfirmRevoke(null);
-    } else {
-      setRevokeStatus("error");
-      setRevokeMessage(result.error || "Failed");
+  const handleRemoveSubsonicPassword = async () => {
+    setSavingSubsonic(true);
+    try {
+      await api.request('/auth/subsonic-password', { method: 'DELETE' });
+      setHasSubsonicPassword(false);
+      setSubsonicPassword('');
+      setSubsonicStatus("success");
+      setSubsonicMessage("Removed");
+    } catch {
+      setSubsonicStatus("error");
+      setSubsonicMessage("Failed");
     }
-  };
-
-  const handleCopyKey = () => {
-    if (generatedApiKey) {
-      navigator.clipboard.writeText(generatedApiKey);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  const handleDismissKey = () => {
-    clearGeneratedKey();
-    setCopied(false);
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
+    setSavingSubsonic(false);
   };
 
   return (
     <section id="api-keys" className="bg-[#111] rounded-lg p-6 scroll-mt-8">
-      <div className="space-y-6">
+      <div className="space-y-4">
         <div>
-          <h2 className="text-xl font-semibold text-white mb-2">API Keys</h2>
+          <h2 className="text-xl font-semibold text-white mb-2">Subsonic Password</h2>
           <p className="text-sm text-gray-400">
-            Manage API keys for programmatic access to your account
+            Set a separate password for Subsonic-compatible apps like Symfonium, Supersonic, or Feishin.
           </p>
         </div>
 
-      {/* Generated Key Display */}
-      {generatedApiKey && (
-        <div className="bg-yellow-900/20 border border-yellow-700/50 rounded-lg p-4 space-y-3">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <h3 className="text-sm font-medium text-yellow-200 mb-2">
-                Your new API key
-              </h3>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  readOnly
-                  value={generatedApiKey}
-                  className="flex-1 bg-black/50 border border-yellow-700/50 rounded px-3 py-2 text-sm text-white font-mono"
-                />
-                <Button
-                  onClick={handleCopyKey}
-                  variant="secondary"
-                  className="shrink-0"
-                >
-                  <Copy className="w-4 h-4 mr-2" />
-                  {copied ? 'Copied!' : 'Copy'}
-                </Button>
-              </div>
-              <p className="text-xs text-yellow-200 mt-2">
-                Save this key now, you won't be able to see it again
-              </p>
-            </div>
-          </div>
-          <div className="flex justify-end">
+        {hasSubsonicPassword ? (
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-green-400">Password is set</span>
             <Button
-              onClick={handleDismissKey}
+              onClick={handleRemoveSubsonicPassword}
               variant="ghost"
+              className="text-red-400 hover:text-red-300"
+              disabled={savingSubsonic}
             >
-              Dismiss
+              <Trash2 className="w-4 h-4 mr-1" />
+              Remove
             </Button>
+            <InlineStatus
+              status={subsonicStatus}
+              message={subsonicMessage}
+              onClear={() => setSubsonicStatus("idle")}
+            />
           </div>
-        </div>
-      )}
-
-      {/* Create Button */}
-      <div>
-        <Button
-          onClick={() => setShowCreateApiKeyDialog(true)}
-          variant="primary"
-        >
-          Generate New API Key
-        </Button>
-      </div>
-
-      {/* API Keys Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-[#1c1c1c]">
-              <th className="text-left py-3 px-4 text-sm font-medium text-gray-400">
-                Device Name
-              </th>
-              <th className="text-left py-3 px-4 text-sm font-medium text-gray-400">
-                Key Preview
-              </th>
-              <th className="text-left py-3 px-4 text-sm font-medium text-gray-400">
-                Created
-              </th>
-              <th className="text-left py-3 px-4 text-sm font-medium text-gray-400">
-                Last Used
-              </th>
-              <th className="text-left py-3 px-4 text-sm font-medium text-gray-400">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {loadingApiKeys ? (
-              <tr>
-                <td colSpan={5} className="py-8 text-center text-sm text-gray-400">
-                  Loading API keys...
-                </td>
-              </tr>
-            ) : apiKeys.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="py-8 text-center text-sm text-gray-400">
-                  No API keys yet
-                </td>
-              </tr>
-            ) : (
-              apiKeys.map((key) => (
-                <tr
-                  key={key.id}
-                  className="border-b border-[#1c1c1c] hover:bg-[#0a0a0a]"
+        ) : (
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <div className="relative flex-1 max-w-xs">
+                <input
+                  type={showSubsonicPassword ? "text" : "password"}
+                  value={subsonicPassword}
+                  onChange={(e) => setSubsonicPassword(e.target.value)}
+                  placeholder="Enter Subsonic password"
+                  className="w-full bg-[#0a0a0a] border border-[#1c1c1c] rounded-lg px-3 py-2 pr-10 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowSubsonicPassword(!showSubsonicPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
                 >
-                  <td className="py-3 px-4 text-sm text-white">
-                    {key.name}
-                  </td>
-                  <td className="py-3 px-4 text-sm text-gray-400 font-mono">
-                    {key.keyPreview}
-                  </td>
-                  <td className="py-3 px-4 text-sm text-gray-400">
-                    {formatDate(key.createdAt)}
-                  </td>
-                  <td className="py-3 px-4 text-sm text-gray-400">
-                    {key.lastUsedAt ? formatDate(key.lastUsedAt) : 'Never'}
-                  </td>
-                  <td className="py-3 px-4 text-sm">
-                    <Button
-                      onClick={() => setConfirmRevoke(key.id)}
-                      variant="ghost"
-                      className="text-red-400 hover:text-red-300"
-                    >
-                      <Trash2 className="w-4 h-4 mr-1" />
-                      Revoke
-                    </Button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Create API Key Dialog */}
-      {showCreateApiKeyDialog && (
-        <Modal
-          isOpen={true}
-          onClose={() => {
-            setShowCreateApiKeyDialog(false);
-            setNewApiKeyName('');
-            setCreateStatus("idle");
-          }}
-          title="Generate New API Key"
-        >
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Device Name
-              </label>
-              <input
-                type="text"
-                value={newApiKeyName}
-                onChange={(e) => setNewApiKeyName(e.target.value)}
-                placeholder="e.g., My Laptop, Production Server"
-                className="w-full bg-[#0a0a0a] border border-[#1c1c1c] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                autoFocus
-              />
-            </div>
-            <div className="flex justify-end items-center gap-3">
-              <InlineStatus 
-                status={createStatus} 
-                message={createMessage}
-                onClear={() => setCreateStatus("idle")}
-              />
+                  {showSubsonicPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
               <Button
-                onClick={() => {
-                  setShowCreateApiKeyDialog(false);
-                  setNewApiKeyName('');
-                  setCreateStatus("idle");
-                }}
-                variant="ghost"
-                disabled={creating}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleCreateApiKey}
+                onClick={handleSaveSubsonicPassword}
                 variant="primary"
-                disabled={!newApiKeyName.trim() || creating}
+                disabled={!subsonicPassword.trim() || savingSubsonic}
               >
-                {creating ? 'Creating...' : 'Create'}
+                {savingSubsonic ? 'Saving...' : 'Save'}
               </Button>
             </div>
+            <InlineStatus
+              status={subsonicStatus}
+              message={subsonicMessage}
+              onClear={() => setSubsonicStatus("idle")}
+            />
           </div>
-        </Modal>
-      )}
-
-      {/* Revoke Confirmation Modal */}
-      {confirmRevoke && (
-        <Modal
-          isOpen={true}
-          onClose={() => {
-            setConfirmRevoke(null);
-            setRevokeStatus("idle");
-          }}
-          title="Revoke API Key"
-        >
-          <div className="space-y-4">
-            <p className="text-sm text-gray-300">
-              Are you sure you want to revoke this API key? This cannot be undone.
-            </p>
-            <div className="flex justify-end items-center gap-3">
-              <InlineStatus 
-                status={revokeStatus} 
-                message={revokeMessage}
-                onClear={() => setRevokeStatus("idle")}
-              />
-              <Button
-                onClick={() => {
-                  setConfirmRevoke(null);
-                  setRevokeStatus("idle");
-                }}
-                variant="ghost"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleRevokeApiKey}
-                variant="primary"
-                className="bg-red-600 hover:bg-red-700"
-              >
-                Revoke
-              </Button>
-            </div>
-          </div>
-        </Modal>
-      )}
+        )}
       </div>
     </section>
   );

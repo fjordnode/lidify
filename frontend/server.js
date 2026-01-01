@@ -19,6 +19,16 @@ const wsProxy = createProxyMiddleware({
     logLevel: "warn",
 });
 
+// Subsonic API proxy (for desktop clients like Supersonic)
+const subsonicProxy = createProxyMiddleware({
+    target: backendUrl,
+    changeOrigin: true,
+    logLevel: "warn",
+    // Subsonic streaming can take a long time
+    timeout: 600000, // 10 minute timeout for streaming
+    proxyTimeout: 600000,
+});
+
 // Long-running API proxy (for AI endpoints that take >30 seconds)
 const longRunningProxy = createProxyMiddleware({
     target: backendUrl,
@@ -39,6 +49,12 @@ app.prepare().then(() => {
     const server = createServer((req, res) => {
         const parsedUrl = parse(req.url, true);
         const { pathname } = parsedUrl;
+
+        // Proxy Subsonic API requests (for desktop clients like Supersonic)
+        if (pathname.startsWith("/rest/")) {
+            subsonicProxy(req, res);
+            return;
+        }
 
         // Proxy Socket.io HTTP requests (polling fallback)
         if (pathname.startsWith("/api/socket.io")) {

@@ -28,10 +28,12 @@ import { AIServicesSection } from "@/features/settings/components/sections/AISer
 import { StoragePathsSection } from "@/features/settings/components/sections/StoragePathsSection";
 import { CacheSection } from "@/features/settings/components/sections/CacheSection";
 import { UserManagementSection } from "@/features/settings/components/sections/UserManagementSection";
+import { APIKeysSection } from "@/features/settings/components/sections/APIKeysSection";
 
 // Define sidebar items
 const sidebarItems: SidebarItem[] = [
     { id: "account", label: "Account" },
+    { id: "api-keys", label: "Subsonic" },
     { id: "playback", label: "Playback" },
     { id: "download-preferences", label: "Download Preferences", adminOnly: true },
     { id: "lidarr", label: "Download Services", adminOnly: true },
@@ -146,6 +148,9 @@ export default function SettingsPage() {
             <SettingsLayout sidebarItems={sidebarItems} isAdmin={isAdmin}>
                 {/* Account Section */}
                 <AccountSection />
+
+                {/* API Keys Section */}
+                <APIKeysSection />
 
                 {/* Playback Section */}
                 <PlaybackSection

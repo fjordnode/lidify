@@ -39,6 +39,7 @@ import browseRoutes from "./routes/browse";
 import analysisRoutes from "./routes/analysis";
 import releasesRoutes from "./routes/releases";
 import remotePlaybackRoutes from "./routes/remotePlayback";
+import subsonicRoutes from "./routes/subsonic";
 import { dataCacheService } from "./services/dataCache";
 import { errorHandler } from "./middleware/errorHandler";
 import {
@@ -165,6 +166,10 @@ app.use("/api/browse", apiLimiter, browseRoutes);
 app.use("/api/analysis", apiLimiter, analysisRoutes);
 app.use("/api/releases", apiLimiter, releasesRoutes);
 app.use("/api/remote-playback", apiLimiter, remotePlaybackRoutes);
+
+// Subsonic API compatibility layer (for clients like Supersonic, Symfonium, etc.)
+// No rate limiting - Subsonic clients make many rapid requests
+app.use("/rest", subsonicRoutes);
 
 // Health check (keep at root for simple container health checks)
 app.get("/health", (req, res) => {

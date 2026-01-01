@@ -18,6 +18,7 @@ model User {
   twoFactorSecret        String? // TOTP secret (encrypted)
   twoFactorRecoveryCodes String? // Recovery codes (encrypted, comma-separated hashed codes)
   moodMixParams          Json? // Saved mood mix parameters for "Your Mood Mix"
+  subsonicPassword       String? // Plaintext password for Subsonic token auth (md5 requires plaintext)
   createdAt              DateTime @default(now())
 
   plays                Play[]
@@ -137,6 +138,7 @@ model Artist {
   heroUrl              String?
   genres               Json? // Array of genre strings from Last.fm/MusicBrainz
   similarArtistsJson   Json? // Full Last.fm similar artists data [{name, mbid, match, image}]
+  createdAt            DateTime                 @default(now()) // When artist was first added to library
   lastSynced           DateTime                 @default(now())
   lastEnriched         DateTime?
   enrichmentStatus     String                   @default("pending") // pending, enriching, completed, failed
@@ -162,6 +164,7 @@ model Album {
   primaryType  String // Album, EP, Single, Live, Compilation
   label        String? // Record label (from MusicBrainz)
   genres       Json? // Array of genre strings from Last.fm
+  createdAt    DateTime                 @default(now()) // When album was first added to library
   lastSynced   DateTime                 @default(now())
   location     AlbumLocation            @default(LIBRARY) // LIBRARY or DISCOVER
   searchVector Unsupported("tsvector")?

@@ -529,4 +529,67 @@ router.get("/2fa/status", requireAuth, async (req, res) => {
     }
 });
 
+// ============================================================================
+// SUBSONIC PASSWORD
+// ============================================================================
+
+// GET /auth/subsonic-password - Check if Subsonic password is set
+router.get("/subsonic-password", requireAuth, async (req, res) => {
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: req.user!.id },
+            select: { subsonicPassword: true },
+        });
+
+        if (!user) {
+            return res.status(404).json({ error: "User not found" });
+        }
+
+        res.json({ hasPassword: !!user.subsonicPassword });
+    } catch (error) {
+        console.error("Subsonic password status error:", error);
+        res.status(500).json({ error: "Failed to get Subsonic password status" });
+    }
+});
+
+// POST /auth/subsonic-password - Set Subsonic password
+router.post("/subsonic-password", requireAuth, async (req, res) => {
+    try {
+        const { password } = req.body;
+
+        if (!password || typeof password !== "string" || password.length < 4) {
+            return res.status(400).json({ error: "Password must be at least 4 characters" });
+        }
+
+        if (password.length > 128) {
+            return res.status(400).json({ error: "Password must be at most 128 characters" });
+        }
+
+        await prisma.user.update({
+            where: { id: req.user!.id },
+            data: { subsonicPassword: encrypt(password) },
+        });
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error("Set Subsonic password error:", error);
+        res.status(500).json({ error: "Failed to set Subsonic password" });
+    }
+});
+
+// DELETE /auth/subsonic-password - Remove Subsonic password
+router.delete("/subsonic-password", requireAuth, async (req, res) => {
+    try {
+        await prisma.user.update({
+            where: { id: req.user!.id },
+            data: { subsonicPassword: null },
+        });
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error("Delete Subsonic password error:", error);
+        res.status(500).json({ error: "Failed to delete Subsonic password" });
+    }
+});
+
 export default router;
