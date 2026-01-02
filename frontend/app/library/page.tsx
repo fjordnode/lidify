@@ -65,7 +65,6 @@ export default function LibraryPage() {
         deleteArtist,
         deleteAlbum,
         deleteTrack,
-        archiveArtist,
     } = useLibraryActions();
 
     // Reset page and filter when tab changes (skip on first render to preserve URL state)
@@ -124,17 +123,6 @@ export default function LibraryPage() {
     const [deleteConfirm, setDeleteConfirm] = useState<DeleteDialogState>({
         isOpen: false,
         type: "track",
-        id: "",
-        title: "",
-    });
-
-    // Archive confirmation dialog state
-    const [archiveConfirm, setArchiveConfirm] = useState<{
-        isOpen: boolean;
-        id: string;
-        title: string;
-    }>({
-        isOpen: false,
         id: "",
         title: "",
     });
@@ -218,17 +206,6 @@ export default function LibraryPage() {
         } catch (error) {
             console.error(`Failed to delete ${deleteConfirm.type}:`, error);
             // Keep dialog open on error so user can retry
-        }
-    };
-
-    // Handle archive confirmation
-    const handleArchive = async () => {
-        try {
-            await archiveArtist(archiveConfirm.id);
-            await reloadData();
-            setArchiveConfirm({ isOpen: false, id: "", title: "" });
-        } catch (error) {
-            console.error("Failed to archive artist:", error);
         }
     };
 
@@ -406,13 +383,6 @@ export default function LibraryPage() {
                                 title: name,
                             })
                         }
-                        onArchive={(id, name) =>
-                            setArchiveConfirm({
-                                isOpen: true,
-                                id,
-                                title: name,
-                            })
-                        }
                     />
                 )}
 
@@ -522,19 +492,6 @@ export default function LibraryPage() {
                     confirmText="Delete"
                     cancelText="Cancel"
                     variant="danger"
-                />
-
-                <ConfirmDialog
-                    isOpen={archiveConfirm.isOpen}
-                    onClose={() =>
-                        setArchiveConfirm({ isOpen: false, id: "", title: "" })
-                    }
-                    onConfirm={handleArchive}
-                    title="Archive Artist?"
-                    message={`Move "${archiveConfirm.title}" to the archive folder? Files will be moved to _archived/ and removed from your library, but not deleted.`}
-                    confirmText="Archive"
-                    cancelText="Cancel"
-                    variant="warning"
                 />
             </div>
         </div>

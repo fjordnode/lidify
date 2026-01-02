@@ -219,10 +219,7 @@ router.put("/artists/:id/metadata", async (req, res) => {
         if (bio) updateData.summary = bio;
         if (mbid) updateData.mbid = mbid;
         if (heroUrl) updateData.heroUrl = heroUrl;
-        if (genres) updateData.manualGenres = JSON.stringify(genres);
-
-        // Mark as manually edited
-        updateData.manuallyEdited = true;
+        if (genres) updateData.genres = genres; // Store as JSON array
 
         const { prisma } = await import("../utils/db");
         const artist = await prisma.artist.update({
@@ -260,10 +257,7 @@ router.put("/albums/:id/metadata", async (req, res) => {
         if (year) updateData.year = parseInt(year);
         if (rgMbid) updateData.rgMbid = rgMbid;
         if (coverUrl) updateData.coverUrl = coverUrl;
-        if (genres) updateData.manualGenres = JSON.stringify(genres);
-
-        // Mark as manually edited
-        updateData.manuallyEdited = true;
+        if (genres) updateData.genres = genres; // Store as JSON array
 
         const { prisma } = await import("../utils/db");
         const album = await prisma.album.update({
