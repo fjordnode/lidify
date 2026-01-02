@@ -237,11 +237,11 @@ model Track {
   lastfmTags String[] // ["chill", "workout", "sad", "90s"]
 
   // Analysis Metadata
-  analysisStatus  String    @default("pending") // pending, processing, completed, failed
+  analysisStatus  String    @default("pending") // pending, processing, completed, failed, skipped
   analysisVersion String? // Essentia version used
   analysisMode    String? // 'standard' or 'enhanced'
   analyzedAt      DateTime?
-  analysisError   String? // Error message if failed
+  analysisError   String? // Error message if failed/skipped (e.g., "File too large")
   analysisRetryCount Int @default(0) // Number of retry attempts
   updatedAt       DateTime  @updatedAt
 

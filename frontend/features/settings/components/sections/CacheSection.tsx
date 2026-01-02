@@ -38,17 +38,19 @@ function ProgressBar({
 }
 
 // Enrichment stage component
-function EnrichmentStage({ 
+function EnrichmentStage({
     icon: Icon,
-    label, 
+    label,
     description,
-    completed, 
-    total, 
+    completed,
+    total,
     progress,
     isBackground = false,
     failed = 0,
+    skipped = 0,
     processing = 0,
-}: { 
+    showAllStats = false,
+}: {
     icon: React.ElementType;
     label: string;
     description: string;
@@ -57,7 +59,9 @@ function EnrichmentStage({
     progress: number;
     isBackground?: boolean;
     failed?: number;
+    skipped?: number;
     processing?: number;
+    showAllStats?: boolean;
 }) {
     const isComplete = progress === 100;
     const hasActivity = processing > 0;
@@ -92,7 +96,12 @@ function EnrichmentStage({
                 <div className="flex items-center gap-3 mt-1 text-[10px] text-white/30">
                     <span>{completed} / {total}</span>
                     {processing > 0 && <span className="text-[#ecb200]">{processing} processing</span>}
-                    {failed > 0 && <span className="text-red-400">{failed} failed</span>}
+                    {(showAllStats || skipped > 0) && (
+                        <span className="text-orange-400">{skipped} skipped</span>
+                    )}
+                    {(showAllStats || failed > 0) && (
+                        <span className={failed > 0 ? "text-red-400" : "text-white/30"}>{failed} errors</span>
+                    )}
                 </div>
             </div>
         </div>
@@ -217,7 +226,9 @@ export function CacheSection({ settings, onUpdate }: CacheSectionProps) {
                             progress={enrichmentProgress.audioAnalysis.progress}
                             processing={enrichmentProgress.audioAnalysis.processing}
                             failed={enrichmentProgress.audioAnalysis.failed}
+                            skipped={enrichmentProgress.audioAnalysis.skipped}
                             isBackground={true}
+                            showAllStats={true}
                         />
                     </div>
                     

@@ -467,6 +467,9 @@ export async function getEnrichmentProgress() {
     const audioFailed = await prisma.track.count({
         where: { analysisStatus: "failed" },
     });
+    const audioSkipped = await prisma.track.count({
+        where: { analysisStatus: "skipped" },
+    });
 
     // Core enrichment is complete when artists and track tags are done
     // Audio analysis is separate - it runs in background and doesn't block
@@ -504,6 +507,7 @@ export async function getEnrichmentProgress() {
             pending: audioPending,
             processing: audioProcessing,
             failed: audioFailed,
+            skipped: audioSkipped,
             progress:
                 trackTotal > 0
                     ? Math.round((audioCompleted / trackTotal) * 100)
