@@ -7,6 +7,7 @@ import { deezerService } from "../services/deezer";
 import { musicBrainzService } from "../services/musicbrainz";
 import { normalizeArtistName } from "../utils/artistNormalization";
 import { coverArtService } from "../services/coverArt";
+import { imageProviderService } from "../services/imageProvider";
 import { redisClient } from "../utils/redis";
 
 /**
@@ -376,7 +377,9 @@ export async function enrichSimilarArtist(artist: Artist): Promise<void> {
 
 /**
  * Enrich album covers for an artist
- * Fetches covers from Cover Art Archive for albums without covers
+ * Strategy:
+ * 1. For valid MBIDs: Try Cover Art Archive first
+ * 2. For temp MBIDs or CAA failures: Use imageProviderService (Deezer -> Fanart -> Last.fm)
  */
 async function enrichAlbumCovers(
     artistId: string,
@@ -393,6 +396,7 @@ async function enrichAlbumCovers(
                 id: true,
                 rgMbid: true,
                 title: true,
+                artist: { select: { name: true } },
             },
         });
 
@@ -408,18 +412,34 @@ async function enrichAlbumCovers(
         let fetchedCount = 0;
         const BATCH_SIZE = 3; // Limit concurrent requests
 
-        // Process in batches to avoid overwhelming Cover Art Archive
+        // Process in batches to avoid overwhelming external APIs
         for (let i = 0; i < albumsWithoutCovers.length; i += BATCH_SIZE) {
             const batch = albumsWithoutCovers.slice(i, i + BATCH_SIZE);
 
             await Promise.all(
                 batch.map(async (album) => {
-                    if (!album.rgMbid) return;
-
                     try {
-                        const coverUrl = await coverArtService.getCoverArt(
-                            album.rgMbid
-                        );
+                        let coverUrl: string | null = null;
+                        const hasValidMbid = album.rgMbid && !album.rgMbid.startsWith("temp-");
+
+                        // Strategy 1: Try Cover Art Archive for valid MBIDs
+                        if (hasValidMbid) {
+                            coverUrl = await coverArtService.getCoverArt(album.rgMbid);
+                        }
+
+                        // Strategy 2: Fallback to Deezer/other providers
+                        // This works even without MBID (uses artist name + album title)
+                        if (!coverUrl) {
+                            const result = await imageProviderService.getAlbumCover(
+                                album.artist.name,
+                                album.title,
+                                hasValidMbid ? album.rgMbid : undefined
+                            );
+                            if (result) {
+                                coverUrl = result.url;
+                                console.log(`      Found cover for "${album.title}" from ${result.source}`);
+                            }
+                        }
 
                         if (coverUrl) {
                             // Save to database
@@ -440,13 +460,20 @@ async function enrichAlbumCovers(
                             }
 
                             fetchedCount++;
+                        } else {
+                            console.log(`      No cover found for: ${album.title}`);
                         }
                     } catch (err) {
                         // Cover art fetch failed, continue with next album
-                        console.log(`      No cover found for: ${album.title}`);
+                        console.log(`      Error fetching cover for "${album.title}":`, err);
                     }
                 })
             );
+
+            // Small delay between batches to be nice to APIs
+            if (i + BATCH_SIZE < albumsWithoutCovers.length) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
         }
 
         console.log(
