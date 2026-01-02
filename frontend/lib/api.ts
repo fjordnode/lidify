@@ -1463,6 +1463,7 @@ class ApiClient {
                 pending: number;
                 processing: number;
                 failed: number;
+                skipped: number;
                 progress: number;
                 isBackground: boolean;
             };
