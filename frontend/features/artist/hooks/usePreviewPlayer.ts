@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { Track } from "../types";
@@ -9,10 +9,17 @@ interface PreviewAlbumInfo {
     cover: string | null;
 }
 
-export function usePreviewPlayer() {
+interface UsePreviewPlayerOptions {
+    artistName?: string;
+    tracks?: Track[];
+}
+
+export function usePreviewPlayer(options: UsePreviewPlayerOptions = {}) {
+    const { artistName, tracks } = options;
     const [previewTrack, setPreviewTrack] = useState<string | null>(null);
     const [previewPlaying, setPreviewPlaying] = useState(false);
     const [previewAlbumInfo, setPreviewAlbumInfo] = useState<Record<string, PreviewAlbumInfo>>({});
+    const [noPreviewTracks, setNoPreviewTracks] = useState<Set<string>>(new Set());
     const previewAudioRef = useRef<HTMLAudioElement | null>(null);
     const mainPlayerWasPausedRef = useRef(false);
     const previewRequestIdRef = useRef(0);
@@ -195,5 +202,54 @@ export function usePreviewPlayer() {
         };
     }, []);
 
-    return { previewTrack, previewPlaying, previewAlbumInfo, handlePreview };
+    // Prefetch album info for unowned tracks (runs once after page load)
+    useEffect(() => {
+        if (!artistName || !tracks || tracks.length === 0) return;
+
+        // Find unowned tracks that need album info
+        const unownedTracks = tracks.filter(track => {
+            const isUnowned = !track.album?.id ||
+                              !track.album?.title ||
+                              track.album.title === "Unknown Album";
+            const alreadyFetched = previewAlbumInfo[track.id];
+            return isUnowned && !alreadyFetched;
+        });
+
+        if (unownedTracks.length === 0) return;
+
+        // Prefetch in background (don't block UI)
+        const prefetchAlbumInfo = async () => {
+            // Fetch sequentially with small delay to avoid rate limiting
+            for (const track of unownedTracks.slice(0, 5)) { // Limit to first 5
+                try {
+                    const response = await api.getTrackPreview(artistName, track.title);
+                    if (response.albumTitle) {
+                        setPreviewAlbumInfo(prev => ({
+                            ...prev,
+                            [track.id]: {
+                                title: response.albumTitle!,
+                                cover: response.albumCover || null,
+                            }
+                        }));
+                    } else {
+                        // No preview available
+                        setNoPreviewTracks(prev => new Set(prev).add(track.id));
+                        noPreviewTrackIdsRef.current.add(track.id);
+                    }
+                } catch {
+                    // API error - mark as no preview
+                    setNoPreviewTracks(prev => new Set(prev).add(track.id));
+                    noPreviewTrackIdsRef.current.add(track.id);
+                }
+                // Small delay between requests
+                await new Promise(r => setTimeout(r, 100));
+            }
+        };
+
+        // Delay prefetch to not block initial page render
+        const timeoutId = setTimeout(prefetchAlbumInfo, 500);
+        return () => clearTimeout(timeoutId);
+    }, [artistName, tracks]); // Only run when artist/tracks change
+
+    return { previewTrack, previewPlaying, previewAlbumInfo, noPreviewTracks, handlePreview };
 }
