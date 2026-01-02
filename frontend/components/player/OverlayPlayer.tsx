@@ -412,27 +412,31 @@ export function OverlayPlayer() {
 
                     {/* Progress Bar */}
                     <div className="mb-6">
+                        {/* Taller hit area wrapper */}
                         <div
                             className={cn(
-                                "w-full h-1 bg-white/20 rounded-full mb-2",
+                                "w-full h-6 flex items-center mb-2",
                                 seekEnabled ? "cursor-pointer" : "cursor-not-allowed"
                             )}
                             onClick={seekEnabled ? handleSeek : undefined}
-                            title={!canSeek 
-                                ? downloadProgress !== null 
+                            title={!canSeek
+                                ? downloadProgress !== null
                                     ? `Downloading ${downloadProgress}%...`
-                                    : "Downloading..." 
+                                    : "Downloading..."
                                 : "Tap to seek"}
                         >
-                            <div
-                                className={cn(
-                                    "h-full rounded-full transition-all duration-150",
-                                    seekEnabled 
-                                        ? "bg-gradient-to-r from-[#f5c518] to-[#a855f7]" 
-                                        : "bg-white/40"
-                                )}
-                                style={{ width: `${progress}%` }}
-                            />
+                            {/* Visual bar */}
+                            <div className="w-full h-1 bg-white/20 rounded-full">
+                                <div
+                                    className={cn(
+                                        "h-full rounded-full transition-all duration-150",
+                                        seekEnabled
+                                            ? "bg-gradient-to-r from-[#f5c518] to-[#a855f7]"
+                                            : "bg-white/40"
+                                    )}
+                                    style={{ width: `${progress}%` }}
+                                />
+                            </div>
                         </div>
                         <div className="flex justify-between text-xs text-gray-500 font-medium tabular-nums">
                             <span>{formatTime(displayTime)}</span>

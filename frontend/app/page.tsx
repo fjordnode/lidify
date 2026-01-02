@@ -77,7 +77,7 @@ export default function HomePage() {
                     {/* Recently Added - #2 Priority */}
                     {recentlyAdded.length > 0 && (
                         <section>
-                            <SectionHeader title="Recently Added" showAllHref="/library?tab=artists" />
+                            <SectionHeader title="Recently Added" showAllHref="/library?tab=artists&sortBy=dateAdded" />
                             <ArtistsGrid artists={recentlyAdded} />
                         </section>
                     )}

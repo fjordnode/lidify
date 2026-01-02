@@ -591,12 +591,12 @@ export function MiniPlayer() {
                 {/* Subtle top glow */}
                 <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
-                {/* Progress Bar */}
+                {/* Progress Bar - tall hit area with thin visual bar */}
                 <div
                     className={cn(
-                        "absolute top-0 left-0 right-0 h-1 bg-white/[0.15] transition-all",
+                        "absolute top-0 left-0 right-0 h-3 flex items-start group",
                         seekEnabled
-                            ? "cursor-pointer group hover:h-2"
+                            ? "cursor-pointer"
                             : "cursor-not-allowed"
                     )}
                     onClick={seekEnabled ? handleProgressClick : undefined}
@@ -610,20 +610,26 @@ export function MiniPlayer() {
                             : "Click to seek"
                     }
                 >
-                    <div
-                        className={cn(
-                            "h-full rounded-full relative transition-all duration-150",
-                            seekEnabled
-                                ? "bg-white"
-                                : hasMedia
-                                ? "bg-white/50"
-                                : "bg-gray-600"
-                        )}
-                        style={{ width: `${progress}%` }}
-                    >
-                        {seekEnabled && (
-                            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg shadow-white/50" />
-                        )}
+                    {/* Visual bar - thin but expands on hover */}
+                    <div className={cn(
+                        "w-full bg-white/[0.15] transition-all",
+                        seekEnabled ? "h-1 group-hover:h-2" : "h-1"
+                    )}>
+                        <div
+                            className={cn(
+                                "h-full rounded-full relative transition-all duration-150",
+                                seekEnabled
+                                    ? "bg-white"
+                                    : hasMedia
+                                    ? "bg-white/50"
+                                    : "bg-gray-600"
+                            )}
+                            style={{ width: `${progress}%` }}
+                        >
+                            {seekEnabled && (
+                                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg shadow-white/50" />
+                            )}
+                        </div>
                     </div>
                 </div>
 

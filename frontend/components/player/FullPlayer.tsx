@@ -584,32 +584,36 @@ export function FullPlayer() {
                         )}>
                             {formatTime(displayTime)}
                         </span>
+                        {/* Taller hit area wrapper */}
                         <div
                             className={cn(
-                                "flex-1 h-1 bg-white/[0.15] rounded-full relative",
+                                "flex-1 h-4 flex items-center",
                                 seekEnabled ? "cursor-pointer group" : "cursor-not-allowed"
                             )}
                             onClick={seekEnabled ? handleSeek : undefined}
                             title={
-                                !hasMedia 
-                                    ? undefined 
-                                    : !canSeek 
-                                    ? downloadProgress !== null 
+                                !hasMedia
+                                    ? undefined
+                                    : !canSeek
+                                    ? downloadProgress !== null
                                         ? `Downloading ${downloadProgress}%... Seek will be available when cached`
-                                        : "Downloading... Seeking will be available when cached" 
+                                        : "Downloading... Seeking will be available when cached"
                                     : "Click to seek"
                             }
                         >
-                            <div
-                                className={cn(
-                                    "h-full rounded-full relative transition-all duration-150",
-                                    seekEnabled ? "bg-white group-hover:bg-white" : hasMedia ? "bg-white/50" : "bg-gray-600"
-                                )}
-                                style={{ width: `${progress}%` }}
-                            >
-                                {seekEnabled && (
-                                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg shadow-white/50" />
-                                )}
+                            {/* Visual bar */}
+                            <div className="w-full h-1 bg-white/[0.15] rounded-full relative group-hover:h-1.5 transition-all">
+                                <div
+                                    className={cn(
+                                        "h-full rounded-full relative transition-all duration-150",
+                                        seekEnabled ? "bg-white group-hover:bg-white" : hasMedia ? "bg-white/50" : "bg-gray-600"
+                                    )}
+                                    style={{ width: `${progress}%` }}
+                                >
+                                    {seekEnabled && (
+                                        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg shadow-white/50" />
+                                    )}
+                                </div>
                             </div>
                         </div>
                         <span className={cn(

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAudio } from "@/lib/audio-context";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -24,17 +24,30 @@ export default function LibraryPage() {
     const searchParams = useSearchParams();
     const { currentTrack, playTracks } = useAudio();
 
-    // Get active tab from URL params, default to "artists"
+    // Get active tab, sort, and page from URL params
     const activeTab = (searchParams.get("tab") as Tab) || "artists";
+    const initialSortBy = (searchParams.get("sortBy") as SortOption) || "name";
+    const initialPage = parseInt(searchParams.get("page") || "1", 10) || 1;
 
     // Filter state (owned = your library, discovery = discovery weekly artists)
     const [filter, setFilter] = useState<LibraryFilter>("owned");
 
     // Sort and pagination state
-    const [sortBy, setSortBy] = useState<SortOption>("name");
-    const [itemsPerPage, setItemsPerPage] = useState<number>(50);
-    const [currentPage, setCurrentPage] = useState(1);
+    const [sortBy, setSortBy] = useState<SortOption>(initialSortBy);
+    const [itemsPerPage, setItemsPerPage] = useState<number>(() => {
+        // Initialize from localStorage if available
+        if (typeof window !== "undefined") {
+            const saved = localStorage.getItem("library-items-per-page");
+            if (saved) {
+                const parsed = parseInt(saved, 10);
+                if ([25, 50, 100, 250].includes(parsed)) return parsed;
+            }
+        }
+        return 50;
+    });
+    const [currentPage, setCurrentPage] = useState(initialPage);
     const [showFilters, setShowFilters] = useState(false);
+    const isFirstRender = useRef(true);
 
     // Use custom hooks with server-side pagination
     const { artists, albums, tracks, isLoading, reloadData, pagination } = useLibraryData({
@@ -52,10 +65,12 @@ export default function LibraryPage() {
         deleteArtist,
         deleteAlbum,
         deleteTrack,
+        archiveArtist,
     } = useLibraryActions();
 
-    // Reset page and filter when tab changes
+    // Reset page and filter when tab changes (skip on first render to preserve URL state)
     useEffect(() => {
+        if (isFirstRender.current) return;
         setCurrentPage(1);
         // Reset filter to 'owned' when switching to tracks tab (which doesn't support filter)
         if (activeTab === "tracks") {
@@ -63,10 +78,43 @@ export default function LibraryPage() {
         }
     }, [activeTab]);
 
-    // Reset page when filter or sort changes
+    // Sync sort state with URL param when navigating from other pages
     useEffect(() => {
+        setSortBy(initialSortBy);
+    }, [initialSortBy]);
+
+    // Sync page state with URL param when navigating back
+    useEffect(() => {
+        setCurrentPage(initialPage);
+    }, [initialPage]);
+
+    // Update URL when page changes (without full navigation)
+    useEffect(() => {
+        const params = new URLSearchParams(searchParams.toString());
+        if (currentPage > 1) {
+            params.set("page", currentPage.toString());
+        } else {
+            params.delete("page");
+        }
+        const newUrl = `/library?${params.toString()}`;
+        window.history.replaceState(null, "", newUrl);
+    }, [currentPage, searchParams]);
+
+    // Persist itemsPerPage to localStorage
+    useEffect(() => {
+        localStorage.setItem("library-items-per-page", itemsPerPage.toString());
+    }, [itemsPerPage]);
+
+    // Reset page when filter or sort changes (skip on first render to preserve URL state)
+    useEffect(() => {
+        if (isFirstRender.current) return;
         setCurrentPage(1);
     }, [filter, sortBy, itemsPerPage]);
+
+    // Mark first render complete (must be last effect to let other effects skip on mount)
+    useEffect(() => {
+        isFirstRender.current = false;
+    }, []);
 
     // Get total items and pages from pagination
     const totalItems = pagination.total;
@@ -76,6 +124,17 @@ export default function LibraryPage() {
     const [deleteConfirm, setDeleteConfirm] = useState<DeleteDialogState>({
         isOpen: false,
         type: "track",
+        id: "",
+        title: "",
+    });
+
+    // Archive confirmation dialog state
+    const [archiveConfirm, setArchiveConfirm] = useState<{
+        isOpen: boolean;
+        id: string;
+        title: string;
+    }>({
+        isOpen: false,
         id: "",
         title: "",
     });
@@ -159,6 +218,17 @@ export default function LibraryPage() {
         } catch (error) {
             console.error(`Failed to delete ${deleteConfirm.type}:`, error);
             // Keep dialog open on error so user can retry
+        }
+    };
+
+    // Handle archive confirmation
+    const handleArchive = async () => {
+        try {
+            await archiveArtist(archiveConfirm.id);
+            await reloadData();
+            setArchiveConfirm({ isOpen: false, id: "", title: "" });
+        } catch (error) {
+            console.error("Failed to archive artist:", error);
         }
     };
 
@@ -280,6 +350,49 @@ export default function LibraryPage() {
                     </div>
                 )}
 
+                {/* Top Pagination */}
+                {totalPages > 1 && (
+                    <div className="flex items-center justify-center gap-2 mb-6">
+                        <button
+                            onClick={() => setCurrentPage(1)}
+                            disabled={currentPage === 1 || isLoading}
+                            className="px-3 py-1.5 text-xs text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            First
+                        </button>
+                        <button
+                            onClick={() =>
+                                setCurrentPage((p) => Math.max(1, p - 1))
+                            }
+                            disabled={currentPage === 1 || isLoading}
+                            className="px-3 py-1.5 text-xs text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Prev
+                        </button>
+                        <span className="px-4 py-1.5 text-xs text-white">
+                            {currentPage} / {totalPages}
+                        </span>
+                        <button
+                            onClick={() =>
+                                setCurrentPage((p) =>
+                                    Math.min(totalPages, p + 1)
+                                )
+                            }
+                            disabled={currentPage === totalPages || isLoading}
+                            className="px-3 py-1.5 text-xs text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Next
+                        </button>
+                        <button
+                            onClick={() => setCurrentPage(totalPages)}
+                            disabled={currentPage === totalPages || isLoading}
+                            className="px-3 py-1.5 text-xs text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Last
+                        </button>
+                    </div>
+                )}
+
                 {activeTab === "artists" && (
                     <ArtistsGrid
                         artists={artists}
@@ -289,6 +402,13 @@ export default function LibraryPage() {
                             setDeleteConfirm({
                                 isOpen: true,
                                 type: "artist",
+                                id,
+                                title: name,
+                            })
+                        }
+                        onArchive={(id, name) =>
+                            setArchiveConfirm({
+                                isOpen: true,
                                 id,
                                 title: name,
                             })
@@ -402,6 +522,19 @@ export default function LibraryPage() {
                     confirmText="Delete"
                     cancelText="Cancel"
                     variant="danger"
+                />
+
+                <ConfirmDialog
+                    isOpen={archiveConfirm.isOpen}
+                    onClose={() =>
+                        setArchiveConfirm({ isOpen: false, id: "", title: "" })
+                    }
+                    onConfirm={handleArchive}
+                    title="Archive Artist?"
+                    message={`Move "${archiveConfirm.title}" to the archive folder? Files will be moved to _archived/ and removed from your library, but not deleted.`}
+                    confirmText="Archive"
+                    cancelText="Cancel"
+                    variant="warning"
                 />
             </div>
         </div>

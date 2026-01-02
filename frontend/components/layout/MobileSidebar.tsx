@@ -11,6 +11,11 @@ import {
     X,
     Radio,
     Calendar,
+    Library,
+    Headphones,
+    Mic2,
+    LayoutGrid,
+    Plus,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { api } from "@/lib/api";
@@ -110,24 +115,24 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
 
                 {/* Menu Content */}
                 <nav className="flex-1 overflow-y-auto py-4">
-                    {/* Quick Links Section */}
+                    {/* Navigation Section */}
                     <div className="px-3 mb-6">
                         <div className="text-[10px] font-semibold text-gray-600 uppercase tracking-widest px-3 mb-2">
-                            Quick Links
+                            Navigation
                         </div>
 
                         <Link
-                            href="/discover"
+                            href="/library"
                             className={cn(
                                 "flex items-center gap-3 px-3 py-3 rounded-lg transition-colors",
-                                pathname === "/discover"
+                                pathname === "/library"
                                     ? "bg-white/10 text-white"
                                     : "text-gray-400 hover:text-white hover:bg-white/5"
                             )}
                         >
-                            <Compass className="w-5 h-5" />
+                            <Library className="w-5 h-5" />
                             <span className="text-[15px] font-medium">
-                                Discover
+                                Library
                             </span>
                         </Link>
 
@@ -147,17 +152,97 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
                         </Link>
 
                         <Link
-                            href="/releases"
+                            href="/discover"
                             className={cn(
                                 "flex items-center gap-3 px-3 py-3 rounded-lg transition-colors",
-                                pathname === "/releases"
+                                pathname === "/discover"
                                     ? "bg-white/10 text-white"
                                     : "text-gray-400 hover:text-white hover:bg-white/5"
                             )}
                         >
-                            <Calendar className="w-5 h-5" />
+                            <Compass className="w-5 h-5" />
                             <span className="text-[15px] font-medium">
-                                Releases
+                                Discovery
+                            </span>
+                        </Link>
+
+                        <Link
+                            href="/audiobooks"
+                            className={cn(
+                                "flex items-center gap-3 px-3 py-3 rounded-lg transition-colors",
+                                pathname === "/audiobooks"
+                                    ? "bg-white/10 text-white"
+                                    : "text-gray-400 hover:text-white hover:bg-white/5"
+                            )}
+                        >
+                            <Headphones className="w-5 h-5" />
+                            <span className="text-[15px] font-medium">
+                                Audiobooks
+                            </span>
+                        </Link>
+
+                        <Link
+                            href="/podcasts"
+                            className={cn(
+                                "flex items-center gap-3 px-3 py-3 rounded-lg transition-colors",
+                                pathname === "/podcasts"
+                                    ? "bg-white/10 text-white"
+                                    : "text-gray-400 hover:text-white hover:bg-white/5"
+                            )}
+                        >
+                            <Mic2 className="w-5 h-5" />
+                            <span className="text-[15px] font-medium">
+                                Podcasts
+                            </span>
+                        </Link>
+
+                        <Link
+                            href="/browse/playlists"
+                            className={cn(
+                                "flex items-center gap-3 px-3 py-3 rounded-lg transition-colors",
+                                pathname.startsWith("/browse")
+                                    ? "bg-white/10 text-white"
+                                    : "text-gray-400 hover:text-white hover:bg-white/5"
+                            )}
+                        >
+                            <LayoutGrid className="w-5 h-5" />
+                            <div className="flex items-center gap-2">
+                                <span className="text-[15px] font-medium">
+                                    Browse
+                                </span>
+                                <span className="px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide rounded bg-[#ecb200]/20 text-[#ecb200] border border-[#ecb200]/30">
+                                    Beta
+                                </span>
+                            </div>
+                        </Link>
+                    </div>
+
+                    {/* Playlists Section */}
+                    <div className="px-3 mb-6">
+                        <div className="flex items-center justify-between px-3 mb-2">
+                            <div className="text-[10px] font-semibold text-gray-600 uppercase tracking-widest">
+                                Playlists
+                            </div>
+                            <Link
+                                href="/playlists"
+                                className="w-6 h-6 flex items-center justify-center rounded-md text-gray-500 hover:text-white hover:bg-white/10 transition-colors"
+                                title="Create Playlist"
+                            >
+                                <Plus className="w-4 h-4" />
+                            </Link>
+                        </div>
+
+                        <Link
+                            href="/playlists"
+                            className={cn(
+                                "flex items-center gap-3 px-3 py-3 rounded-lg transition-colors",
+                                pathname === "/playlists"
+                                    ? "bg-white/10 text-white"
+                                    : "text-gray-400 hover:text-white hover:bg-white/5"
+                            )}
+                        >
+                            <span className="text-[15px] font-medium">
+                                View All Playlists
                             </span>
                         </Link>
                     </div>
