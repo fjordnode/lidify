@@ -1070,15 +1070,10 @@ export class ProgrammaticPlaylistService {
             return null;
         }
 
-        // Use date seed for consistent daily selection
-        const seed = getSeededRandom(`party-${today}`);
-        let random = seed;
-        const shuffled = tracks.sort(() => {
-            random = (random * 9301 + 49297) % 233280;
-            return random / 233280 - 0.5;
-        });
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
 
-        const selectedTracks = shuffled.slice(0, this.TRACK_LIMIT);
+        const selectedTracks = diverseTracks.slice(0, this.TRACK_LIMIT);
         const coverUrls = selectedTracks
             .filter((t) => t.album.coverUrl)
             .slice(0, 4)
@@ -1925,8 +1920,7 @@ export class ProgrammaticPlaylistService {
                 danceability: { gte: 0.7 },
                 bpm: { gte: 110, lte: 140 },
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 100,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
         tracks = audioTracks;
         console.log(
@@ -1965,14 +1959,10 @@ export class ProgrammaticPlaylistService {
             return null;
         }
 
-        const seed = getSeededRandom(`dance-floor-${today}`);
-        let random = seed;
-        const shuffled = tracks.sort(() => {
-            random = (random * 9301 + 49297) % 233280;
-            return random / 233280 - 0.5;
-        });
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
 
-        const selectedTracks = shuffled.slice(0, this.TRACK_LIMIT);
+        const selectedTracks = diverseTracks.slice(0, this.TRACK_LIMIT);
         const coverUrls = selectedTracks
             .filter((t) => t.album.coverUrl)
             .slice(0, 4)
@@ -2008,8 +1998,7 @@ export class ProgrammaticPlaylistService {
                 acousticness: { gte: 0.6 },
                 energy: { gte: 0.3, lte: 0.6 },
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 100,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
         tracks = audioTracks;
         console.log(
@@ -2046,14 +2035,10 @@ export class ProgrammaticPlaylistService {
             return null;
         }
 
-        const seed = getSeededRandom(`acoustic-${today}`);
-        let random = seed;
-        const shuffled = tracks.sort(() => {
-            random = (random * 9301 + 49297) % 233280;
-            return random / 233280 - 0.5;
-        });
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
 
-        const selectedTracks = shuffled.slice(0, this.TRACK_LIMIT);
+        const selectedTracks = diverseTracks.slice(0, this.TRACK_LIMIT);
         const coverUrls = selectedTracks
             .filter((t) => t.album.coverUrl)
             .slice(0, 4)
@@ -2089,8 +2074,7 @@ export class ProgrammaticPlaylistService {
                 instrumentalness: { gte: 0.7 },
                 energy: { gte: 0.3, lte: 0.6 },
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 100,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
         tracks = audioTracks;
         console.log(
@@ -2128,14 +2112,10 @@ export class ProgrammaticPlaylistService {
             return null;
         }
 
-        const seed = getSeededRandom(`instrumental-${today}`);
-        let random = seed;
-        const shuffled = tracks.sort(() => {
-            random = (random * 9301 + 49297) % 233280;
-            return random / 233280 - 0.5;
-        });
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
 
-        const selectedTracks = shuffled.slice(0, this.TRACK_LIMIT);
+        const selectedTracks = diverseTracks.slice(0, this.TRACK_LIMIT);
         const coverUrls = selectedTracks
             .filter((t) => t.album.coverUrl)
             .slice(0, 4)
@@ -2232,8 +2212,7 @@ export class ProgrammaticPlaylistService {
                     { moodTags: { hasSome: ["energetic", "upbeat", "happy"] } },
                 ],
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 100,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
         tracks = taggedTracks;
         console.log(`[ROAD TRIP MIX] Found ${tracks.length} tracks from tags`);
@@ -2246,8 +2225,7 @@ export class ProgrammaticPlaylistService {
                     energy: { gte: 0.5, lte: 0.8 },
                     bpm: { gte: 100, lte: 130 },
                 },
-                include: { album: { select: { coverUrl: true } } },
-                take: 100,
+                include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
             });
             const existingIds = new Set(tracks.map((t) => t.id));
             tracks = [
@@ -2289,14 +2267,10 @@ export class ProgrammaticPlaylistService {
             return null;
         }
 
-        const seed = getSeededRandom(`road-trip-${today}`);
-        let random = seed;
-        const shuffled = tracks.sort(() => {
-            random = (random * 9301 + 49297) % 233280;
-            return random / 233280 - 0.5;
-        });
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
 
-        const selectedTracks = shuffled.slice(0, this.TRACK_LIMIT);
+        const selectedTracks = diverseTracks.slice(0, this.TRACK_LIMIT);
         const coverUrls = selectedTracks
             .filter((t) => t.album.coverUrl)
             .slice(0, 4)
@@ -2364,14 +2338,16 @@ export class ProgrammaticPlaylistService {
                 ],
             },
             include: {
-                album: { select: { coverUrl: true } },
+                album: { select: { coverUrl: true, artist: { select: { id: true } } } },
             },
-            take: 100,
         });
 
-        if (tracks.length < 15) return null;
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
 
-        const selectedTracks = randomSample(tracks, this.TRACK_LIMIT);
+        if (diverseTracks.length < 15) return null;
+
+        const selectedTracks = diverseTracks.slice(0, this.TRACK_LIMIT);
         const coverUrls = selectedTracks
             .filter((t) => t.album.coverUrl)
             .slice(0, 4)
@@ -2414,14 +2390,16 @@ export class ProgrammaticPlaylistService {
                 ],
             },
             include: {
-                album: { select: { coverUrl: true } },
+                album: { select: { coverUrl: true, artist: { select: { id: true } } } },
             },
-            take: 100,
         });
 
-        if (tracks.length < 15) return null;
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
 
-        const selectedTracks = randomSample(tracks, this.TRACK_LIMIT);
+        if (diverseTracks.length < 15) return null;
+
+        const selectedTracks = diverseTracks.slice(0, this.TRACK_LIMIT);
         const coverUrls = selectedTracks
             .filter((t) => t.album.coverUrl)
             .slice(0, 4)
@@ -2459,14 +2437,16 @@ export class ProgrammaticPlaylistService {
                 ],
             },
             include: {
-                album: { select: { coverUrl: true } },
+                album: { select: { coverUrl: true, artist: { select: { id: true } } } },
             },
-            take: 100,
         });
 
-        if (tracks.length < 15) return null;
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
 
-        const selectedTracks = randomSample(tracks, this.TRACK_LIMIT);
+        if (diverseTracks.length < 15) return null;
+
+        const selectedTracks = diverseTracks.slice(0, this.TRACK_LIMIT);
         const coverUrls = selectedTracks
             .filter((t) => t.album.coverUrl)
             .slice(0, 4)
@@ -2530,14 +2510,16 @@ export class ProgrammaticPlaylistService {
                     },
                 ],
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 50,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
 
-        if (tracks.length < 8) return null;
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
 
-        const shuffled = randomSample(tracks, this.DAILY_TRACK_LIMIT);
-        const coverUrls = shuffled
+        if (diverseTracks.length < 8) return null;
+
+        const selectedTracks = diverseTracks.slice(0, this.DAILY_TRACK_LIMIT);
+        const coverUrls = selectedTracks
             .filter((t) => t.album.coverUrl)
             .slice(0, 4)
             .map((t) => t.album.coverUrl!);
@@ -2547,9 +2529,9 @@ export class ProgrammaticPlaylistService {
             type: "sad-girl-sundays",
             name: "Sad Girl Sundays",
             description: "Melancholic introspection and feelings",
-            trackIds: shuffled.map((t) => t.id),
+            trackIds: selectedTracks.map((t) => t.id),
             coverUrls,
-            trackCount: shuffled.length,
+            trackCount: selectedTracks.length,
             color: getMixColor("sad-girl-sundays"),
         };
     }
@@ -2585,14 +2567,16 @@ export class ProgrammaticPlaylistService {
                     },
                 ],
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 50,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
 
-        if (tracks.length < 8) return null;
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
 
-        const shuffled = randomSample(tracks, this.DAILY_TRACK_LIMIT);
-        const coverUrls = shuffled
+        if (diverseTracks.length < 8) return null;
+
+        const selectedTracks = diverseTracks.slice(0, this.DAILY_TRACK_LIMIT);
+        const coverUrls = selectedTracks
             .filter((t) => t.album.coverUrl)
             .slice(0, 4)
             .map((t) => t.album.coverUrl!);
@@ -2602,9 +2586,9 @@ export class ProgrammaticPlaylistService {
             type: "main-character",
             name: "Main Character Energy",
             description: "You're the protagonist today",
-            trackIds: shuffled.map((t) => t.id),
+            trackIds: selectedTracks.map((t) => t.id),
             coverUrls,
-            trackCount: shuffled.length,
+            trackCount: selectedTracks.length,
             color: getMixColor("main-character"),
         };
     }
@@ -2641,14 +2625,16 @@ export class ProgrammaticPlaylistService {
                     },
                 ],
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 50,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
 
-        if (tracks.length < 8) return null;
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
 
-        const shuffled = randomSample(tracks, this.DAILY_TRACK_LIMIT);
-        const coverUrls = shuffled
+        if (diverseTracks.length < 8) return null;
+
+        const selectedTracks = diverseTracks.slice(0, this.DAILY_TRACK_LIMIT);
+        const coverUrls = selectedTracks
             .filter((t) => t.album.coverUrl)
             .slice(0, 4)
             .map((t) => t.album.coverUrl!);
@@ -2658,9 +2644,9 @@ export class ProgrammaticPlaylistService {
             type: "villain-era",
             name: "Villain Era",
             description: "Embrace your dark side",
-            trackIds: shuffled.map((t) => t.id),
+            trackIds: selectedTracks.map((t) => t.id),
             coverUrls,
-            trackCount: shuffled.length,
+            trackCount: selectedTracks.length,
             color: getMixColor("villain-era"),
         };
     }
@@ -2689,14 +2675,16 @@ export class ProgrammaticPlaylistService {
                     },
                 ],
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 50,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
 
-        if (tracks.length < this.MIN_TRACKS_DAILY) return null;
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
 
-        const shuffled = randomSample(tracks, this.DAILY_TRACK_LIMIT);
-        const coverUrls = shuffled
+        if (diverseTracks.length < this.MIN_TRACKS_DAILY) return null;
+
+        const selectedTracks = diverseTracks.slice(0, this.DAILY_TRACK_LIMIT);
+        const coverUrls = selectedTracks
             .filter((t) => t.album.coverUrl)
             .slice(0, 4)
             .map((t) => t.album.coverUrl!);
@@ -2706,9 +2694,9 @@ export class ProgrammaticPlaylistService {
             type: "3am-thoughts",
             name: "3AM Thoughts",
             description: "Late night overthinking companion",
-            trackIds: shuffled.map((t) => t.id),
+            trackIds: selectedTracks.map((t) => t.id),
             coverUrls,
-            trackCount: shuffled.length,
+            trackCount: selectedTracks.length,
             color: getMixColor("3am-thoughts"),
         };
     }
@@ -2740,14 +2728,16 @@ export class ProgrammaticPlaylistService {
                     },
                 ],
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 50,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
 
-        if (tracks.length < 8) return null;
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
 
-        const shuffled = randomSample(tracks, this.DAILY_TRACK_LIMIT);
-        const coverUrls = shuffled
+        if (diverseTracks.length < 8) return null;
+
+        const selectedTracks = diverseTracks.slice(0, this.DAILY_TRACK_LIMIT);
+        const coverUrls = selectedTracks
             .filter((t) => t.album.coverUrl)
             .slice(0, 4)
             .map((t) => t.album.coverUrl!);
@@ -2757,9 +2747,9 @@ export class ProgrammaticPlaylistService {
             type: "hot-girl-walk",
             name: "Hot Girl Walk",
             description: "Confidence boost for your walk",
-            trackIds: shuffled.map((t) => t.id),
+            trackIds: selectedTracks.map((t) => t.id),
             coverUrls,
-            trackCount: shuffled.length,
+            trackCount: selectedTracks.length,
             color: getMixColor("confidence-boost"),
         };
     }
@@ -2794,14 +2784,16 @@ export class ProgrammaticPlaylistService {
                     },
                 ],
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 50,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
 
-        if (tracks.length < 8) return null;
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
 
-        const shuffled = randomSample(tracks, this.DAILY_TRACK_LIMIT);
-        const coverUrls = shuffled
+        if (diverseTracks.length < 8) return null;
+
+        const selectedTracks = diverseTracks.slice(0, this.DAILY_TRACK_LIMIT);
+        const coverUrls = selectedTracks
             .filter((t) => t.album.coverUrl)
             .slice(0, 4)
             .map((t) => t.album.coverUrl!);
@@ -2811,9 +2803,9 @@ export class ProgrammaticPlaylistService {
             type: "rage-cleaning",
             name: "Rage Cleaning",
             description: "Aggressive productivity fuel",
-            trackIds: shuffled.map((t) => t.id),
+            trackIds: selectedTracks.map((t) => t.id),
             coverUrls,
-            trackCount: shuffled.length,
+            trackCount: selectedTracks.length,
             color: getMixColor("workout"),
         };
     }
@@ -2844,14 +2836,16 @@ export class ProgrammaticPlaylistService {
                     },
                 ],
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 50,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
 
-        if (tracks.length < 8) return null;
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
 
-        const shuffled = randomSample(tracks, this.DAILY_TRACK_LIMIT);
-        const coverUrls = shuffled
+        if (diverseTracks.length < 8) return null;
+
+        const selectedTracks = diverseTracks.slice(0, this.DAILY_TRACK_LIMIT);
+        const coverUrls = selectedTracks
             .filter((t) => t.album.coverUrl)
             .slice(0, 4)
             .map((t) => t.album.coverUrl!);
@@ -2861,9 +2855,9 @@ export class ProgrammaticPlaylistService {
             type: "golden-hour",
             name: "Golden Hour",
             description: "Warm sunset vibes",
-            trackIds: shuffled.map((t) => t.id),
+            trackIds: selectedTracks.map((t) => t.id),
             coverUrls,
-            trackCount: shuffled.length,
+            trackCount: selectedTracks.length,
             color: getMixColor("golden-hour"),
         };
     }
@@ -2885,14 +2879,16 @@ export class ProgrammaticPlaylistService {
                     { valence: { gte: 0.45 } },
                 ],
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 50,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
 
-        if (tracks.length < 8) return null;
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
 
-        const shuffled = randomSample(tracks, this.DAILY_TRACK_LIMIT);
-        const coverUrls = shuffled
+        if (diverseTracks.length < 8) return null;
+
+        const selectedTracks = diverseTracks.slice(0, this.DAILY_TRACK_LIMIT);
+        const coverUrls = selectedTracks
             .filter((t) => t.album.coverUrl)
             .slice(0, 4)
             .map((t) => t.album.coverUrl!);
@@ -2902,9 +2898,9 @@ export class ProgrammaticPlaylistService {
             type: "shower-karaoke",
             name: "Shower Karaoke",
             description: "Belters you can't help but sing",
-            trackIds: shuffled.map((t) => t.id),
+            trackIds: selectedTracks.map((t) => t.id),
             coverUrls,
-            trackCount: shuffled.length,
+            trackCount: selectedTracks.length,
             color: getMixColor("happy"),
         };
     }
@@ -2940,14 +2936,16 @@ export class ProgrammaticPlaylistService {
                     },
                 ],
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 50,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
 
-        if (tracks.length < 8) return null;
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
 
-        const shuffled = randomSample(tracks, this.DAILY_TRACK_LIMIT);
-        const coverUrls = shuffled
+        if (diverseTracks.length < 8) return null;
+
+        const selectedTracks = diverseTracks.slice(0, this.DAILY_TRACK_LIMIT);
+        const coverUrls = selectedTracks
             .filter((t) => t.album.coverUrl)
             .slice(0, 4)
             .map((t) => t.album.coverUrl!);
@@ -2957,9 +2955,9 @@ export class ProgrammaticPlaylistService {
             type: "in-my-feelings",
             name: "In My Feelings",
             description: "Let it all out",
-            trackIds: shuffled.map((t) => t.id),
+            trackIds: selectedTracks.map((t) => t.id),
             coverUrls,
-            trackCount: shuffled.length,
+            trackCount: selectedTracks.length,
             color: getMixColor("heartbreak-hotel"),
         };
     }
@@ -2990,14 +2988,16 @@ export class ProgrammaticPlaylistService {
                     },
                 ],
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 50,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
 
-        if (tracks.length < this.MIN_TRACKS_DAILY) return null;
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
 
-        const shuffled = randomSample(tracks, this.DAILY_TRACK_LIMIT);
-        const coverUrls = shuffled
+        if (diverseTracks.length < this.MIN_TRACKS_DAILY) return null;
+
+        const selectedTracks = diverseTracks.slice(0, this.DAILY_TRACK_LIMIT);
+        const coverUrls = selectedTracks
             .filter((t) => t.album.coverUrl)
             .slice(0, 4)
             .map((t) => t.album.coverUrl!);
@@ -3007,9 +3007,9 @@ export class ProgrammaticPlaylistService {
             type: "midnight-drive",
             name: "Midnight Drive",
             description: "Perfect for late night cruising",
-            trackIds: shuffled.map((t) => t.id),
+            trackIds: selectedTracks.map((t) => t.id),
             coverUrls,
-            trackCount: shuffled.length,
+            trackCount: selectedTracks.length,
             color: getMixColor("night-drive"),
         };
     }
@@ -3040,14 +3040,16 @@ export class ProgrammaticPlaylistService {
                     },
                 ],
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 50,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
 
-        if (tracks.length < this.MIN_TRACKS_DAILY) return null;
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
 
-        const shuffled = randomSample(tracks, this.DAILY_TRACK_LIMIT);
-        const coverUrls = shuffled
+        if (diverseTracks.length < this.MIN_TRACKS_DAILY) return null;
+
+        const selectedTracks = diverseTracks.slice(0, this.DAILY_TRACK_LIMIT);
+        const coverUrls = selectedTracks
             .filter((t) => t.album.coverUrl)
             .slice(0, 4)
             .map((t) => t.album.coverUrl!);
@@ -3057,9 +3059,9 @@ export class ProgrammaticPlaylistService {
             type: "coffee-shop",
             name: "Coffee Shop Vibes",
             description: "Cozy background music",
-            trackIds: shuffled.map((t) => t.id),
+            trackIds: selectedTracks.map((t) => t.id),
             coverUrls,
-            trackCount: shuffled.length,
+            trackCount: selectedTracks.length,
             color: getMixColor("coffee-shop"),
         };
     }
@@ -3095,14 +3097,16 @@ export class ProgrammaticPlaylistService {
                     },
                 ],
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 50,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
 
-        if (tracks.length < 8) return null;
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
 
-        const shuffled = randomSample(tracks, this.DAILY_TRACK_LIMIT);
-        const coverUrls = shuffled
+        if (diverseTracks.length < 8) return null;
+
+        const selectedTracks = diverseTracks.slice(0, this.DAILY_TRACK_LIMIT);
+        const coverUrls = selectedTracks
             .filter((t) => t.album.coverUrl)
             .slice(0, 4)
             .map((t) => t.album.coverUrl!);
@@ -3112,9 +3116,9 @@ export class ProgrammaticPlaylistService {
             type: "romanticize",
             name: "Romanticize Your Life",
             description: "Make every moment aesthetic",
-            trackIds: shuffled.map((t) => t.id),
+            trackIds: selectedTracks.map((t) => t.id),
             coverUrls,
-            trackCount: shuffled.length,
+            trackCount: selectedTracks.length,
             color: getMixColor("golden-hour"),
         };
     }
@@ -3136,14 +3140,16 @@ export class ProgrammaticPlaylistService {
                     { danceability: { gte: 0.45 } },
                 ],
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 50,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
 
-        if (tracks.length < 8) return null;
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
 
-        const shuffled = randomSample(tracks, this.DAILY_TRACK_LIMIT);
-        const coverUrls = shuffled
+        if (diverseTracks.length < 8) return null;
+
+        const selectedTracks = diverseTracks.slice(0, this.DAILY_TRACK_LIMIT);
+        const coverUrls = selectedTracks
             .filter((t) => t.album.coverUrl)
             .slice(0, 4)
             .map((t) => t.album.coverUrl!);
@@ -3153,9 +3159,9 @@ export class ProgrammaticPlaylistService {
             type: "that-girl-era",
             name: "That Girl Era",
             description: "Self-improvement mode activated",
-            trackIds: shuffled.map((t) => t.id),
+            trackIds: selectedTracks.map((t) => t.id),
             coverUrls,
-            trackCount: shuffled.length,
+            trackCount: selectedTracks.length,
             color: getMixColor("confidence-boost"),
         };
     }
@@ -3182,14 +3188,16 @@ export class ProgrammaticPlaylistService {
                     { danceability: { gte: 0.9 } },
                 ],
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 100,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
 
-        if (tracks.length < 8) return null;
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
 
-        const shuffled = randomSample(tracks, this.DAILY_TRACK_LIMIT);
-        const coverUrls = shuffled
+        if (diverseTracks.length < 8) return null;
+
+        const selectedTracks = diverseTracks.slice(0, this.DAILY_TRACK_LIMIT);
+        const coverUrls = selectedTracks
             .filter((t) => t.album.coverUrl)
             .slice(0, 4)
             .map((t) => t.album.coverUrl!);
@@ -3199,9 +3207,9 @@ export class ProgrammaticPlaylistService {
             type: "unhinged",
             name: "Unhinged",
             description: "Embrace the chaos",
-            trackIds: shuffled.map((t) => t.id),
+            trackIds: selectedTracks.map((t) => t.id),
             coverUrls,
-            trackCount: shuffled.length,
+            trackCount: selectedTracks.length,
             color: getMixColor("dance-floor"),
         };
     }
@@ -3292,24 +3300,24 @@ export class ProgrammaticPlaylistService {
                 analysisStatus: "completed",
                 key: { not: null },
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 200,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
 
         if (tracks.length < 15) return null;
 
+        // Apply artist diversity first
+        const diverseTracks = diversifyByArtist(tracks, 2);
+
         // Group by key
-        const byKey = new Map<string, typeof tracks>();
-        for (const track of tracks) {
+        const byKey = new Map<string, typeof diverseTracks>();
+        for (const track of diverseTracks) {
             const key = track.key || "C";
             if (!byKey.has(key)) byKey.set(key, []);
             byKey.get(key)!.push(track);
         }
 
         // Build a journey through keys
-        const journey: typeof tracks = [];
-        const seed = getSeededRandom(`key-journey-${today}`);
-        let seedVal = seed;
+        const journey: typeof diverseTracks = [];
 
         for (const key of keyOrder) {
             const keyTracks = byKey.get(key) || [];
@@ -3323,12 +3331,7 @@ export class ProgrammaticPlaylistService {
                     keyTracks.length,
                     this.WEEKLY_TRACK_LIMIT - journey.length
                 );
-                seedVal = (seedVal * 9301 + 49297) % 233280;
-                const shuffled = keyTracks.sort(() => {
-                    seedVal = (seedVal * 9301 + 49297) % 233280;
-                    return seedVal / 233280 - 0.5;
-                });
-                journey.push(...shuffled.slice(0, count));
+                journey.push(...keyTracks.slice(0, count));
             }
         }
 
@@ -3364,14 +3367,16 @@ export class ProgrammaticPlaylistService {
                 analysisStatus: "completed",
                 bpm: { not: null },
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 200,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
 
         if (tracks.length < 15) return null;
 
+        // Apply artist diversity first
+        const diverseTracks = diversifyByArtist(tracks, 2);
+
         // Sort by BPM
-        const sorted = [...tracks].sort((a, b) => (a.bpm || 0) - (b.bpm || 0));
+        const sorted = [...diverseTracks].sort((a, b) => (a.bpm || 0) - (b.bpm || 0));
 
         // Build an arc: slow → fast → slow
         const slow = sorted.filter((t) => (t.bpm || 0) < 100);
@@ -3380,27 +3385,25 @@ export class ProgrammaticPlaylistService {
         );
         const fast = sorted.filter((t) => (t.bpm || 0) >= 130);
 
-        const flow: typeof tracks = [];
+        const flow: typeof diverseTracks = [];
 
         // Intro: 4 slow tracks
-        flow.push(...randomSample(slow, Math.min(4, slow.length)));
+        flow.push(...slow.slice(0, Math.min(4, slow.length)));
         // Build: 4 medium tracks
-        flow.push(...randomSample(medium, Math.min(5, medium.length)));
+        flow.push(...medium.slice(0, Math.min(5, medium.length)));
         // Peak: 5 fast tracks
-        flow.push(...randomSample(fast, Math.min(6, fast.length)));
+        flow.push(...fast.slice(0, Math.min(6, fast.length)));
         // Cool down: 3 medium tracks
         flow.push(
-            ...randomSample(
-                medium.filter((t) => !flow.includes(t)),
-                Math.min(3, medium.length)
-            )
+            ...medium
+                .filter((t) => !flow.includes(t))
+                .slice(0, Math.min(3, medium.length))
         );
         // Outro: 3 slow tracks
         flow.push(
-            ...randomSample(
-                slow.filter((t) => !flow.includes(t)),
-                Math.min(2, slow.length)
-            )
+            ...slow
+                .filter((t) => !flow.includes(t))
+                .slice(0, Math.min(2, slow.length))
         );
 
         if (flow.length < 15) return null;
@@ -3435,14 +3438,16 @@ export class ProgrammaticPlaylistService {
                 analysisStatus: "completed",
                 instrumentalness: { gte: 0.75 },
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 100,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
 
-        if (tracks.length < 15) return null;
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
 
-        const shuffled = randomSample(tracks, this.WEEKLY_TRACK_LIMIT);
-        const coverUrls = shuffled
+        if (diverseTracks.length < 15) return null;
+
+        const selectedTracks = diverseTracks.slice(0, this.WEEKLY_TRACK_LIMIT);
+        const coverUrls = selectedTracks
             .filter((t) => t.album.coverUrl)
             .slice(0, 4)
             .map((t) => t.album.coverUrl!);
@@ -3452,9 +3457,9 @@ export class ProgrammaticPlaylistService {
             type: "vocal-detox",
             name: "Vocal Detox",
             description: "Pure instrumental escape",
-            trackIds: shuffled.map((t) => t.id),
+            trackIds: selectedTracks.map((t) => t.id),
             coverUrls,
-            trackCount: shuffled.length,
+            trackCount: selectedTracks.length,
             color: getMixColor("instrumental"),
         };
     }
@@ -3478,14 +3483,16 @@ export class ProgrammaticPlaylistService {
                 keyScale: "minor",
                 energy: { gte: 0.45 },
             },
-            include: { album: { select: { coverUrl: true } } },
-            take: 100,
+            include: { album: { select: { coverUrl: true, artist: { select: { id: true } } } } },
         });
 
-        if (tracks.length < 15) return null;
+        // Apply artist diversity: max 2 tracks per artist
+        const diverseTracks = diversifyByArtist(tracks, 2);
 
-        const shuffled = randomSample(tracks, this.WEEKLY_TRACK_LIMIT);
-        const coverUrls = shuffled
+        if (diverseTracks.length < 15) return null;
+
+        const selectedTracks = diverseTracks.slice(0, this.WEEKLY_TRACK_LIMIT);
+        const coverUrls = selectedTracks
             .filter((t) => t.album.coverUrl)
             .slice(0, 4)
             .map((t) => t.album.coverUrl!);
@@ -3495,9 +3502,9 @@ export class ProgrammaticPlaylistService {
             type: "melancholy",
             name: "Minor Key Mondays",
             description: "All minor key bangers",
-            trackIds: shuffled.map((t) => t.id),
+            trackIds: selectedTracks.map((t) => t.id),
             coverUrls,
-            trackCount: shuffled.length,
+            trackCount: selectedTracks.length,
             color: getMixColor("melancholy"),
         };
     }
