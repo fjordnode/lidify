@@ -543,38 +543,29 @@ router.get("/recently-added", async (req, res) => {
         const { limit = "10" } = req.query;
         const limitNum = parseInt(limit as string, 10);
 
-        // Get the 20 most recently added LIBRARY albums (by lastSynced timestamp)
-        // This limits "Recently Added" to actual recent additions, not the entire library
-        const recentAlbums = await prisma.album.findMany({
+        // Query Artists directly by lastSynced (matches Library view behavior)
+        // Filter to only artists with LIBRARY albums that have tracks
+        const recentArtists = await prisma.artist.findMany({
             where: {
-                location: "LIBRARY",
-                tracks: { some: {} }, // Only albums with actual tracks
-            },
-            orderBy: { lastSynced: "desc" },
-            take: 20, // Hard limit to last 20 albums
-            include: {
-                artist: {
-                    select: {
-                        id: true,
-                        mbid: true,
-                        name: true,
-                        heroUrl: true,
+                albums: {
+                    some: {
+                        location: "LIBRARY",
+                        tracks: { some: {} },
                     },
                 },
             },
+            orderBy: { lastSynced: "desc" },
+            take: limitNum,
+            select: {
+                id: true,
+                mbid: true,
+                name: true,
+                heroUrl: true,
+            },
         });
 
-        // Extract unique artists from recent albums (preserving order of most recent)
-        const artistsMap = new Map();
-        for (const album of recentAlbums) {
-            if (!artistsMap.has(album.artist.id)) {
-                artistsMap.set(album.artist.id, album.artist);
-            }
-            if (artistsMap.size >= limitNum) break;
-        }
-
         // Get album counts for each artist (only LIBRARY albums)
-        const artistIds = Array.from(artistsMap.keys());
+        const artistIds = recentArtists.map((a) => a.id);
         const albumCounts = await prisma.album.groupBy({
             by: ["artistId"],
             where: {
@@ -591,7 +582,7 @@ router.get("/recently-added", async (req, res) => {
         // ========== ON-DEMAND IMAGE FETCHING FOR RECENTLY ADDED ==========
         // For artists without heroUrl, fetch images on-demand
         const artistsWithImages = await Promise.all(
-            Array.from(artistsMap.values()).map(async (artist) => {
+            recentArtists.map(async (artist) => {
                 let coverArt = artist.heroUrl;
 
                 if (!coverArt) {

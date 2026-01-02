@@ -717,6 +717,12 @@ export class MusicScannerService {
                             source: "native_scan",
                         },
                     });
+
+                    // Update artist's lastSynced so they appear in "Recently Added"
+                    await prisma.artist.update({
+                        where: { id: artist.id },
+                        data: { lastSynced: new Date() },
+                    });
                 }
             }
 
