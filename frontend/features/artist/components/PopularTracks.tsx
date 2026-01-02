@@ -1,5 +1,5 @@
 import React from "react";
-import { Play, Pause, Volume2, Music } from "lucide-react";
+import { Play, Pause, Volume2, Music, Radio } from "lucide-react";
 import { cn } from "@/utils/cn";
 import Image from "next/image";
 import { api } from "@/lib/api";
@@ -19,6 +19,7 @@ interface PopularTracksProps {
     previewTrack: string | null;
     previewPlaying: boolean;
     previewAlbumInfo?: Record<string, PreviewAlbumInfo>;
+    noPreviewTracks?: Set<string>;
     onPreview: (track: Track, e: React.MouseEvent) => void;
 }
 
@@ -31,6 +32,7 @@ export const PopularTracks: React.FC<PopularTracksProps> = ({
     previewTrack,
     previewPlaying,
     previewAlbumInfo,
+    noPreviewTracks,
     onPreview,
 }) => {
     const formatDuration = (seconds: number) => {
@@ -73,11 +75,15 @@ export const PopularTracks: React.FC<PopularTracksProps> = ({
                             tabIndex={0}
                             className={cn(
                                 "grid grid-cols-[40px_1fr_auto] md:grid-cols-[40px_minmax(200px,4fr)_minmax(80px,1fr)_80px] gap-4 py-2 rounded-md hover:bg-white/5 transition-colors group cursor-pointer",
-                                isPlaying && "bg-white/10"
+                                isPlaying && "bg-white/10",
+                                isPreviewPlaying && "bg-blue-500/10"
                             )}
                             onClick={(e) => {
                                 if (isUnowned) {
-                                    onPreview(track, e);
+                                    // Only try preview if not already known to be unavailable
+                                    if (!noPreviewTracks?.has(track.id)) {
+                                        onPreview(track, e);
+                                    }
                                 } else {
                                     onPlayTrack(track);
                                 }
@@ -90,11 +96,15 @@ export const PopularTracks: React.FC<PopularTracksProps> = ({
                                         "text-sm group-hover:hidden",
                                         isPlaying
                                             ? "text-[#ecb200]"
+                                            : isPreviewPlaying
+                                            ? "text-blue-400"
                                             : "text-gray-400"
                                     )}
                                 >
                                     {isPlaying ? (
                                         <Music className="w-4 h-4 text-[#ecb200] animate-pulse" />
+                                    ) : isPreviewPlaying ? (
+                                        <Radio className="w-4 h-4 text-blue-400 animate-pulse" />
                                     ) : (
                                         index + 1
                                     )}
@@ -126,6 +136,8 @@ export const PopularTracks: React.FC<PopularTracksProps> = ({
                                             "text-sm font-medium truncate flex items-center gap-2",
                                             isPlaying
                                                 ? "text-[#ecb200]"
+                                                : isPreviewPlaying
+                                                ? "text-blue-400"
                                                 : "text-white"
                                         )}
                                     >
@@ -133,8 +145,13 @@ export const PopularTracks: React.FC<PopularTracksProps> = ({
                                             {track.title}
                                         </span>
                                         {isUnowned && (
-                                            <span className="shrink-0 text-[10px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded font-medium">
-                                                PREVIEW
+                                            <span className={cn(
+                                                "shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium",
+                                                noPreviewTracks?.has(track.id)
+                                                    ? "bg-gray-500/20 text-gray-500"
+                                                    : "bg-blue-500/20 text-blue-400"
+                                            )}>
+                                                {noPreviewTracks?.has(track.id) ? "NO PREVIEW" : "PREVIEW"}
                                             </span>
                                         )}
                                     </div>
@@ -161,13 +178,18 @@ export const PopularTracks: React.FC<PopularTracksProps> = ({
 
                             {/* Duration + Preview */}
                             <div className="flex items-center justify-end gap-2">
-                                {isUnowned && (
+                                {isUnowned && !noPreviewTracks?.has(track.id) && (
                                     <button
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             onPreview(track, e);
                                         }}
-                                        className="p-1.5 rounded-full opacity-0 group-hover:opacity-100 hover:bg-white/10 text-gray-400 hover:text-white transition-all"
+                                        className={cn(
+                                            "p-1.5 rounded-full hover:bg-white/10 transition-all",
+                                            isPreviewPlaying
+                                                ? "opacity-100 text-blue-400"
+                                                : "opacity-0 group-hover:opacity-100 text-gray-400 hover:text-white"
+                                        )}
                                     >
                                         {isPreviewPlaying ? (
                                             <Pause className="w-4 h-4" />
