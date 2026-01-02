@@ -5,6 +5,7 @@ import { prisma } from "../utils/db";
 import PQueue from "p-queue";
 import { CoverArtExtractor } from "./coverArtExtractor";
 import { deezerService } from "./deezer";
+import { musicBrainzService } from "./musicbrainz";
 import { normalizeArtistName, areArtistNamesSimilar, canonicalizeVariousArtists } from "../utils/artistNormalization";
 
 // Supported audio formats
@@ -239,11 +240,11 @@ export class MusicScannerService {
 
         // LOWER PRIORITY: These might be band names, so only split if the result
         // looks like a complete artist name (not truncated)
+        // NOTE: Removed " & " - too many false positives (Above & Beyond, Nick Cave & the Bad Seeds, etc.)
+        // NOTE: Removed ", " - false positives like "Tyler, The Creator", "Earth, Wind & Fire"
         const ambiguousPatterns = [
-            { pattern: / \& /, name: "&" },    // "Earth, Wind & Fire" shouldn't split
             { pattern: / and /i, name: "and" }, // "The Naked and Famous" shouldn't split
             { pattern: / with /i, name: "with" },
-            { pattern: /, /, name: "," },
         ];
 
         for (const { pattern } of ambiguousPatterns) {
@@ -445,6 +446,11 @@ export class MusicScannerService {
             });
 
             for (const entry of entries) {
+                // Skip hidden files/folders (starting with .)
+                if (entry.name.startsWith(".")) {
+                    continue;
+                }
+
                 const fullPath = path.join(dir, entry.name);
 
                 if (entry.isDirectory()) {
@@ -626,9 +632,41 @@ export class MusicScannerService {
             }
 
             if (!album) {
-                // Create new album (use a temporary MBID for now)
-                const rgMbid =
-                    albumMbid || `temp-${Date.now()}-${Math.random()}`;
+                // Try to find MBID from MusicBrainz if not embedded
+                let rgMbid = albumMbid;
+
+                if (!rgMbid && artist.mbid && !artist.mbid.startsWith("temp-")) {
+                    try {
+                        // Look up artist's discography on MusicBrainz
+                        const releaseGroups = await musicBrainzService.getReleaseGroups(
+                            artist.mbid,
+                            ["album", "ep", "single"],
+                            100
+                        );
+
+                        // Try to match by title (case-insensitive, normalized)
+                        const normalizedAlbumTitle = albumTitle.toLowerCase().replace(/[^a-z0-9]/g, "");
+                        const match = releaseGroups.find((rg: any) => {
+                            const rgNormalized = rg.title.toLowerCase().replace(/[^a-z0-9]/g, "");
+                            return rgNormalized === normalizedAlbumTitle ||
+                                   rg.title.toLowerCase() === albumTitle.toLowerCase();
+                        });
+
+                        if (match) {
+                            rgMbid = match.id;
+                            console.log(`[Scanner] Found MBID for "${albumTitle}" via MusicBrainz: ${rgMbid}`);
+                        }
+                    } catch (err) {
+                        // MusicBrainz lookup failed, will fall back to temp MBID
+                        console.log(`[Scanner] MusicBrainz lookup failed for "${albumTitle}":`, err);
+                    }
+                }
+
+                // Fall back to temp MBID if no match found
+                if (!rgMbid) {
+                    rgMbid = `temp-${Date.now()}-${Math.random()}`;
+                    console.log(`[Scanner] Using temp MBID for "${albumTitle}" (no MusicBrainz match)`);
+                }
 
                 // Determine if this is a discovery album:
                 // 1. Check file path (legacy: /music/discovery/ folder)
