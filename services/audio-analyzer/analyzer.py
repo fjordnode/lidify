@@ -891,17 +891,20 @@ class AnalysisWorker:
             if retry_count > 0:
                 logger.info(f"Re-queued {retry_count} failed tracks for retry (max retries: {MAX_RETRIES})")
             
-            # Also log tracks that have permanently failed
+            # Log counts for skipped and permanently failed tracks
             cursor.execute("""
-                SELECT COUNT(*) as count
+                SELECT
+                    SUM(CASE WHEN "analysisStatus" = 'skipped' THEN 1 ELSE 0 END) as skipped,
+                    SUM(CASE WHEN "analysisStatus" = 'failed' AND COALESCE("analysisRetryCount", 0) >= %s THEN 1 ELSE 0 END) as perm_failed
                 FROM "Track"
-                WHERE "analysisStatus" = 'failed'
-                AND COALESCE("analysisRetryCount", 0) >= %s
             """, (MAX_RETRIES,))
-            
-            perm_failed = cursor.fetchone()
-            if perm_failed and perm_failed['count'] > 0:
-                logger.warning(f"{perm_failed['count']} tracks have permanently failed (exceeded {MAX_RETRIES} retries)")
+
+            counts = cursor.fetchone()
+            if counts:
+                if counts['skipped'] and counts['skipped'] > 0:
+                    logger.info(f"{counts['skipped']} tracks skipped (file size/timeout limits)")
+                if counts['perm_failed'] and counts['perm_failed'] > 0:
+                    logger.warning(f"{counts['perm_failed']} tracks permanently failed (exceeded {MAX_RETRIES} retries)")
             
             self.db.commit()
         except Exception as e:
@@ -1134,7 +1137,14 @@ class AnalysisWorker:
 
         elapsed = time.time() - start_time
         rate = len(tracks) / elapsed if elapsed > 0 else 0
-        logger.info(f"Batch complete: {completed} succeeded, {failed} failed, {skipped} skipped in {elapsed:.1f}s ({rate:.1f} tracks/sec)")
+
+        # Build clear summary message
+        parts = [f"{completed} completed"]
+        if skipped > 0:
+            parts.append(f"{skipped} skipped (size/timeout)")
+        if failed > 0:
+            parts.append(f"{failed} failed")
+        logger.info(f"Batch: {', '.join(parts)} in {elapsed:.1f}s ({rate:.1f} tracks/sec)")
     
     def _save_results(self, track_id: str, file_path: str, features: Dict[str, Any]):
         """Save analysis results to database"""
@@ -1211,27 +1221,27 @@ class AnalysisWorker:
             cursor.close()
     
     def _save_failed(self, track_id: str, error: str, permanent: bool = False):
-        """Mark track as failed and increment retry count.
+        """Mark track as failed or skipped.
 
         Args:
-            track_id: The track ID to mark as failed
-            error: Error message describing the failure
-            permanent: If True, immediately set retry count to MAX_RETRIES
-                      to prevent future retry attempts (for timeouts, oversized files, etc.)
+            track_id: The track ID to mark
+            error: Error message describing the failure/skip reason
+            permanent: If True, mark as 'skipped' (for size limits, timeouts, etc.)
+                      If False, mark as 'failed' and allow retries
         """
         cursor = self.db.get_cursor()
         try:
             if permanent:
-                # Permanently fail this track - don't retry
+                # Mark as skipped - these won't be retried (size limits, timeouts, memory errors)
                 cursor.execute("""
                     UPDATE "Track"
                     SET
-                        "analysisStatus" = 'failed',
+                        "analysisStatus" = 'skipped',
                         "analysisError" = %s,
                         "analysisRetryCount" = %s
                     WHERE id = %s
                 """, (error[:500], MAX_RETRIES, track_id))
-                logger.warning(f"Track {track_id} permanently failed: {error}")
+                logger.info(f"Track {track_id} skipped: {error}")
             else:
                 # Normal failure - increment retry count
                 cursor.execute("""
