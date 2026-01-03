@@ -259,7 +259,39 @@ router.put("/albums/:id/metadata", async (req, res) => {
         if (coverUrl) updateData.coverUrl = coverUrl;
         if (genres) updateData.genres = genres; // Store as JSON array
 
-        const { prisma } = await import("../utils/db");
+        // If rgMbid is being changed, we need to update OwnedAlbum to maintain ownership
+        // (fixes: Changing Album MBID Breaks Library Recognition)
+        if (rgMbid) {
+            const existingAlbum = await prisma.album.findUnique({
+                where: { id: req.params.id },
+                select: { rgMbid: true, artistId: true, location: true },
+            });
+
+            if (existingAlbum && existingAlbum.rgMbid !== rgMbid) {
+                // Only update OwnedAlbum for library albums
+                if (existingAlbum.location === "LIBRARY") {
+                    // Try to update existing OwnedAlbum entry
+                    const updated = await prisma.ownedAlbum.updateMany({
+                        where: { rgMbid: existingAlbum.rgMbid },
+                        data: { rgMbid },
+                    });
+
+                    // If no entry existed (edge case), create one
+                    if (updated.count === 0) {
+                        await prisma.ownedAlbum.create({
+                            data: {
+                                rgMbid,
+                                artistId: existingAlbum.artistId,
+                                source: "metadata_edit",
+                            },
+                        });
+                    }
+
+                    console.log(`[Enrichment] Updated OwnedAlbum: ${existingAlbum.rgMbid} → ${rgMbid}`);
+                }
+            }
+        }
+
         const album = await prisma.album.update({
             where: { id: req.params.id },
             data: updateData,

@@ -128,11 +128,42 @@ class MusicBrainzService {
         return this.cachedRequest(cacheKey, async () => {
             const response = await this.client.get(`/release/${releaseMbid}`, {
                 params: {
-                    inc: "recordings+artist-credits+labels",
+                    inc: "recordings+artist-credits+labels+release-groups",
                     fmt: "json",
                 },
             });
             return response.data;
+        });
+    }
+
+    /**
+     * Convert a Release MBID to a Release Group MBID
+     * Lidarr sends Release MBIDs (specific version), but we need Release Group MBIDs
+     * Returns null if lookup fails
+     */
+    async getReleaseGroupFromRelease(releaseMbid: string): Promise<string | null> {
+        const cacheKey = `mb:release-to-rg:${releaseMbid}`;
+
+        return this.cachedRequest(cacheKey, async () => {
+            try {
+                const response = await this.client.get(`/release/${releaseMbid}`, {
+                    params: {
+                        inc: "release-groups",
+                        fmt: "json",
+                    },
+                });
+
+                const releaseGroupId = response.data["release-group"]?.id;
+                if (releaseGroupId) {
+                    console.log(`[MusicBrainz] Converted Release ${releaseMbid} → ReleaseGroup ${releaseGroupId}`);
+                    return releaseGroupId;
+                }
+
+                return null;
+            } catch (error: any) {
+                console.error(`[MusicBrainz] Failed to get release group for ${releaseMbid}:`, error.message);
+                return null;
+            }
         });
     }
 

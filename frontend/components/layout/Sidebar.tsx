@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Plus, Settings, RefreshCw } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { api } from "@/lib/api";
@@ -12,6 +12,12 @@ import { useIsMobile, useIsTablet } from "@/hooks/useMediaQuery";
 import { useToast } from "@/lib/toast-context";
 import Image from "next/image";
 import { MobileSidebar } from "./MobileSidebar";
+
+interface ScanStatus {
+    active: boolean;
+    progress?: number;
+    startedAt?: number;
+}
 
 const navigation = [
     { name: "Library", href: "/library" },
@@ -43,24 +49,61 @@ export function Sidebar() {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [playlists, setPlaylists] = useState<Playlist[]>([]);
     const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(false);
-    const [isSyncing, setIsSyncing] = useState(false);
+    const [scanStatus, setScanStatus] = useState<ScanStatus>({ active: false });
     const hasLoadedPlaylists = useRef(false);
+    const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-    // Handle library sync - no toast, notification bar handles feedback
+    // Check for active scan
+    const checkActiveScan = useCallback(async () => {
+        try {
+            const status = await api.getActiveScan();
+            setScanStatus({
+                active: status.active,
+                progress: status.progress,
+                startedAt: status.startedAt,
+            });
+            return status.active;
+        } catch (error) {
+            console.error("Failed to check scan status:", error);
+            return false;
+        }
+    }, []);
+
+    // Poll for scan status while active
+    useEffect(() => {
+        if (!isAuthenticated) return;
+
+        // Check on mount
+        checkActiveScan();
+
+        // Start polling
+        pollIntervalRef.current = setInterval(async () => {
+            const isActive = await checkActiveScan();
+            // If scan just completed, dispatch notification event
+            if (!isActive && scanStatus.active) {
+                window.dispatchEvent(new CustomEvent("notifications-changed"));
+            }
+        }, 2000);
+
+        return () => {
+            if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current);
+            }
+        };
+    }, [isAuthenticated, checkActiveScan, scanStatus.active]);
+
+    // Handle library sync
     const handleSync = async () => {
-        if (isSyncing) return;
+        if (scanStatus.active) return;
 
         try {
-            setIsSyncing(true);
+            setScanStatus({ active: true, progress: 0 });
             await api.scanLibrary();
-            // No toast - notification will appear in the activity panel
-            window.dispatchEvent(new CustomEvent("notifications-changed"));
+            // Polling will pick up the active scan
         } catch (error) {
             console.error("Failed to trigger library scan:", error);
             toast.error("Failed to start scan. Please try again.");
-        } finally {
-            // Keep syncing for a bit to show the animation
-            setTimeout(() => setIsSyncing(false), 2000);
+            setScanStatus({ active: false });
         }
     };
 
@@ -206,24 +249,30 @@ export function Sidebar() {
 
                     {/* Quick Actions - Settings and Sync */}
                     <div className="flex items-center gap-2">
-                        <button
-                            onClick={handleSync}
-                            disabled={isSyncing}
-                            className={cn(
-                                "w-10 h-10 flex items-center justify-center rounded-full transition-all duration-300",
-                                isSyncing
-                                    ? "bg-[#1DB954] text-black"
-                                    : "bg-white/10 text-white hover:bg-white/15 active:scale-95"
+                        <div className="relative group">
+                            <button
+                                onClick={handleSync}
+                                disabled={scanStatus.active}
+                                className="w-10 h-10 flex items-center justify-center rounded-full transition-all duration-300 bg-white/10 text-white hover:bg-white/15 active:scale-95"
+                                title={scanStatus.active ? undefined : "Sync Library"}
+                            >
+                                <RefreshCw
+                                    className={cn(
+                                        "w-4 h-4 transition-transform",
+                                        scanStatus.active && "animate-spin"
+                                    )}
+                                />
+                            </button>
+                            {/* Tooltip with scan progress */}
+                            {scanStatus.active && (
+                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-3 py-2 bg-black/90 border border-white/10 rounded-lg text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none">
+                                    <div className="text-white font-medium mb-1">Library Scan</div>
+                                    <div className="text-gray-400">
+                                        Progress: {Math.min(scanStatus.progress || 0, 100)}%
+                                    </div>
+                                </div>
                             )}
-                            title={isSyncing ? "Syncing..." : "Sync Library"}
-                        >
-                            <RefreshCw
-                                className={cn(
-                                    "w-4 h-4 transition-transform",
-                                    isSyncing && "animate-spin"
-                                )}
-                            />
-                        </button>
+                        </div>
 
                         <Link
                             href="/settings"

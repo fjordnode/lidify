@@ -2,8 +2,9 @@
 
 ## Discovery Album Blocking Library Import
 
-**Status:** Open
+**Status:** Fixed
 **Discovered:** 2026-01-02
+**Fixed:** 2026-01-03 - Removed `DELETED` from discovery status check in `musicScanner.ts`
 
 ### Problem
 
@@ -20,24 +21,15 @@ When an artist has a `DiscoveryAlbum` entry (even with status `DELETED`), the sc
 
 In `musicScanner.ts`, the scanner checks for `DiscoveryAlbum` entries and skips import if found. It doesn't distinguish between active discovery entries and deleted ones.
 
-### Workaround
+### Fix Applied
 
-Delete the blocking discovery entry:
-```sql
-DELETE FROM "DiscoveryAlbum" WHERE "artistName" ILIKE '%Artist Name%';
+Changed the status check in `isDiscoveryDownload()` Pass 5 to only match `ACTIVE` and `LIKED` statuses, excluding `DELETED`:
+
+```typescript
+status: { in: ["ACTIVE", "LIKED"] },  // Don't include DELETED
 ```
 
-Then rescan the library.
-
-### Proper Fix
-
-The scanner should either:
-1. Only check for discovery entries with `status = 'ACTIVE'` or similar
-2. Not skip import when the artist has actual files on disk
-3. Delete stale discovery entries during cleanup
-
-**Files to investigate:**
-- `backend/src/services/musicScanner.ts` - Look for discovery check logic
+**File changed:** `backend/src/services/musicScanner.ts:410`
 
 ---
 
@@ -106,3 +98,35 @@ UPDATE "Artist" SET name = 'Nick Cave & the Bad Seeds' WHERE name = 'Nick Cave';
 ### Proper Fix
 
 Investigate scanner's artist name parsing - likely splitting on "&" somewhere.
+
+---
+
+## Changing Album MBID Breaks Library Recognition
+
+**Status:** Fixed
+**Discovered:** 2026-01-02
+**Fixed:** 2026-01-03 - Metadata editor now syncs `OwnedAlbum` when `rgMbid` changes
+
+### Problem
+
+When manually editing an album's MusicBrainz ID (rgMbid), the album stops being recognized as a library album. It shows "Download" button instead of playable tracks, even though the tracks exist and are linked.
+
+### Root Cause
+
+The `OwnedAlbum` table stores the original MBID to track library ownership. When the album's MBID is changed via the metadata editor, the `OwnedAlbum` entry still references the old MBID, so the album is no longer recognized as owned.
+
+### Symptoms
+
+- Album shows in library list
+- Entering album page shows "Preview" and "Download" buttons
+- Tracks exist in database but aren't displayed as playable
+- `Album.location` is correctly set to `LIBRARY`
+
+### Fix Applied
+
+The `PUT /enrichment/albums/:id/metadata` endpoint now updates `OwnedAlbum` when `rgMbid` changes:
+1. Fetches existing album to get the old MBID
+2. If MBID is changing and album is in LIBRARY, updates `OwnedAlbum.rgMbid`
+3. If no `OwnedAlbum` entry existed (edge case), creates one with source `metadata_edit`
+
+**File changed:** `backend/src/routes/enrichment.ts:262-293`

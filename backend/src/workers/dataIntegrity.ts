@@ -8,9 +8,13 @@
  * 4. Consolidate duplicate artists (temp MBID vs real MBID)
  * 5. Clean up orphaned artists (no albums)
  * 6. Clean up old completed/failed DownloadJob records
+ * 7. Remove tracks pointing to deleted files (NEW)
  */
 
 import { prisma } from "../utils/db";
+import { config } from "../config";
+import * as fs from "fs";
+import * as path from "path";
 
 interface IntegrityReport {
     expiredExclusions: number;
@@ -20,6 +24,7 @@ interface IntegrityReport {
     consolidatedArtists: number;
     orphanedArtists: number;
     oldDownloadJobs: number;
+    missingFileTracks: number;
 }
 
 export async function runDataIntegrityCheck(): Promise<IntegrityReport> {
@@ -33,6 +38,7 @@ export async function runDataIntegrityCheck(): Promise<IntegrityReport> {
         consolidatedArtists: 0,
         orphanedArtists: 0,
         oldDownloadJobs: 0,
+        missingFileTracks: 0,
     };
 
     // 1. Remove expired DiscoverExclusion records
@@ -46,6 +52,36 @@ export async function runDataIntegrityCheck(): Promise<IntegrityReport> {
         console.log(
             `     Removed ${expiredExclusions.count} expired exclusions`
         );
+    }
+
+    // 1.5. Remove tracks pointing to deleted files
+    // This catches tracks that weren't cleaned up during scan (e.g., if scan was interrupted)
+    if (config.music?.musicPath) {
+        const musicPath = config.music.musicPath;
+        const allTracks = await prisma.track.findMany({
+            select: { id: true, filePath: true },
+        });
+
+        const tracksToDelete: string[] = [];
+        for (const track of allTracks) {
+            const fullPath = path.join(musicPath, track.filePath);
+            try {
+                await fs.promises.access(fullPath, fs.constants.F_OK);
+            } catch {
+                // File doesn't exist
+                tracksToDelete.push(track.id);
+            }
+        }
+
+        if (tracksToDelete.length > 0) {
+            await prisma.track.deleteMany({
+                where: { id: { in: tracksToDelete } },
+            });
+            report.missingFileTracks = tracksToDelete.length;
+            console.log(
+                `     Removed ${tracksToDelete.length} tracks pointing to deleted files`
+            );
+        }
     }
 
     // 2. Clean up orphaned DiscoveryTrack records (tracks whose Track record was deleted)
@@ -357,6 +393,7 @@ export async function runDataIntegrityCheck(): Promise<IntegrityReport> {
 
     // Summary
     console.log("\nData integrity check complete:");
+    console.log(`   - Missing file tracks: ${report.missingFileTracks}`);
     console.log(`   - Expired exclusions: ${report.expiredExclusions}`);
     console.log(
         `   - Orphaned discovery tracks: ${report.orphanedDiscoveryTracks}`

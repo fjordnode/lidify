@@ -113,7 +113,7 @@ export function AlbumHero({
                                         title: album.title,
                                         year: album.year,
                                         genres: album.genre ? [album.genre] : [],
-                                        mbid: album.mbid,
+                                        rgMbid: album.rgMbid,
                                         coverUrl: album.coverUrl,
                                     }}
                                     onSave={async () => {

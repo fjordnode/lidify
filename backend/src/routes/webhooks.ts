@@ -124,9 +124,20 @@ async function handleDownload(payload: any) {
     const downloadId = payload.downloadId;
     const albumTitle = payload.album?.title || payload.albums?.[0]?.title;
     const artistName = payload.artist?.name;
+    // Try multiple paths for MBID - Lidarr uses different field names in different events
     const albumMbid =
-        payload.album?.foreignAlbumId || payload.albums?.[0]?.foreignAlbumId;
+        payload.album?.foreignAlbumId ||
+        payload.album?.mbId ||
+        payload.albums?.[0]?.foreignAlbumId ||
+        payload.albums?.[0]?.mbId ||
+        payload.release?.foreignReleaseId;
     const lidarrAlbumId = payload.album?.id || payload.albums?.[0]?.id;
+
+    // Debug: log available fields if MBID not found
+    if (!albumMbid && process.env.DEBUG_WEBHOOKS !== "true") {
+        console.log(`   DEBUG: album keys: ${Object.keys(payload.album || {}).join(", ")}`);
+        console.log(`   DEBUG: albums[0] keys: ${Object.keys(payload.albums?.[0] || {}).join(", ")}`);
+    }
 
     console.log(`   Album: ${artistName} - ${albumTitle}`);
     console.log(`   Download ID: ${downloadId}`);
@@ -167,20 +178,26 @@ async function handleDownload(payload: any) {
             }
         } else if (!result.batchId) {
             // Single album download (not part of discovery batch)
-            console.log(`   Triggering library scan...`);
+            console.log(`   Triggering library scan with MBID: ${albumMbid}...`);
             await scanQueue.add("scan", {
                 type: "full",
                 source: "lidarr-import",
+                lidarrAlbumMbid: albumMbid,
+                lidarrArtistName: artistName,
+                lidarrAlbumTitle: albumTitle,
             });
         }
         // If part of discovery batch, the download manager already called checkBatchCompletion
     } else {
         // No job found - this might be an external download not initiated by us
         // Still trigger a scan to pick up the new music
-        console.log(`   No matching job, triggering scan anyway...`);
+        console.log(`   No matching job, triggering scan with MBID: ${albumMbid}...`);
         await scanQueue.add("scan", {
             type: "full",
             source: "lidarr-import-external",
+            lidarrAlbumMbid: albumMbid,
+            lidarrArtistName: artistName,
+            lidarrAlbumTitle: albumTitle,
         });
     }
 }
