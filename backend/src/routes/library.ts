@@ -149,6 +149,40 @@ router.post("/scan", async (req, res) => {
     }
 });
 
+// GET /library/scan/active - Check if any scan is currently running
+router.get("/scan/active", async (req, res) => {
+    try {
+        const activeJobs = await scanQueue.getActive();
+        const waitingJobs = await scanQueue.getWaiting();
+
+        if (activeJobs.length > 0) {
+            const job = activeJobs[0];
+            const progress = job.progress();
+            const data = job.data as any;
+
+            res.json({
+                active: true,
+                jobId: job.id,
+                progress: typeof progress === 'number' ? progress : 0,
+                startedAt: job.processedOn,
+                filesTotal: data?.filesTotal,
+            });
+        } else if (waitingJobs.length > 0) {
+            res.json({
+                active: true,
+                jobId: waitingJobs[0].id,
+                progress: 0,
+                status: "waiting",
+            });
+        } else {
+            res.json({ active: false });
+        }
+    } catch (error) {
+        console.error("Get active scan error:", error);
+        res.status(500).json({ error: "Failed to check scan status" });
+    }
+});
+
 // GET /library/scan/status/:jobId - Check scan job status
 router.get("/scan/status/:jobId", async (req, res) => {
     try {
@@ -1214,11 +1248,15 @@ router.get("/artists/:id", async (req, res) => {
 
                 // Merge database albums with MusicBrainz albums
                 // Database albums take precedence (they have actual files!)
+                // Deduplicate by MBID first (most accurate), then by title as fallback
+                const dbAlbumMbids = new Set(
+                    dbAlbums.map((a) => a.rgMbid).filter((m) => m && !m.startsWith("temp-"))
+                );
                 const dbAlbumTitles = new Set(
                     dbAlbums.map((a) => a.title.toLowerCase())
                 );
                 const mbAlbumsFiltered = mbAlbums.filter(
-                    (a) => !dbAlbumTitles.has(a.title.toLowerCase())
+                    (a) => !dbAlbumMbids.has(a.rgMbid) && !dbAlbumTitles.has(a.title.toLowerCase())
                 );
 
                 albumsWithOwnership = [...dbAlbums, ...mbAlbumsFiltered];

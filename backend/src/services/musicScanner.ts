@@ -112,8 +112,7 @@ export class MusicScannerService {
                             existingTrack.fileModified >= fileModified
                         ) {
                             // File hasn't changed, skip
-                            filesScanned++;
-                            progress.filesScanned = filesScanned;
+                            // Note: Don't increment filesScanned here - finally block handles it
                             return;
                         }
                         // File changed, will update
@@ -402,10 +401,12 @@ export class MusicScannerService {
             // Pass 5: Check if artist name matches any discovery album
             // This catches cases where Lidarr downloads a different album than requested
             // e.g., requested "Broods - Broods" but got "Broods - Evergreen"
+            // NOTE: Don't include DELETED status - deleted discovery albums should not
+            // block library imports (fixes: Discovery Album Blocking Library Import)
             const discoveryAlbumByArtist = await prisma.discoveryAlbum.findFirst({
                 where: {
                     artistName: { equals: artistName, mode: "insensitive" },
-                    status: { in: ["ACTIVE", "LIKED", "DELETED"] }, // Include DELETED to catch cleanup scenarios
+                    status: { in: ["ACTIVE", "LIKED"] },
                 },
             });
 

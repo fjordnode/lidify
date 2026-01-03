@@ -12,6 +12,10 @@ export interface ScanJobData {
     downloadId?: string; // Optional: Lidarr download ID for precise job linking
     discoveryBatchId?: string; // Optional: Discovery Weekly batch ID
     spotifyImportJobId?: string; // Optional: Spotify Import job ID
+    // Lidarr import data - used to set proper MBID on imported albums
+    lidarrAlbumMbid?: string; // Release MBID from Lidarr (will be converted to Release Group MBID)
+    lidarrArtistName?: string; // Artist name for matching
+    lidarrAlbumTitle?: string; // Album title for matching
 }
 
 export interface ScanJobResult {
@@ -34,6 +38,9 @@ export async function processScan(
         downloadId,
         discoveryBatchId,
         spotifyImportJobId,
+        lidarrAlbumMbid,
+        lidarrArtistName,
+        lidarrAlbumTitle,
     } = job.data;
 
     console.log(`\n═══════════════════════════════════════════════`);
@@ -82,6 +89,67 @@ export async function processScan(
         console.log(
             `[ScanJob ${job.id}] Scan complete: +${result.tracksAdded} ~${result.tracksUpdated} -${result.tracksRemoved}`
         );
+
+        // If we have Lidarr album data, fix temp MBIDs on the imported album
+        if (lidarrAlbumMbid && lidarrArtistName && lidarrAlbumTitle) {
+            try {
+                console.log(`[ScanJob ${job.id}] Fixing MBID for Lidarr import: ${lidarrArtistName} - ${lidarrAlbumTitle}`);
+
+                const { prisma } = await import("../../utils/db");
+                const { musicBrainzService } = await import("../../services/musicbrainz");
+
+                // Convert Release MBID to Release Group MBID
+                const releaseGroupMbid = await musicBrainzService.getReleaseGroupFromRelease(lidarrAlbumMbid);
+
+                if (releaseGroupMbid) {
+                    // Find the album by artist name + title that has a temp MBID
+                    const album = await prisma.album.findFirst({
+                        where: {
+                            title: { equals: lidarrAlbumTitle, mode: "insensitive" },
+                            artist: { name: { equals: lidarrArtistName, mode: "insensitive" } },
+                            rgMbid: { startsWith: "temp-" },
+                        },
+                        include: { artist: true },
+                    });
+
+                    if (album) {
+                        const oldMbid = album.rgMbid;
+
+                        // Update the album's MBID
+                        await prisma.album.update({
+                            where: { id: album.id },
+                            data: { rgMbid: releaseGroupMbid },
+                        });
+
+                        // Also update OwnedAlbum if it exists
+                        await prisma.ownedAlbum.updateMany({
+                            where: { rgMbid: oldMbid },
+                            data: { rgMbid: releaseGroupMbid },
+                        });
+
+                        console.log(`[ScanJob ${job.id}] ✓ Fixed MBID: ${oldMbid} → ${releaseGroupMbid}`);
+                    } else {
+                        // Try without temp- filter in case album already had a different MBID
+                        const existingAlbum = await prisma.album.findFirst({
+                            where: {
+                                title: { equals: lidarrAlbumTitle, mode: "insensitive" },
+                                artist: { name: { equals: lidarrArtistName, mode: "insensitive" } },
+                            },
+                        });
+
+                        if (existingAlbum) {
+                            console.log(`[ScanJob ${job.id}] Album already has MBID: ${existingAlbum.rgMbid}`);
+                        } else {
+                            console.log(`[ScanJob ${job.id}] Could not find album to fix: ${lidarrArtistName} - ${lidarrAlbumTitle}`);
+                        }
+                    }
+                } else {
+                    console.log(`[ScanJob ${job.id}] Could not convert Release MBID to Release Group MBID`);
+                }
+            } catch (error: any) {
+                console.error(`[ScanJob ${job.id}] Failed to fix Lidarr album MBID:`, error.message);
+            }
+        }
 
         // If this scan was triggered by a download completion, mark download jobs as completed
         if (
@@ -348,6 +416,20 @@ export async function processScan(
             } catch (error) {
                 console.error(`[ScanJob ${job.id}] Failed to reconcile pending tracks:`, error);
             }
+        }
+
+        // Run data integrity check to clean up any orphaned records
+        // This catches albums/tracks that weren't cleaned up properly during scan
+        // (e.g., if files were deleted but tracks remain in DB)
+        try {
+            console.log(`[ScanJob ${job.id}] Running post-scan data integrity check...`);
+            const { runDataIntegrityCheck } = await import("../dataIntegrity");
+            const integrityReport = await runDataIntegrityCheck();
+            if (integrityReport.orphanedAlbums > 0 || integrityReport.orphanedArtists > 0) {
+                console.log(`[ScanJob ${job.id}] Cleaned up ${integrityReport.orphanedAlbums} orphaned albums, ${integrityReport.orphanedArtists} orphaned artists`);
+            }
+        } catch (error) {
+            console.error(`[ScanJob ${job.id}] Data integrity check failed:`, error);
         }
 
         // Trigger mood tag collection for new tracks whose artists are already enriched

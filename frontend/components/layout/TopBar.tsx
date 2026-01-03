@@ -2,18 +2,23 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Home, Search, Settings, RefreshCw, Power, Menu, Bell } from "lucide-react";
 import { ActivityPanelToggle } from "./ActivityPanel";
 import { cn } from "@/utils/cn";
 import { api } from "@/lib/api";
 import { useToast } from "@/lib/toast-context";
-import { useJobStatus } from "@/hooks/useJobStatus";
 import { useDownloadContext } from "@/lib/download-context";
 import { useIsMobile, useIsTablet } from "@/hooks/useMediaQuery";
 import { useAuth } from "@/lib/auth-context";
 import { useQueryClient } from "@tanstack/react-query";
 import Image from "next/image";
+
+interface ScanStatus {
+    active: boolean;
+    progress?: number;
+    startedAt?: number;
+}
 
 export function TopBar() {
     const pathname = usePathname();
@@ -23,24 +28,54 @@ export function TopBar() {
     const isTablet = useIsTablet();
     const isMobileOrTablet = isMobile || isTablet;
     const [searchQuery, setSearchQuery] = useState("");
-    const [scanJobId, setScanJobId] = useState<string | null>(null);
+    const [scanStatus, setScanStatus] = useState<ScanStatus>({ active: false });
     const [lastScanTime, setLastScanTime] = useState<number>(0);
     const { toast } = useToast();
     const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const queryClient = useQueryClient();
 
-    const { jobStatus, isPolling } = useJobStatus(scanJobId, "scan", {
-        onComplete: () => {
-            // Refresh Activity Panel and enrichment progress after scan
-            queryClient.invalidateQueries({ queryKey: ["notifications"] });
-            queryClient.invalidateQueries({ queryKey: ["enrichment-progress"] });
-            setScanJobId(null);
-        },
-        onError: () => {
-            // Scan errors will show in the activity panel via notifications
-            setScanJobId(null);
-        },
-    });
+    // Check for active scan
+    const checkActiveScan = useCallback(async () => {
+        try {
+            const status = await api.getActiveScan();
+            const wasActive = scanStatus.active;
+            setScanStatus({
+                active: status.active,
+                progress: status.progress,
+                startedAt: status.startedAt,
+            });
+            // If scan just completed, refresh data
+            if (wasActive && !status.active) {
+                queryClient.invalidateQueries({ queryKey: ["notifications"] });
+                queryClient.invalidateQueries({ queryKey: ["enrichment-progress"] });
+            }
+            return status.active;
+        } catch (error) {
+            console.error("Failed to check scan status:", error);
+            return false;
+        }
+    }, [scanStatus.active, queryClient]);
+
+    // Poll for scan status
+    useEffect(() => {
+        // Check on mount
+        checkActiveScan();
+
+        // Start polling
+        pollIntervalRef.current = setInterval(() => {
+            checkActiveScan();
+        }, 2000);
+
+        return () => {
+            if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current);
+            }
+        };
+    }, [checkActiveScan]);
+
+    // Keep isPolling for backward compatibility
+    const isPolling = scanStatus.active;
 
     // Track download status from context (single source of truth)
     const { pendingDownloads, downloadStatus } = useDownloadContext();
@@ -60,13 +95,13 @@ export function TopBar() {
 
         try {
             setLastScanTime(now);
-            const response = await api.scanLibrary();
-            setScanJobId(response.jobId);
-            // Refresh notifications to show the scan started notification
+            setScanStatus({ active: true, progress: 0 });
+            await api.scanLibrary();
+            // Polling will pick up the active scan
             queryClient.invalidateQueries({ queryKey: ["notifications"] });
         } catch (error) {
             console.error("Failed to trigger library scan:", error);
-            // Scan errors will show in the activity panel via notifications
+            setScanStatus({ active: false });
         }
     };
 
@@ -273,40 +308,49 @@ export function TopBar() {
 
                     {/* Right - Sync & Settings */}
                     <div className="w-72 flex items-center justify-end gap-2 px-2">
-                        <button
-                            onClick={handleSync}
-                            disabled={isPolling}
-                            className={cn(
-                                "flex items-center gap-2 px-3 h-10 rounded-full transition-all text-sm font-medium",
-                                isPolling
-                                    ? "bg-white/10 text-gray-500 cursor-not-allowed"
-                                    : hasActiveDownloads
-                                    ? " text-green-400 "
-                                    : hasFailedDownloads
-                                    ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-                                    : "bg-#0a0a0a text-white hover:bg-white/20"
-                            )}
-                            title={
-                                isPolling
-                                    ? "Library scan in progress..."
-                                    : hasActiveDownloads
-                                    ? `${
-                                          downloadStatus.activeDownloads
-                                              .length + pendingDownloads.length
-                                      } download(s) in progress`
-                                    : hasFailedDownloads
-                                    ? `${downloadStatus.failedDownloads.length} download(s) failed`
-                                    : "Sync Library"
-                            }
-                        >
-                            <RefreshCw
+                        <div className="relative group">
+                            <button
+                                onClick={handleSync}
+                                disabled={isPolling}
                                 className={cn(
-                                    "w-4 h-4",
-                                    (isPolling || hasActiveDownloads) &&
-                                        "animate-spin"
+                                    "flex items-center gap-2 px-3 h-10 rounded-full transition-all text-sm font-medium",
+                                    hasActiveDownloads
+                                        ? "text-green-400"
+                                        : hasFailedDownloads
+                                        ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                                        : "text-white hover:bg-white/20"
                                 )}
-                            />
-                        </button>
+                                title={
+                                    isPolling
+                                        ? undefined
+                                        : hasActiveDownloads
+                                        ? `${
+                                              downloadStatus.activeDownloads
+                                                  .length + pendingDownloads.length
+                                          } download(s) in progress`
+                                        : hasFailedDownloads
+                                        ? `${downloadStatus.failedDownloads.length} download(s) failed`
+                                        : "Sync Library"
+                                }
+                            >
+                                <RefreshCw
+                                    className={cn(
+                                        "w-4 h-4",
+                                        (isPolling || hasActiveDownloads) &&
+                                            "animate-spin"
+                                    )}
+                                />
+                            </button>
+                            {/* Tooltip with scan progress */}
+                            {isPolling && (
+                                <div className="absolute right-0 top-full mt-2 px-3 py-2 bg-black/90 border border-white/10 rounded-lg text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none">
+                                    <div className="text-white font-medium mb-1">Library Scan</div>
+                                    <div className="text-gray-400">
+                                        Progress: {Math.min(scanStatus.progress || 0, 100)}%
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                         <ActivityPanelToggle />
                         <Link
                             href="/settings"

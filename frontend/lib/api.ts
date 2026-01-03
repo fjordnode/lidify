@@ -391,6 +391,16 @@ class ApiClient {
         }>(`/library/scan/status/${jobId}`);
     }
 
+    async getActiveScan() {
+        return this.request<{
+            active: boolean;
+            jobId?: string;
+            progress?: number;
+            startedAt?: number;
+            status?: string;
+        }>("/library/scan/active");
+    }
+
     async organizeLibrary() {
         return this.request<{ message: string }>("/library/organize", {
             method: "POST",
