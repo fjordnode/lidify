@@ -52,22 +52,35 @@ export function Sidebar() {
     const [scanStatus, setScanStatus] = useState<ScanStatus>({ active: false });
     const hasLoadedPlaylists = useRef(false);
     const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const scanStartedLocallyRef = useRef<number>(0); // Track when user clicked scan
 
     // Check for active scan
     const checkActiveScan = useCallback(async () => {
         try {
             const status = await api.getActiveScan();
+
+            // Don't override local "starting" state for 5 seconds after click
+            const timeSinceLocalStart = Date.now() - scanStartedLocallyRef.current;
+            if (timeSinceLocalStart < 5000 && !status.active) {
+                return true;
+            }
+
+            const wasActive = scanStatus.active;
             setScanStatus({
                 active: status.active,
                 progress: status.progress,
                 startedAt: status.startedAt,
             });
+
+            if (wasActive && !status.active) {
+                scanStartedLocallyRef.current = 0;
+            }
             return status.active;
         } catch (error) {
             console.error("Failed to check scan status:", error);
             return false;
         }
-    }, []);
+    }, [scanStatus.active]);
 
     // Poll for scan status while active
     useEffect(() => {
@@ -97,6 +110,7 @@ export function Sidebar() {
         if (scanStatus.active) return;
 
         try {
+            scanStartedLocallyRef.current = Date.now(); // Mark that we started locally
             setScanStatus({ active: true, progress: 0 });
             await api.scanLibrary();
             // Polling will pick up the active scan
@@ -104,6 +118,7 @@ export function Sidebar() {
             console.error("Failed to trigger library scan:", error);
             toast.error("Failed to start scan. Please try again.");
             setScanStatus({ active: false });
+            scanStartedLocallyRef.current = 0; // Reset on error
         }
     };
 

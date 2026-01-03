@@ -30,6 +30,7 @@ export function TopBar() {
     const [searchQuery, setSearchQuery] = useState("");
     const [scanStatus, setScanStatus] = useState<ScanStatus>({ active: false });
     const [lastScanTime, setLastScanTime] = useState<number>(0);
+    const scanStartedLocallyRef = useRef<number>(0); // Track when user clicked scan
     const { toast } = useToast();
     const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -39,6 +40,15 @@ export function TopBar() {
     const checkActiveScan = useCallback(async () => {
         try {
             const status = await api.getActiveScan();
+
+            // Don't override local "starting" state for 5 seconds after click
+            // This prevents the poll from setting active=false before server registers the job
+            const timeSinceLocalStart = Date.now() - scanStartedLocallyRef.current;
+            if (timeSinceLocalStart < 5000 && !status.active) {
+                // User just clicked, keep showing animation even if server doesn't see job yet
+                return true;
+            }
+
             const wasActive = scanStatus.active;
             setScanStatus({
                 active: status.active,
@@ -49,6 +59,7 @@ export function TopBar() {
             if (wasActive && !status.active) {
                 queryClient.invalidateQueries({ queryKey: ["notifications"] });
                 queryClient.invalidateQueries({ queryKey: ["enrichment-progress"] });
+                scanStartedLocallyRef.current = 0; // Reset
             }
             return status.active;
         } catch (error) {
@@ -95,6 +106,7 @@ export function TopBar() {
 
         try {
             setLastScanTime(now);
+            scanStartedLocallyRef.current = now; // Mark that we started locally
             setScanStatus({ active: true, progress: 0 });
             await api.scanLibrary();
             // Polling will pick up the active scan
@@ -102,6 +114,7 @@ export function TopBar() {
         } catch (error) {
             console.error("Failed to trigger library scan:", error);
             setScanStatus({ active: false });
+            scanStartedLocallyRef.current = 0; // Reset on error
         }
     };
 
