@@ -8,7 +8,7 @@
 
 import { prisma } from "../utils/db";
 import { lidarrService, LidarrRelease } from "./lidarr";
-import { musicBrainzService } from "./musicbrainz";
+import { musicBrainzService, MusicBrainzError } from "./musicbrainz";
 import { getSystemSettings } from "../utils/systemSettings";
 import { notificationService } from "./notificationService";
 import { sessionLog } from "../utils/playlistLogger";
@@ -94,11 +94,22 @@ class SimpleDownloadManager {
                         `   Could not extract artist MBID from release group`
                     );
                 }
-            } catch (mbError) {
-                console.error(
-                    `   Failed to fetch artist MBID from MusicBrainz:`,
-                    mbError
-                );
+            } catch (mbError: any) {
+                // Provide specific error messages based on MusicBrainz error type
+                if (mbError instanceof MusicBrainzError) {
+                    const errorMessages: Record<string, string> = {
+                        connection_reset: "MusicBrainz connection reset (network issue)",
+                        timeout: "MusicBrainz request timed out",
+                        rate_limited: "MusicBrainz rate limit exceeded",
+                        service_unavailable: "MusicBrainz service temporarily unavailable",
+                        not_found: "Album not found in MusicBrainz",
+                    };
+                    const friendlyMsg = errorMessages[mbError.errorType] || mbError.message;
+                    console.warn(`   MusicBrainz lookup failed: ${friendlyMsg}`);
+                    console.warn(`   Will attempt to add via Lidarr without artist MBID`);
+                } else {
+                    console.error(`   Failed to fetch artist MBID from MusicBrainz:`, mbError.message || mbError);
+                }
             }
 
             // Add album to Lidarr (with discovery tag if this is a discovery download)

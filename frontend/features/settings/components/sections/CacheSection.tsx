@@ -63,7 +63,9 @@ function EnrichmentStage({
     processing?: number;
     showAllStats?: boolean;
 }) {
-    const isComplete = progress === 100;
+    // Complete when: 100% OR (no processing AND all tracks accounted for by completed+skipped+failed)
+    const allAccountedFor = (completed + skipped + failed) >= total && total > 0;
+    const isComplete = progress === 100 || (processing === 0 && allAccountedFor);
     const hasActivity = processing > 0;
     
     return (

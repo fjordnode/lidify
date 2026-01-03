@@ -2,8 +2,88 @@ import axios, { AxiosInstance } from "axios";
 import { redisClient } from "../utils/redis";
 import { rateLimiter } from "./rateLimiter";
 
+// Error types for better error messages
+export type MusicBrainzErrorType =
+    | "connection_reset"   // ECONNRESET - network issue
+    | "timeout"            // ETIMEDOUT, ESOCKETTIMEDOUT
+    | "rate_limited"       // 429 status
+    | "service_unavailable" // 503 status
+    | "not_found"          // 404 status
+    | "unknown";
+
+export class MusicBrainzError extends Error {
+    constructor(
+        message: string,
+        public readonly errorType: MusicBrainzErrorType,
+        public readonly retryable: boolean,
+        public readonly originalError?: any
+    ) {
+        super(message);
+        this.name = "MusicBrainzError";
+    }
+
+    static fromAxiosError(error: any): MusicBrainzError {
+        const code = error.code;
+        const status = error.response?.status;
+
+        // Network-level errors
+        if (code === "ECONNRESET") {
+            return new MusicBrainzError(
+                "MusicBrainz connection reset - network issue",
+                "connection_reset",
+                true,
+                error
+            );
+        }
+        if (code === "ETIMEDOUT" || code === "ESOCKETTIMEDOUT" || code === "ECONNABORTED") {
+            return new MusicBrainzError(
+                "MusicBrainz request timed out",
+                "timeout",
+                true,
+                error
+            );
+        }
+
+        // HTTP status errors
+        if (status === 429) {
+            return new MusicBrainzError(
+                "MusicBrainz rate limit exceeded - too many requests",
+                "rate_limited",
+                true,
+                error
+            );
+        }
+        if (status === 503) {
+            return new MusicBrainzError(
+                "MusicBrainz service temporarily unavailable",
+                "service_unavailable",
+                true,
+                error
+            );
+        }
+        if (status === 404) {
+            return new MusicBrainzError(
+                "Resource not found in MusicBrainz",
+                "not_found",
+                false,
+                error
+            );
+        }
+
+        // Unknown error
+        return new MusicBrainzError(
+            `MusicBrainz error: ${error.message}`,
+            "unknown",
+            false,
+            error
+        );
+    }
+}
+
 class MusicBrainzService {
     private client: AxiosInstance;
+    private readonly MAX_RETRIES = 3;
+    private readonly INITIAL_RETRY_DELAY_MS = 1000; // 1 second
 
     constructor() {
         this.client = axios.create({
@@ -16,10 +96,50 @@ class MusicBrainzService {
         });
     }
 
+    /**
+     * Execute a request with retry logic for transient errors
+     */
+    private async executeWithRetry<T>(
+        requestFn: () => Promise<T>,
+        context: string = "request"
+    ): Promise<T> {
+        let lastError: MusicBrainzError | null = null;
+
+        for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
+            try {
+                return await rateLimiter.execute("musicbrainz", requestFn);
+            } catch (error: any) {
+                const mbError = MusicBrainzError.fromAxiosError(error);
+                lastError = mbError;
+
+                // Don't retry non-retryable errors (404, unknown)
+                if (!mbError.retryable) {
+                    throw mbError;
+                }
+
+                // Log the retry attempt
+                if (attempt < this.MAX_RETRIES) {
+                    const delay = this.INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
+                    console.warn(
+                        `[MusicBrainz] ${mbError.errorType} during ${context} (attempt ${attempt}/${this.MAX_RETRIES}), retrying in ${delay}ms...`
+                    );
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        }
+
+        // All retries exhausted
+        console.error(
+            `[MusicBrainz] All ${this.MAX_RETRIES} attempts failed for ${context}: ${lastError?.message}`
+        );
+        throw lastError;
+    }
+
     private async cachedRequest(
         cacheKey: string,
         requestFn: () => Promise<any>,
-        ttlSeconds = 2592000 // 30 days
+        ttlSeconds = 2592000, // 30 days
+        context: string = "request"
     ) {
         try {
             const cached = await redisClient.get(cacheKey);
@@ -30,8 +150,8 @@ class MusicBrainzService {
             console.warn("Redis get error:", err);
         }
 
-        // Use global rate limiter instead of local rate limiting
-        const data = await rateLimiter.execute("musicbrainz", requestFn);
+        // Use retry logic for transient errors
+        const data = await this.executeWithRetry(requestFn, context);
 
         try {
             // Use shorter TTL for null results (1 hour) vs successful results (30 days)
@@ -57,7 +177,7 @@ class MusicBrainzService {
                 },
             });
             return response.data.artists || [];
-        });
+        }, 2592000, `searchArtist(${query})`);
     }
 
     async getArtist(mbid: string, includes: string[] = ["url-rels", "tags"]) {
@@ -71,7 +191,7 @@ class MusicBrainzService {
                 },
             });
             return response.data;
-        });
+        }, 2592000, `getArtist(${mbid})`);
     }
 
     async getReleaseGroups(
@@ -91,7 +211,7 @@ class MusicBrainzService {
                 },
             });
             return response.data["release-groups"] || [];
-        });
+        }, 2592000, `getReleaseGroups(${artistMbid})`);
     }
 
     async getReleaseGroup(rgMbid: string) {
@@ -105,7 +225,7 @@ class MusicBrainzService {
                 },
             });
             return response.data;
-        });
+        }, 2592000, `getReleaseGroup(${rgMbid})`);
     }
 
     async getReleaseGroupDetails(rgMbid: string) {
@@ -119,7 +239,7 @@ class MusicBrainzService {
                 },
             });
             return response.data;
-        });
+        }, 2592000, `getReleaseGroupDetails(${rgMbid})`);
     }
 
     async getRelease(releaseMbid: string) {
@@ -133,7 +253,7 @@ class MusicBrainzService {
                 },
             });
             return response.data;
-        });
+        }, 2592000, `getRelease(${releaseMbid})`);
     }
 
     /**
@@ -164,7 +284,7 @@ class MusicBrainzService {
                 console.error(`[MusicBrainz] Failed to get release group for ${releaseMbid}:`, error.message);
                 return null;
             }
-        });
+        }, 2592000, `getReleaseGroupFromRelease(${releaseMbid})`);
     }
 
     extractPrimaryArtist(artistCredits: any[]): string {
@@ -332,7 +452,7 @@ class MusicBrainzService {
             }
 
             return null;
-        });
+        }, 2592000, `searchAlbum(${artistName} - ${albumTitle})`);
     }
 
     /**
@@ -528,7 +648,7 @@ class MusicBrainzService {
                 );
                 return null;
             }
-        });
+        }, 2592000, `searchRecording(${artistName} - ${trackTitle})`);
     }
 
     /**
