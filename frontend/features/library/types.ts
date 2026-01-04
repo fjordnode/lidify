@@ -27,7 +27,8 @@ export interface Track {
   id: string;
   title: string;
   duration: number;
-  trackNumber?: number;
+  trackNo?: number;
+  discNo?: number;
   album?: {
     id: string;
     title: string;

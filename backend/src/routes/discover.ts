@@ -209,7 +209,7 @@ router.get("/current", async (req, res) => {
                     },
                     include: {
                         artist: true,
-                        tracks: { take: 1, orderBy: { trackNo: "asc" } },
+                        tracks: { take: 1, orderBy: [{ discNo: "asc" }, { trackNo: "asc" }] },
                     },
                 });
 

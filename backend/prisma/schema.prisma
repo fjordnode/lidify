@@ -183,6 +183,7 @@ model Track {
   albumId      String
   title        String
   trackNo      Int
+  discNo       Int      @default(1) // Disc number for multi-disc albums
   duration     Int // seconds
   mime         String?
   searchVector Unsupported("tsvector")?

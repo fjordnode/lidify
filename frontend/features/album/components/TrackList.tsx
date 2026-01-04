@@ -1,6 +1,6 @@
-import React, { memo, useCallback } from 'react';
+import React, { memo, useCallback, useMemo } from 'react';
 import { Card } from '@/components/ui/Card';
-import { Play, Pause, Volume2, ListPlus, Plus } from 'lucide-react';
+import { Play, Pause, Volume2, ListPlus, Plus, Disc } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import type { Track, Album, AlbumSource } from '../types';
 
@@ -21,6 +21,7 @@ interface TrackListProps {
 interface TrackRowProps {
   track: Track;
   index: number;
+  displayNumber: number;
   album: Album;
   isOwned: boolean;
   isPlaying: boolean;
@@ -50,6 +51,7 @@ const formatNumber = (num: number) => {
 const TrackRow = memo(function TrackRow({
   track,
   index,
+  displayNumber,
   album,
   isOwned,
   isPlaying,
@@ -96,7 +98,7 @@ const TrackRow = memo(function TrackRow({
       data-tv-card-index={index}
       tabIndex={0}
       className={cn(
-        'group relative flex items-center gap-3 md:gap-4 px-3 md:px-4 py-3 hover:bg-[#141414] transition-colors cursor-pointer',
+        'group relative flex items-center gap-3 md:gap-4 px-3 md:px-4 py-3 cursor-pointer',
         isPlaying && 'bg-[#1a1a1a] border-l-2',
         isPreviewOnly && 'opacity-70 hover:opacity-90'
       )}
@@ -124,7 +126,7 @@ const TrackRow = memo(function TrackRow({
             isPlaying ? 'text-purple-400 font-bold' : 'text-gray-500'
           )}
         >
-          {index + 1}
+          {displayNumber}
         </span>
         <Play
           className="hidden group-hover:inline-block w-4 h-4 text-white"
@@ -203,6 +205,7 @@ const TrackRow = memo(function TrackRow({
     prevProps.isPlaying === nextProps.isPlaying &&
     prevProps.isPreviewPlaying === nextProps.isPreviewPlaying &&
     prevProps.index === nextProps.index &&
+    prevProps.displayNumber === nextProps.displayNumber &&
     prevProps.isOwned === nextProps.isOwned
   );
 });
@@ -222,31 +225,80 @@ export const TrackList = memo(function TrackList({
 }: TrackListProps) {
   const isOwned = source === 'library';
 
+  // Group tracks by disc number
+  const { discGroups, hasMultipleDiscs } = useMemo(() => {
+    const groups = new Map<number, Track[]>();
+
+    for (const track of tracks) {
+      const discNo = track.discNo ?? 1;
+      if (!groups.has(discNo)) {
+        groups.set(discNo, []);
+      }
+      groups.get(discNo)!.push(track);
+    }
+
+    // Sort disc numbers
+    const sortedDiscs = Array.from(groups.keys()).sort((a, b) => a - b);
+
+    return {
+      discGroups: sortedDiscs.map(discNo => ({
+        discNo,
+        tracks: groups.get(discNo)!,
+      })),
+      hasMultipleDiscs: sortedDiscs.length > 1,
+    };
+  }, [tracks]);
+
+  // Build a map of track id to overall index for play functionality
+  const trackIndexMap = useMemo(() => {
+    const map = new Map<string, number>();
+    tracks.forEach((track, index) => {
+      map.set(track.id, index);
+    });
+    return map;
+  }, [tracks]);
+
   return (
     <section>
-      <Card>
-        <div data-tv-section="tracks" className="divide-y divide-[#1c1c1c]">
-          {tracks.map((track, index) => {
-            const isPlaying = currentTrackId === track.id;
-            const isPreviewPlaying = previewTrack === track.id && previewPlaying;
+      <Card hover={false}>
+        <div data-tv-section="tracks">
+          {discGroups.map(({ discNo, tracks: discTracks }) => (
+            <div key={discNo}>
+              {hasMultipleDiscs && (
+                <div className="flex items-center gap-2 px-4 py-3 bg-[#0a0a0a] border-b border-[#1c1c1c]">
+                  <Disc className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm font-medium text-gray-400">
+                    Disc {discNo}
+                  </span>
+                </div>
+              )}
+              <div className="divide-y divide-[#1c1c1c]">
+                {discTracks.map((track) => {
+                  const overallIndex = trackIndexMap.get(track.id) ?? 0;
+                  const isPlaying = currentTrackId === track.id;
+                  const isPreviewPlaying = previewTrack === track.id && previewPlaying;
 
-            return (
-              <TrackRow
-                key={track.id}
-                track={track}
-                index={index}
-                album={album}
-                isOwned={isOwned}
-                isPlaying={isPlaying}
-                isPreviewPlaying={isPreviewPlaying}
-                colors={colors}
-                onPlayTrack={onPlayTrack}
-                onAddToQueue={onAddToQueue}
-                onAddToPlaylist={onAddToPlaylist}
-                onPreview={onPreview}
-              />
-            );
-          })}
+                  return (
+                    <TrackRow
+                      key={track.id}
+                      track={track}
+                      index={overallIndex}
+                      displayNumber={track.trackNo ?? (overallIndex + 1)}
+                      album={album}
+                      isOwned={isOwned}
+                      isPlaying={isPlaying}
+                      isPreviewPlaying={isPreviewPlaying}
+                      colors={colors}
+                      onPlayTrack={onPlayTrack}
+                      onAddToQueue={onAddToQueue}
+                      onAddToPlaylist={onAddToPlaylist}
+                      onPreview={onPreview}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       </Card>
     </section>

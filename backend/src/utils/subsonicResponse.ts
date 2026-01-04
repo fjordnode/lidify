@@ -199,6 +199,7 @@ export function formatTrackForSubsonic(track: {
     id: string;
     title: string;
     trackNo: number;
+    discNo?: number;
     duration: number;
     filePath: string;
     fileSize: number;
@@ -224,6 +225,7 @@ export function formatTrackForSubsonic(track: {
         album: track.album.title,
         artist: track.album.artist.name,
         track: track.trackNo,
+        discNumber: track.discNo ?? 1,
         year: track.album.year || undefined,
         coverArt: track.album.coverUrl ? `al-${track.album.id}` : undefined,
         size: track.fileSize,
