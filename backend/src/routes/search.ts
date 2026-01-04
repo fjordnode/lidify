@@ -146,12 +146,13 @@ router.get("/", async (req, res) => {
                 },
             });
 
-            // Preserve rank order from full-text search
+            // Preserve rank order from search, with name as secondary sort
             const rankMap = new Map(artistResults.map((a) => [a.id, a.rank]));
             results.artists = artistsWithAlbums.sort((a, b) => {
                 const rankA = rankMap.get(a.id) || 0;
                 const rankB = rankMap.get(b.id) || 0;
-                return rankB - rankA; // Sort by rank DESC
+                if (rankB !== rankA) return rankB - rankA; // Sort by rank DESC
+                return a.name.localeCompare(b.name); // Then by name ASC
             });
         }
 
@@ -211,16 +212,16 @@ router.get("/", async (req, res) => {
                         title: track.title,
                         albumId: track.albumId,
                         duration: track.duration,
-                        trackNo: 0, // Not included in search result
+                        trackNo: 0,
                         album: {
                             id: track.albumId,
                             title: track.albumTitle,
                             artistId: track.artistId,
-                            coverUrl: null, // Not included in search result
+                            coverUrl: track.albumCoverUrl,
                             artist: {
                                 id: track.artistId,
                                 name: track.artistName,
-                                mbid: "", // Not included in search result
+                                mbid: "",
                             },
                         },
                     }));
@@ -230,16 +231,16 @@ router.get("/", async (req, res) => {
                     title: track.title,
                     albumId: track.albumId,
                     duration: track.duration,
-                    trackNo: 0, // Not included in search result
+                    trackNo: 0,
                     album: {
                         id: track.albumId,
                         title: track.albumTitle,
                         artistId: track.artistId,
-                        coverUrl: null, // Not included in search result
+                        coverUrl: track.albumCoverUrl,
                         artist: {
                             id: track.artistId,
                             name: track.artistName,
-                            mbid: "", // Not included in search result
+                            mbid: "",
                         },
                     },
                 }));

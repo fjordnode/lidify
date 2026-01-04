@@ -6,8 +6,8 @@ import { SearchIcon } from "lucide-react";
 import { useSearchData } from "@/features/search/hooks/useSearchData";
 import { useSoulseekSearch } from "@/features/search/hooks/useSoulseekSearch";
 import { SearchFilters } from "@/features/search/components/SearchFilters";
-import { TopResult } from "@/features/search/components/TopResult";
 import { EmptyState } from "@/features/search/components/EmptyState";
+import { LibraryArtistsGrid } from "@/features/search/components/LibraryArtistsGrid";
 import { LibraryAlbumsGrid } from "@/features/search/components/LibraryAlbumsGrid";
 import { LibraryPodcastsGrid } from "@/features/search/components/LibraryPodcastsGrid";
 import { LibraryTracksList } from "@/features/search/components/LibraryTracksList";
@@ -48,7 +48,6 @@ export default function SearchPage() {
     }, [searchParams]);
 
     // Derived state
-    const topArtist = discoverResults.find((r) => r.type === "music");
     const isLoading =
         isLibrarySearching ||
         isDiscoverSearching ||
@@ -157,13 +156,13 @@ export default function SearchPage() {
                         </div>
                     )}
 
-                {/* Top Result */}
+                {/* Library Artists */}
                 {hasSearched &&
-                    (showDiscover || showLibrary) &&
-                    (libraryResults?.artists?.[0] || topArtist) && (
-                        <TopResult
-                            libraryArtist={libraryResults?.artists?.[0]}
-                            discoveryArtist={topArtist}
+                    showLibrary &&
+                    libraryResults?.artists &&
+                    libraryResults.artists.length > 0 && (
+                        <LibraryArtistsGrid
+                            artists={libraryResults.artists}
                         />
                     )}
 
@@ -199,7 +198,7 @@ export default function SearchPage() {
                     libraryResults?.albums?.length > 0 && (
                         <section>
                             <h2 className="text-2xl font-bold text-white mb-6">
-                                Your Albums
+                                Albums in Your Library
                             </h2>
                             <LibraryAlbumsGrid albums={libraryResults.albums} />
                         </section>
@@ -219,18 +218,19 @@ export default function SearchPage() {
                         </section>
                     )}
 
-                {/* Similar Artists */}
-                {hasSearched &&
-                    showDiscover &&
-                    discoverResults.filter((r) => r.type === "music").length >
-                        1 && (
-                        <SimilarArtistsGrid discoverResults={discoverResults} />
-                    )}
+                {/* Last.fm Artists */}
+                {hasSearched && showDiscover && (
+                    <SimilarArtistsGrid
+                        discoverResults={discoverResults}
+                        skipFirst={!libraryResults?.artists?.[0]}
+                        isLoading={isDiscoverSearching}
+                    />
+                )}
 
                 {/* No Results */}
                 {hasSearched &&
                     !isLoading &&
-                    !topArtist &&
+                    discoverResults.length === 0 &&
                     soulseekResults.length === 0 &&
                     (!libraryResults ||
                         (!libraryResults.artists?.length &&

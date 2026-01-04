@@ -30,6 +30,7 @@ interface TrackSearchResult {
     title: string;
     albumId: string;
     albumTitle: string;
+    albumCoverUrl: string | null;
     artistId: string;
     artistName: string;
     duration: number;
@@ -77,9 +78,9 @@ export class SearchService {
           name,
           mbid,
           "heroUrl",
-          ts_rank(search_vector, to_tsquery('english', ${tsquery})) AS rank
+          ts_rank("searchVector", to_tsquery('simple', ${tsquery})) AS rank
         FROM "Artist"
-        WHERE search_vector @@ to_tsquery('english', ${tsquery})
+        WHERE "searchVector" @@ to_tsquery('simple', ${tsquery})
         ORDER BY rank DESC, name ASC
         LIMIT ${limit}
         OFFSET ${offset}
@@ -88,28 +89,27 @@ export class SearchService {
             return results;
         } catch (error) {
             console.error("Artist search error:", error);
-            // Fallback to LIKE query if full-text search fails
-            const results = await prisma.artist.findMany({
-                where: {
-                    name: {
-                        contains: query,
-                        mode: "insensitive",
-                    },
-                },
-                select: {
-                    id: true,
-                    name: true,
-                    mbid: true,
-                    heroUrl: true,
-                },
-                take: limit,
-                skip: offset,
-                orderBy: {
-                    name: "asc",
-                },
-            });
-
-            return results.map((r) => ({ ...r, rank: 0 }));
+            // Fallback to ranked LIKE query if full-text search fails
+            // Rank: exact=100, starts-with=75, word-starts-with=50, contains=25
+            const results = await prisma.$queryRaw<ArtistSearchResult[]>`
+                SELECT
+                    id,
+                    name,
+                    mbid,
+                    "heroUrl",
+                    CASE
+                        WHEN LOWER(name) = LOWER(${query}) THEN 100
+                        WHEN LOWER(name) LIKE LOWER(${query + '%'}) THEN 75
+                        WHEN LOWER(name) LIKE LOWER(${'% ' + query + '%'}) THEN 50
+                        ELSE 25
+                    END AS rank
+                FROM "Artist"
+                WHERE name ILIKE ${'%' + query + '%'}
+                ORDER BY rank DESC, name ASC
+                LIMIT ${limit}
+                OFFSET ${offset}
+            `;
+            return results;
         }
     }
 
@@ -134,13 +134,13 @@ export class SearchService {
           a.year,
           a."coverUrl",
           GREATEST(
-            ts_rank(a.search_vector, to_tsquery('english', ${tsquery})),
-            ts_rank(ar.search_vector, to_tsquery('english', ${tsquery}))
+            ts_rank(a."searchVector", to_tsquery('simple', ${tsquery})),
+            ts_rank(ar."searchVector", to_tsquery('simple', ${tsquery}))
           ) AS rank
         FROM "Album" a
         LEFT JOIN "Artist" ar ON a."artistId" = ar.id
-        WHERE a.search_vector @@ to_tsquery('english', ${tsquery})
-           OR ar.search_vector @@ to_tsquery('english', ${tsquery})
+        WHERE a."searchVector" @@ to_tsquery('simple', ${tsquery})
+           OR ar."searchVector" @@ to_tsquery('simple', ${tsquery})
         ORDER BY rank DESC, a.title ASC
         LIMIT ${limit}
         OFFSET ${offset}
@@ -149,54 +149,32 @@ export class SearchService {
             return results;
         } catch (error) {
             console.error("Album search error:", error);
-            // Fallback to LIKE query - search both album title and artist name
-            const results = await prisma.album.findMany({
-                where: {
-                    OR: [
-                        {
-                            title: {
-                                contains: query,
-                                mode: "insensitive",
-                            },
-                        },
-                        {
-                            artist: {
-                                name: {
-                                    contains: query,
-                                    mode: "insensitive",
-                                },
-                            },
-                        },
-                    ],
-                },
-                select: {
-                    id: true,
-                    title: true,
-                    artistId: true,
-                    year: true,
-                    coverUrl: true,
-                    artist: {
-                        select: {
-                            name: true,
-                        },
-                    },
-                },
-                take: limit,
-                skip: offset,
-                orderBy: {
-                    title: "asc",
-                },
-            });
-
-            return results.map((r) => ({
-                id: r.id,
-                title: r.title,
-                artistId: r.artistId,
-                artistName: r.artist.name,
-                year: r.year,
-                coverUrl: r.coverUrl,
-                rank: 0,
-            }));
+            // Fallback to ranked LIKE query - search both album title and artist name
+            // Rank: title-exact=100, title-starts=75, artist-starts=60, title-word=50, contains=25
+            const results = await prisma.$queryRaw<AlbumSearchResult[]>`
+                SELECT
+                    a.id,
+                    a.title,
+                    a."artistId",
+                    ar.name as "artistName",
+                    a.year,
+                    a."coverUrl",
+                    CASE
+                        WHEN LOWER(a.title) = LOWER(${query}) THEN 100
+                        WHEN LOWER(a.title) LIKE LOWER(${query + '%'}) THEN 75
+                        WHEN LOWER(ar.name) LIKE LOWER(${query + '%'}) THEN 60
+                        WHEN LOWER(a.title) LIKE LOWER(${'% ' + query + '%'}) THEN 50
+                        ELSE 25
+                    END AS rank
+                FROM "Album" a
+                LEFT JOIN "Artist" ar ON a."artistId" = ar.id
+                WHERE a.title ILIKE ${'%' + query + '%'}
+                   OR ar.name ILIKE ${'%' + query + '%'}
+                ORDER BY rank DESC, a.title ASC
+                LIMIT ${limit}
+                OFFSET ${offset}
+            `;
+            return results;
         }
     }
 
@@ -219,13 +197,14 @@ export class SearchService {
           t."albumId",
           t.duration,
           a.title as "albumTitle",
+          a."coverUrl" as "albumCoverUrl",
           a."artistId",
           ar.name as "artistName",
-          ts_rank(t.search_vector, to_tsquery('english', ${tsquery})) AS rank
+          ts_rank(t."searchVector", to_tsquery('simple', ${tsquery})) AS rank
         FROM "Track" t
         LEFT JOIN "Album" a ON t."albumId" = a.id
         LEFT JOIN "Artist" ar ON a."artistId" = ar.id
-        WHERE t.search_vector @@ to_tsquery('english', ${tsquery})
+        WHERE t."searchVector" @@ to_tsquery('simple', ${tsquery})
         ORDER BY rank DESC, t.title ASC
         LIMIT ${limit}
         OFFSET ${offset}
@@ -234,48 +213,33 @@ export class SearchService {
             return results;
         } catch (error) {
             console.error("Track search error:", error);
-            // Fallback to LIKE query
-            const results = await prisma.track.findMany({
-                where: {
-                    title: {
-                        contains: query,
-                        mode: "insensitive",
-                    },
-                },
-                select: {
-                    id: true,
-                    title: true,
-                    albumId: true,
-                    duration: true,
-                    album: {
-                        select: {
-                            title: true,
-                            artistId: true,
-                            artist: {
-                                select: {
-                                    name: true,
-                                },
-                            },
-                        },
-                    },
-                },
-                take: limit,
-                skip: offset,
-                orderBy: {
-                    title: "asc",
-                },
-            });
-
-            return results.map((r) => ({
-                id: r.id,
-                title: r.title,
-                albumId: r.albumId,
-                albumTitle: r.album.title,
-                artistId: r.album.artistId,
-                artistName: r.album.artist.name,
-                duration: r.duration,
-                rank: 0,
-            }));
+            // Fallback to ranked LIKE query
+            // Rank: exact=100, starts-with=75, word-starts-with=50, contains=25
+            const results = await prisma.$queryRaw<TrackSearchResult[]>`
+                SELECT
+                    t.id,
+                    t.title,
+                    t."albumId",
+                    t.duration,
+                    a.title as "albumTitle",
+                    a."coverUrl" as "albumCoverUrl",
+                    a."artistId",
+                    ar.name as "artistName",
+                    CASE
+                        WHEN LOWER(t.title) = LOWER(${query}) THEN 100
+                        WHEN LOWER(t.title) LIKE LOWER(${query + '%'}) THEN 75
+                        WHEN LOWER(t.title) LIKE LOWER(${'% ' + query + '%'}) THEN 50
+                        ELSE 25
+                    END AS rank
+                FROM "Track" t
+                LEFT JOIN "Album" a ON t."albumId" = a.id
+                LEFT JOIN "Artist" ar ON a."artistId" = ar.id
+                WHERE t.title ILIKE ${'%' + query + '%'}
+                ORDER BY rank DESC, t.title ASC
+                LIMIT ${limit}
+                OFFSET ${offset}
+            `;
+            return results;
         }
     }
 

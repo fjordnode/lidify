@@ -1,67 +1,47 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Music } from "lucide-react";
-import { cn } from "@/utils/cn";
-import { DiscoverResult } from "../types";
 import { api } from "@/lib/api";
 
-interface SimilarArtistsGridProps {
-    discoverResults: DiscoverResult[];
-    skipFirst?: boolean; // Skip first result if it was shown in TopResult
-    isLoading?: boolean;
+interface LibraryArtist {
+    id: string;
+    mbid?: string;
+    name: string;
+    heroUrl?: string | null;
+    summary?: string | null;
+}
+
+interface LibraryArtistsGridProps {
+    artists: LibraryArtist[];
 }
 
 // Always proxy images through the backend for caching and mobile compatibility
-const getProxiedImageUrl = (imageUrl: string | undefined): string | null => {
+const getProxiedImageUrl = (imageUrl: string | undefined | null): string | null => {
     if (!imageUrl) return null;
     return api.getCoverArtUrl(imageUrl, 300);
 };
 
-export function SimilarArtistsGrid({
-    discoverResults,
-    skipFirst = true,
-    isLoading = false,
-}: SimilarArtistsGridProps) {
-    const artistResults = discoverResults.filter((r) => r.type === "music");
-
-    // Skip first if it was shown in TopResult, otherwise show all
-    const startIndex = skipFirst ? 1 : 0;
-    const displayResults = artistResults.slice(startIndex, startIndex + 6);
-
-    // Show loading state
-    if (isLoading) {
-        return (
-            <section>
-                <h2 className="text-2xl font-bold text-white mb-6">
-                    More on Last.fm
-                </h2>
-                <div className="flex items-center gap-3 text-gray-400">
-                    <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                    <span>Searching Last.fm...</span>
-                </div>
-            </section>
-        );
-    }
-
-    if (displayResults.length === 0) {
+export function LibraryArtistsGrid({ artists }: LibraryArtistsGridProps) {
+    if (!artists || artists.length === 0) {
         return null;
     }
 
     return (
         <section>
             <h2 className="text-2xl font-bold text-white mb-6">
-                More on Last.fm
+                Artists in Your Library
             </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 gap-4" data-tv-section="search-results-artists">
-                {displayResults.map((result, index) => {
-                    const artistId =
-                        result.mbid || encodeURIComponent(result.name);
-                    const imageUrl = getProxiedImageUrl(result.image);
+            <div
+                className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 gap-4"
+                data-tv-section="search-results-library-artists"
+            >
+                {artists.map((artist, index) => {
+                    const imageUrl = getProxiedImageUrl(artist.heroUrl);
 
                     return (
                         <Link
-                            key={`artist-${artistId}-${index}`}
-                            href={`/artist/${artistId}`}
+                            key={artist.id}
+                            href={`/artist/${artist.id}`}
                             data-tv-card
                             data-tv-card-index={index}
                             tabIndex={0}
@@ -71,7 +51,7 @@ export function SimilarArtistsGrid({
                                     {imageUrl ? (
                                         <Image
                                             src={imageUrl}
-                                            alt={result.name}
+                                            alt={artist.name}
                                             fill
                                             sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 16vw"
                                             className="object-cover group-hover:scale-110 transition-all"
@@ -82,7 +62,7 @@ export function SimilarArtistsGrid({
                                     )}
                                 </div>
                                 <h3 className="text-base font-bold text-white line-clamp-1 mb-1">
-                                    {result.name}
+                                    {artist.name}
                                 </h3>
                                 <p className="text-sm text-[#b3b3b3]">Artist</p>
                             </div>
