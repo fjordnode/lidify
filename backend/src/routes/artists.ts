@@ -12,6 +12,34 @@ const router = Router();
 
 // Cache TTL for discovery content (shorter since it's not owned)
 const DISCOVERY_CACHE_TTL = 24 * 60 * 60; // 24 hours
+
+/**
+ * Normalize fullwidth Unicode characters to ASCII equivalents for discovery lookups.
+ * ONLY handles fullwidth characters (ＧＨＯＳＴ -> GHOST) which are stylistic variants.
+ * Does NOT normalize diacritics (ø, é, ñ) - those represent distinct artists.
+ */
+function normalizeFullwidth(name: string): string {
+    return name
+        // Convert fullwidth characters (U+FF01-U+FF5E) to ASCII (U+0021-U+007E)
+        .replace(/[\uFF01-\uFF5E]/g, (char) =>
+            String.fromCharCode(char.charCodeAt(0) - 0xFEE0)
+        )
+        // Convert fullwidth space to regular space
+        .replace(/\u3000/g, " ")
+        .trim();
+}
+
+/**
+ * Safely decode a URI component, returning the original string if decoding fails.
+ */
+function safeDecodeURIComponent(str: string): string {
+    try {
+        return decodeURIComponent(str);
+    } catch {
+        return str;
+    }
+}
+
 const AI_SIMILAR_CACHE_TTL = 7 * 24 * 60 * 60; // 7 days
 
 // Interface for enriched similar artist
@@ -24,7 +52,7 @@ interface EnrichedSimilarArtist extends SimilarArtistRecommendation {
 // GET /artists/image/:artistName - Get just the artist image (lightweight)
 router.get("/image/:artistName", async (req, res) => {
     try {
-        const artistName = decodeURIComponent(req.params.artistName);
+        const artistName = safeDecodeURIComponent(req.params.artistName);
         const cacheKey = `artist-image:${artistName.toLowerCase()}`;
 
         // Check cache first
@@ -117,7 +145,7 @@ router.get("/ai-similar/:artistId", async (req, res) => {
         // If not in library, try discovery (using Last.fm)
         if (!artist) {
             source = "discovery";
-            const nameOrMbid = decodeURIComponent(artistId);
+            const nameOrMbid = safeDecodeURIComponent(artistId);
 
             try {
                 const lastFmInfo = await lastFmService.getArtistInfo(nameOrMbid);
@@ -290,7 +318,7 @@ router.post("/ai-chat/:artistId", async (req, res) => {
 
             if (!artistInfo) {
                 // Try discovery via Last.fm
-                const nameOrMbid = decodeURIComponent(artistId);
+                const nameOrMbid = safeDecodeURIComponent(artistId);
                 try {
                     const lastFmInfo = await lastFmService.getArtistInfo(nameOrMbid);
                     if (lastFmInfo) {
@@ -395,8 +423,8 @@ router.post("/ai-chat/:artistId", async (req, res) => {
 router.get("/preview/:artistName/:trackTitle", async (req, res) => {
     try {
         const { artistName, trackTitle } = req.params;
-        const decodedArtist = decodeURIComponent(artistName);
-        const decodedTrack = decodeURIComponent(trackTitle);
+        const decodedArtist = safeDecodeURIComponent(artistName);
+        const decodedTrack = safeDecodeURIComponent(trackTitle);
 
         console.log(
             `Getting preview for "${decodedTrack}" by ${decodedArtist}`
@@ -449,18 +477,47 @@ router.get("/discover/:nameOrMbid", async (req, res) => {
             );
 
         let mbid: string | null = isMbid ? nameOrMbid : null;
-        let artistName: string = isMbid ? "" : decodeURIComponent(nameOrMbid);
+        // Keep original name for display, use normalized for lookups
+        const originalName: string = isMbid ? "" : safeDecodeURIComponent(nameOrMbid);
+        let artistName: string = originalName;
+        const normalizedName = artistName ? normalizeFullwidth(artistName) : "";
 
         // If we have a name but no MBID, search for it
         if (!mbid && artistName) {
-            const mbResults = await musicBrainzService.searchArtist(
-                artistName,
-                1
+            // Step 1: Try searching with the ORIGINAL name first
+            let mbResults = await musicBrainzService.searchArtist(artistName, 10);
+
+            // Look for exact match with original name (case-insensitive)
+            let exactMatch = mbResults.find((r: any) =>
+                r.name.toLowerCase() === artistName.toLowerCase()
             );
-            if (mbResults.length > 0) {
-                mbid = mbResults[0].id;
-                artistName = mbResults[0].name;
+
+            if (exactMatch) {
+                mbid = exactMatch.id;
+                artistName = exactMatch.name;
+            } else if (normalizedName.toLowerCase() !== artistName.toLowerCase()) {
+                // Step 2: Only if normalization actually changed the name,
+                // try searching with normalized name (handles ＧＨＯＳＴ -> GHOST)
+                mbResults = await musicBrainzService.searchArtist(normalizedName, 10);
+
+                // Look for match where normalized names are equal
+                exactMatch = mbResults.find((r: any) =>
+                    normalizeFullwidth(r.name).toLowerCase() === normalizedName.toLowerCase()
+                );
+
+                if (exactMatch) {
+                    mbid = exactMatch.id;
+                    artistName = exactMatch.name;
+                } else if (mbResults.length > 0) {
+                    // Fallback to first result only for normalized searches
+                    // (e.g., ＧＨＯＳＴ where there's no exact "ＧＨＯＳＴ" artist)
+                    mbid = mbResults[0].id;
+                    artistName = mbResults[0].name;
+                }
             }
+            // If original search had results but no exact match,
+            // we intentionally DON'T fall back to first result
+            // This prevents "Ghøst" from matching "GHØST GIRL"
         }
 
         // If we have MBID but no name, get it from MusicBrainz

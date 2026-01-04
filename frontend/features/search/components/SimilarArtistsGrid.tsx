@@ -54,8 +54,8 @@ export function SimilarArtistsGrid({
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 gap-4" data-tv-section="search-results-artists">
                 {displayResults.map((result, index) => {
-                    const artistId =
-                        result.mbid || encodeURIComponent(result.name);
+                    // Use MBID if available, otherwise use name (Next.js Link handles encoding)
+                    const artistId = result.mbid || result.name;
                     const imageUrl = getProxiedImageUrl(result.image);
 
                     return (

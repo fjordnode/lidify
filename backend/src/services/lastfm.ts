@@ -546,42 +546,39 @@ class LastFmService {
             tags: [] as string[],
         };
 
-        if (!enrich) {
-            // Use Last.fm image if valid, otherwise try Deezer
-            const hasValidLastfmImage = lastfmImage &&
-                !lastfmImage.includes("2a96cbd8b46e442fc41c2b86b821562f");
-
-            if (hasValidLastfmImage) {
-                return baseResult;
-            }
-
-            // Fallback to Deezer
-            const deezerImage = await deezerService
-                .getArtistImage(artist.name)
-                .catch(() => null);
-            return {
-                ...baseResult,
-                image: deezerImage || lastfmImage,
-            };
-        }
-
-        const [info, fanartImage, deezerImage] = await Promise.all([
+        // Fetch artist info and images from multiple sources
+        // Priority: Fanart.tv (MBID) > Last.fm info > Deezer (strict match) > Last.fm search
+        const [info, fanartImage] = await Promise.all([
             this.getArtistInfo(artist.name, artist.mbid),
-            artist.mbid
+            enrich && artist.mbid
                 ? fanartService
                       .getArtistImage(artist.mbid)
                       .catch(() => null as string | null)
                 : Promise.resolve<string | null>(null),
-            deezerService
-                .getArtistImage(artist.name)
-                .catch(() => null as string | null),
         ]);
 
-        const resolvedImage =
-            fanartImage ||
-            deezerImage ||
-            (info ? this.getBestImage(info.image) : null) ||
-            baseResult.image;
+        // Try to get image from various sources
+        let resolvedImage = fanartImage || (info ? this.getBestImage(info.image) : null);
+
+        // If still no image, try Deezer with strict name matching
+        // This prevents "GHOST" and "ghøst" from getting the same image
+        if (!resolvedImage) {
+            resolvedImage = await deezerService
+                .getArtistImageStrict(artist.name)
+                .catch(() => null);
+        }
+
+        // Final fallback to Last.fm search image
+        if (!resolvedImage) {
+            resolvedImage = baseResult.image;
+        }
+
+        if (!enrich) {
+            return {
+                ...baseResult,
+                image: resolvedImage,
+            };
+        }
 
         return {
             ...baseResult,

@@ -12,6 +12,7 @@ interface AvailableAlbumsProps {
     source: ArtistSource;
     colors: any;
     onDownloadAlbum: (album: Album, e: React.MouseEvent) => void;
+    onSearchAlbum: (album: Album, e: React.MouseEvent) => void;
     isPendingDownload: (mbid: string) => boolean;
 }
 
@@ -21,6 +22,7 @@ function LazyAlbumCard({
     source,
     colors,
     onDownloadAlbum,
+    onSearchAlbum,
     isPendingDownload,
     index,
 }: {
@@ -28,6 +30,7 @@ function LazyAlbumCard({
     source: ArtistSource;
     colors: any;
     onDownloadAlbum: (album: Album, e: React.MouseEvent) => void;
+    onSearchAlbum: (album: Album, e: React.MouseEvent) => void;
     isPendingDownload: (mbid: string) => boolean;
     index: number;
 }) {
@@ -46,9 +49,11 @@ function LazyAlbumCard({
     // Lazy-load cover art if not available
     useEffect(() => {
         if (coverArt || fetchAttempted) return;
-        
+
         const mbid = album.rgMbid || album.mbid;
         if (!mbid || mbid.startsWith("temp-")) return;
+
+        let isMounted = true;
 
         // Fetch cover art from our backend (which caches it)
         const fetchCover = async () => {
@@ -56,19 +61,24 @@ function LazyAlbumCard({
                 const response = await api.request<{ coverUrl: string }>(
                     `/library/album-cover/${mbid}`
                 );
-                if (response.coverUrl) {
+                if (isMounted && response.coverUrl) {
                     setCoverArt(api.getCoverArtUrl(response.coverUrl, 300));
                 }
             } catch {
                 // Cover not found, leave as null
             } finally {
-                setFetchAttempted(true);
+                if (isMounted) {
+                    setFetchAttempted(true);
+                }
             }
         };
 
         // Delay fetch slightly to avoid thundering herd on page load
         const timeoutId = setTimeout(fetchCover, index * 100);
-        return () => clearTimeout(timeoutId);
+        return () => {
+            isMounted = false;
+            clearTimeout(timeoutId);
+        };
     }, [album, coverArt, fetchAttempted, index]);
 
     // Get MBID for download tracking
@@ -96,6 +106,7 @@ function LazyAlbumCard({
             colors={colors}
             isDownloading={isPendingDownload(albumMbid)}
             onDownload={(e) => onDownloadAlbum(album, e)}
+            onSearch={(e) => onSearchAlbum(album, e)}
             tvCardIndex={index}
         />
     );
@@ -106,6 +117,7 @@ function AlbumGrid({
     source,
     colors,
     onDownloadAlbum,
+    onSearchAlbum,
     isPendingDownload,
 }: Omit<AvailableAlbumsProps, "artistName">) {
     return (
@@ -117,6 +129,7 @@ function AlbumGrid({
                     source={source}
                     colors={colors}
                     onDownloadAlbum={onDownloadAlbum}
+                    onSearchAlbum={onSearchAlbum}
                     isPendingDownload={isPendingDownload}
                     index={index}
                 />
@@ -131,6 +144,7 @@ export function AvailableAlbums({
     source,
     colors,
     onDownloadAlbum,
+    onSearchAlbum,
     isPendingDownload,
 }: AvailableAlbumsProps) {
     if (!albums || albums.length === 0) {
@@ -159,6 +173,7 @@ export function AvailableAlbums({
                             source={source}
                             colors={colors}
                             onDownloadAlbum={onDownloadAlbum}
+                            onSearchAlbum={onSearchAlbum}
                             isPendingDownload={isPendingDownload}
                         />
                     </div>
@@ -177,6 +192,7 @@ export function AvailableAlbums({
                             source={source}
                             colors={colors}
                             onDownloadAlbum={onDownloadAlbum}
+                            onSearchAlbum={onSearchAlbum}
                             isPendingDownload={isPendingDownload}
                         />
                     </div>

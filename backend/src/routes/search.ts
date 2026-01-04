@@ -352,17 +352,31 @@ router.get("/discover", async (req, res) => {
         const results: any[] = [];
 
         if (type === "music" || type === "all") {
+            // Get library artist names to filter out (normalized for comparison)
+            const libraryArtists = await prisma.artist.findMany({
+                select: { name: true },
+            });
+            const libraryArtistNames = new Set(
+                libraryArtists.map((a) => a.name.toLowerCase().trim())
+            );
+
             // Search Last.fm for artists AND tracks
             try {
                 // Search for artists
                 const lastfmArtistResults = await lastFmService.searchArtists(
                     query,
-                    searchLimit
+                    searchLimit + 10 // Request extra to account for filtering
                 );
+
+                // Filter out artists already in library
+                const filteredArtists = lastfmArtistResults.filter(
+                    (artist: any) => !libraryArtistNames.has(artist.name?.toLowerCase().trim())
+                );
+
                 console.log(
-                    `[SEARCH ENDPOINT] Found ${lastfmArtistResults.length} artist results`
+                    `[SEARCH ENDPOINT] Found ${lastfmArtistResults.length} artists, ${filteredArtists.length} after filtering library`
                 );
-                results.push(...lastfmArtistResults);
+                results.push(...filteredArtists.slice(0, searchLimit));
 
                 // Search for tracks (songs)
                 const lastfmTrackResults = await lastFmService.searchTracks(

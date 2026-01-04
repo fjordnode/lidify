@@ -12,6 +12,7 @@ import { LibraryAlbumsGrid } from "@/features/search/components/LibraryAlbumsGri
 import { LibraryPodcastsGrid } from "@/features/search/components/LibraryPodcastsGrid";
 import { LibraryTracksList } from "@/features/search/components/LibraryTracksList";
 import { SimilarArtistsGrid } from "@/features/search/components/SimilarArtistsGrid";
+import { TopResult } from "@/features/search/components/TopResult";
 import { SoulseekSongsList } from "@/features/search/components/SoulseekSongsList";
 import { TVSearchInput } from "@/features/search/components/TVSearchInput";
 import type { FilterTab } from "@/features/search/types";
@@ -155,6 +156,14 @@ export default function SearchPage() {
                             </p>
                         </div>
                     )}
+
+                {/* Top Result - shows best match from library or discovery */}
+                {hasSearched && (showLibrary || showDiscover) && (
+                    <TopResult
+                        libraryArtist={showLibrary ? libraryResults?.artists?.[0] : undefined}
+                        discoveryArtist={showDiscover ? discoverResults.find(r => r.type === "music") : undefined}
+                    />
+                )}
 
                 {/* Library Artists */}
                 {hasSearched &&

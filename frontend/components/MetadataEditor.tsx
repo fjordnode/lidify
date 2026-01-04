@@ -89,10 +89,10 @@ export function MetadataEditor({
 
     return (
         <>
-            {/* Pencil Icon Button */}
+            {/* Pencil Icon Button - Always visible */}
             <button
                 onClick={handleOpen}
-                className="p-2 rounded-full bg-black/40 hover:bg-black/60 transition-all opacity-0 group-hover:opacity-100"
+                className="p-2 rounded-full bg-black/40 hover:bg-black/60 transition-all"
                 title={`Edit ${type} metadata`}
             >
                 <Edit className="w-4 h-4 text-white" />

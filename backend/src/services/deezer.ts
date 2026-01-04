@@ -127,6 +127,48 @@ class DeezerService {
     }
 
     /**
+     * Search for an artist and get their image URL, but only if the name matches closely
+     * This prevents conflating similar artist names (e.g., "GHOST" vs "ghøst")
+     */
+    async getArtistImageStrict(artistName: string): Promise<string | null> {
+        const cacheKey = `artist-strict:${artistName.toLowerCase()}`;
+        const cached = await this.getCached(cacheKey);
+        if (cached) return cached === "null" ? null : cached;
+
+        try {
+            const response = await axios.get(`${DEEZER_API}/search/artist`, {
+                params: { q: artistName, limit: 5 },
+                timeout: 5000,
+            });
+
+            const artists = response.data?.data || [];
+
+            // Normalize for comparison: lowercase, remove special chars
+            const normalize = (s: string) => s.toLowerCase().replace(/[^\w\s]/g, '').trim();
+            const normalizedSearch = normalize(artistName);
+
+            // Find an artist that matches closely
+            for (const artist of artists) {
+                const normalizedResult = normalize(artist.name || '');
+
+                // Check for exact match (after normalization)
+                if (normalizedResult === normalizedSearch) {
+                    const imageUrl = artist.picture_xl || artist.picture_big || artist.picture_medium || null;
+                    await this.setCache(cacheKey, imageUrl || "null");
+                    return imageUrl;
+                }
+            }
+
+            // No close match found
+            await this.setCache(cacheKey, "null");
+            return null;
+        } catch (error: any) {
+            console.error(`Deezer artist image (strict) error for ${artistName}:`, error.message);
+            return null;
+        }
+    }
+
+    /**
      * Search for an album and get its cover art URL
      */
     async getAlbumCover(artistName: string, albumName: string): Promise<string | null> {
