@@ -1838,6 +1838,7 @@ export interface LidarrRelease {
     title: string;
     indexerId: number;
     indexer?: string;
+    infoUrl?: string; // Link to the release on the tracker/indexer
     size?: number;
     seeders?: number;
     leechers?: number;

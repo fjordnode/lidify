@@ -526,6 +526,225 @@ router.get("/", async (req, res) => {
     }
 });
 
+// GET /downloads/releases/:albumMbid - Get available releases for an album (Interactive Search)
+router.get("/releases/:albumMbid", async (req, res) => {
+    try {
+        const { albumMbid } = req.params;
+        const { artistName, albumTitle } = req.query;
+
+        if (!albumMbid) {
+            return res.status(400).json({ error: "Missing albumMbid parameter" });
+        }
+
+        // Check if Lidarr is enabled
+        const lidarrEnabled = await lidarrService.isEnabled();
+        if (!lidarrEnabled) {
+            return res.status(400).json({ error: "Lidarr not configured" });
+        }
+
+        console.log(`\n[INTERACTIVE] Searching releases for: ${albumTitle || albumMbid}`);
+
+        // First, we need to ensure the album exists in Lidarr to get its ID
+        // This may involve adding the artist first
+        let lidarrAlbumId: number | null = null;
+
+        // Try to find the album in Lidarr by searching
+        const searchResults = await lidarrService.searchAlbum(
+            artistName as string || "",
+            albumTitle as string || "",
+            albumMbid
+        );
+
+        if (searchResults.length > 0) {
+            // Find exact match by MBID
+            const exactMatch = searchResults.find(a => a.foreignAlbumId === albumMbid);
+            if (exactMatch) {
+                lidarrAlbumId = exactMatch.id;
+                console.log(`   Found album in Lidarr search: ID ${lidarrAlbumId}`);
+            }
+        }
+
+        // If not found, we need to add the artist/album to Lidarr first
+        if (!lidarrAlbumId) {
+            console.log(`   Album not in Lidarr, need to add artist first...`);
+
+            // Get artist MBID from MusicBrainz
+            let artistMbid: string | undefined;
+            try {
+                const releaseGroup = await musicBrainzService.getReleaseGroup(albumMbid);
+                if (releaseGroup?.["artist-credit"]?.[0]?.artist) {
+                    artistMbid = releaseGroup["artist-credit"][0].artist.id;
+                }
+            } catch (mbError) {
+                console.warn(`   Could not get artist MBID from MusicBrainz`);
+            }
+
+            if (artistMbid && artistName) {
+                // Add artist to Lidarr (without downloading)
+                const artist = await lidarrService.addArtist(
+                    artistMbid,
+                    artistName as string,
+                    "/music",
+                    false,  // Don't auto-search
+                    false   // Don't monitor all albums
+                );
+
+                if (artist) {
+                    // Wait a moment for Lidarr to populate album catalog
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+
+                    // Now search for the album again
+                    const retryResults = await lidarrService.searchAlbum(
+                        artistName as string,
+                        albumTitle as string || "",
+                        albumMbid
+                    );
+
+                    const match = retryResults.find(a => a.foreignAlbumId === albumMbid);
+                    if (match) {
+                        lidarrAlbumId = match.id;
+                        console.log(`   Found album after adding artist: ID ${lidarrAlbumId}`);
+                    }
+                }
+            }
+        }
+
+        if (!lidarrAlbumId) {
+            return res.status(404).json({
+                error: "Album not found in Lidarr",
+                message: "Could not find or add this album to Lidarr. The album may not be available in Lidarr's metadata sources."
+            });
+        }
+
+        // Now fetch available releases from indexers
+        console.log(`   Fetching releases from indexers for album ID ${lidarrAlbumId}...`);
+        const releases = await lidarrService.getAlbumReleases(lidarrAlbumId);
+
+        console.log(`   Found ${releases.length} releases from indexers`);
+
+        // Transform releases for frontend
+        const formattedReleases = releases.map(release => ({
+            guid: release.guid,
+            title: release.title,
+            indexer: release.indexer || "Unknown",
+            indexerId: release.indexerId,
+            infoUrl: release.infoUrl || null,
+            size: release.size || 0,
+            sizeFormatted: formatBytes(release.size || 0),
+            seeders: release.seeders,
+            leechers: release.leechers,
+            protocol: release.protocol,
+            quality: release.quality?.quality?.name || "Unknown",
+            approved: release.approved,
+            rejected: release.rejected,
+            rejections: release.rejections || [],
+        }));
+
+        res.json({
+            albumMbid,
+            lidarrAlbumId,
+            releases: formattedReleases,
+            total: formattedReleases.length,
+        });
+    } catch (error: any) {
+        console.error("Get releases error:", error);
+        res.status(500).json({ error: "Failed to fetch releases", message: error.message });
+    }
+});
+
+// POST /downloads/grab - Grab a specific release (Interactive Download)
+router.post("/grab", async (req, res) => {
+    try {
+        const {
+            guid,
+            indexerId,
+            albumMbid,
+            lidarrAlbumId,
+            artistName,
+            albumTitle,
+            title: releaseTitle
+        } = req.body;
+        const userId = req.user!.id;
+
+        if (!guid || !lidarrAlbumId) {
+            return res.status(400).json({ error: "Missing required fields: guid, lidarrAlbumId" });
+        }
+
+        // Check if Lidarr is enabled
+        const lidarrEnabled = await lidarrService.isEnabled();
+        if (!lidarrEnabled) {
+            return res.status(400).json({ error: "Lidarr not configured" });
+        }
+
+        console.log(`\n[INTERACTIVE] Grabbing release: ${releaseTitle || guid}`);
+        console.log(`   Album: ${artistName} - ${albumTitle}`);
+        console.log(`   GUID: ${guid}`);
+
+        // Create download job to track this
+        const subject = `${artistName || "Unknown"} - ${albumTitle || "Unknown"}`;
+        const job = await prisma.downloadJob.create({
+            data: {
+                userId,
+                subject,
+                type: "album",
+                targetMbid: albumMbid,
+                status: "processing",
+                lidarrAlbumId,
+                metadata: {
+                    downloadType: "library",
+                    rootFolderPath: "/music",
+                    artistName,
+                    albumTitle,
+                    interactiveDownload: true,
+                    selectedRelease: releaseTitle || guid,
+                },
+            },
+        });
+
+        // Grab the specific release
+        const success = await lidarrService.grabRelease({
+            guid,
+            indexerId: indexerId || 0,
+            title: releaseTitle || "",
+            protocol: "torrent",
+            approved: true,
+            rejected: false,
+        });
+
+        if (!success) {
+            await prisma.downloadJob.update({
+                where: { id: job.id },
+                data: {
+                    status: "failed",
+                    error: "Failed to grab release from indexer",
+                    completedAt: new Date(),
+                },
+            });
+            return res.status(500).json({ error: "Failed to grab release" });
+        }
+
+        console.log(`   Release grabbed successfully, job ID: ${job.id}`);
+
+        res.json({
+            success: true,
+            jobId: job.id,
+            message: `Downloading "${albumTitle}" - release grabbed from indexer`,
+        });
+    } catch (error: any) {
+        console.error("Grab release error:", error);
+        res.status(500).json({ error: "Failed to grab release", message: error.message });
+    }
+});
+
+// Helper function to format bytes
+function formatBytes(bytes: number): string {
+    if (bytes === 0) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB", "TB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+}
+
 // POST /downloads/keep-track - Keep a discovery track (move to permanent library)
 router.post("/keep-track", async (req, res) => {
     try {
