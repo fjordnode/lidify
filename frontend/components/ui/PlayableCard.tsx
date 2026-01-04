@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, ReactNode, memo } from "react";
+import { useState, ReactNode, memo, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Play, Pause, Check, Download } from "lucide-react";
@@ -49,6 +49,12 @@ const PlayableCard = memo(function PlayableCard({
     ...props
 }: PlayableCardProps) {
     const [isHovered, setIsHovered] = useState(false);
+    const [imageError, setImageError] = useState(false);
+
+    // Handle image load error (e.g., Cover Art Archive 404)
+    const handleImageError = useCallback(() => {
+        setImageError(true);
+    }, []);
 
     // Handle Link click to prevent navigation when clicking on interactive elements
     const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
@@ -70,7 +76,7 @@ const PlayableCard = memo(function PlayableCard({
                     "relative w-full h-full bg-[#282828] flex items-center justify-center overflow-hidden shadow-lg",
                     circular ? "rounded-full" : "rounded-md"
                 )}>
-                    {coverArt ? (
+                    {coverArt && !imageError ? (
                         <Image
                             src={coverArt}
                             alt={title}
@@ -81,6 +87,7 @@ const PlayableCard = memo(function PlayableCard({
                                 isHovered && "scale-105"
                             )}
                             unoptimized
+                            onError={handleImageError}
                         />
                     ) : (
                         placeholderIcon || (

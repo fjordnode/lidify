@@ -15,6 +15,7 @@ import { fanartService } from "../services/fanart";
 import { deezerService } from "../services/deezer";
 import { musicBrainzService } from "../services/musicbrainz";
 import { coverArtService } from "../services/coverArt";
+import { imageProviderService } from "../services/imageProvider";
 import { getSystemSettings } from "../utils/systemSettings";
 import { AudioStreamingService } from "../services/audioStreaming";
 import { scanQueue } from "../workers/queues";
@@ -1011,7 +1012,7 @@ router.get("/artists/:id", async (req, res) => {
                 orderBy: { year: "desc" },
                 include: {
                     tracks: {
-                        orderBy: { trackNo: "asc" },
+                        orderBy: [{ discNo: "asc" }, { trackNo: "asc" }],
                         take: 10, // Top tracks
                         include: {
                             album: {
@@ -1121,12 +1122,50 @@ router.get("/artists/:id", async (req, res) => {
 
         // ========== ALWAYS include albums from database (actual owned files) ==========
         // These are albums with actual tracks on disk - they MUST show as owned
-        const dbAlbums = artist.albums.map((album) => ({
-            ...album,
-            owned: true, // If it's in the database with tracks, user owns it!
-            coverArt: album.coverUrl,
-            source: "database" as const,
-        }));
+        // Don't wait for cover fetches - return endpoint URL for lazy loading
+        const artistName = artist.name;
+        const dbAlbumsCoverPromises = artist.albums.map(async (album) => {
+            const hasValidMbid = album.rgMbid && !album.rgMbid.startsWith("temp-");
+            let coverArt = album.coverUrl;
+
+            // If no cover in DB, check Redis cache or return lazy-load endpoint URL
+            if (!coverArt && hasValidMbid) {
+                const cacheKey = `caa:${album.rgMbid}`;
+                try {
+                    const cached = await redisClient.get(cacheKey);
+                    if (cached === "NOT_FOUND") {
+                        // Already tried, nothing found
+                        coverArt = null;
+                    } else if (cached) {
+                        // Use cached URL directly
+                        coverArt = cached;
+                    } else {
+                        // Cache miss - return endpoint URL for lazy loading
+                        // Browser will fetch this, endpoint will try Deezer -> CAA -> Fanart.tv
+                        const params = new URLSearchParams({
+                            artist: artistName,
+                            album: album.title,
+                        });
+                        coverArt = `/api/library/album-cover/${album.rgMbid}?${params}`;
+                    }
+                } catch (err) {
+                    // Redis error - return endpoint URL as fallback
+                    const params = new URLSearchParams({
+                        artist: artistName,
+                        album: album.title,
+                    });
+                    coverArt = `/api/library/album-cover/${album.rgMbid}?${params}`;
+                }
+            }
+
+            return {
+                ...album,
+                owned: true,
+                coverArt,
+                source: "database" as const,
+            };
+        });
+        const dbAlbums = await Promise.all(dbAlbumsCoverPromises);
 
         console.log(
             `[Artist] Found ${dbAlbums.length} albums from database (actual owned files)`
@@ -1207,22 +1246,35 @@ router.get("/artists/:id", async (req, res) => {
                 );
 
                 // Transform MusicBrainz release groups to album format
-                // PERFORMANCE: Only check Redis cache for covers, don't make API calls
-                // This makes artist pages load instantly after the first visit
+                // Don't wait for cover fetches - return endpoint URL for lazy loading
                 const mbAlbums = await Promise.all(
                     filteredReleaseGroups.map(async (rg: any) => {
                         let coverUrl = null;
 
-                        // Only check Redis cache - don't make external API calls
-                        // Covers will be fetched lazily by the frontend or during enrichment
                         const cacheKey = `caa:${rg.id}`;
                         try {
                             const cached = await redisClient.get(cacheKey);
-                            if (cached && cached !== "NOT_FOUND") {
+                            if (cached === "NOT_FOUND") {
+                                // Already tried, nothing found
+                                coverUrl = null;
+                            } else if (cached) {
+                                // Use cached URL directly
                                 coverUrl = cached;
+                            } else {
+                                // Cache miss - return endpoint URL for lazy loading
+                                const params = new URLSearchParams({
+                                    artist: artist.name,
+                                    album: rg.title,
+                                });
+                                coverUrl = `/api/library/album-cover/${rg.id}?${params}`;
                             }
                         } catch (err) {
-                            // Redis error, continue without cover
+                            // Redis error - return endpoint URL as fallback
+                            const params = new URLSearchParams({
+                                artist: artist.name,
+                                album: rg.title,
+                            });
+                            coverUrl = `/api/library/album-cover/${rg.id}?${params}`;
                         }
 
                         return {
@@ -1753,7 +1805,7 @@ router.get("/albums/:id", async (req, res) => {
                     },
                 },
                 tracks: {
-                    orderBy: { trackNo: "asc" },
+                    orderBy: [{ discNo: "asc" }, { trackNo: "asc" }],
                 },
             },
         });
@@ -1771,7 +1823,7 @@ router.get("/albums/:id", async (req, res) => {
                         },
                     },
                     tracks: {
-                        orderBy: { trackNo: "asc" },
+                        orderBy: [{ discNo: "asc" }, { trackNo: "asc" }],
                     },
                 },
             });
@@ -1781,19 +1833,14 @@ router.get("/albums/:id", async (req, res) => {
             return res.status(404).json({ error: "Album not found" });
         }
 
-        // Check ownership
-        const owned = await prisma.ownedAlbum.findUnique({
-            where: {
-                artistId_rgMbid: {
-                    artistId: album.artistId,
-                    rgMbid: album.rgMbid,
-                },
-            },
-        });
+        // Check ownership: album is owned if it has tracks (actual files on disk)
+        // This is more reliable than OwnedAlbum table which can get out of sync
+        // when external tools like Beets update MBIDs
+        const hasTracksOnDisk = album.tracks && album.tracks.length > 0;
 
         res.json({
             ...album,
-            owned: !!owned,
+            owned: hasTracksOnDisk,
             coverArt: album.coverUrl,
         });
     } catch (error) {
@@ -1819,7 +1866,7 @@ router.get("/tracks", async (req, res) => {
                 where,
                 skip: offset,
                 take: limit,
-                orderBy: albumId ? { trackNo: "asc" } : { id: "desc" },
+                orderBy: albumId ? [{ discNo: "asc" }, { trackNo: "asc" }] : { id: "desc" },
                 include: {
                     album: {
                         include: {
@@ -2273,25 +2320,58 @@ router.get("/cover-art/:id?", imageLimiter, async (req, res) => {
 });
 
 // GET /library/album-cover/:mbid - Fetch and cache album cover by MBID
-// This is called lazily by the frontend when an album doesn't have a cached cover
+// Returns a redirect to the cover image (Deezer -> CAA -> Fanart.tv fallback chain)
+// Used by frontend for lazy-loading covers without blocking page load
 router.get("/album-cover/:mbid", imageLimiter, async (req, res) => {
     try {
         const { mbid } = req.params;
+        const { artist, album } = req.query; // Optional: artist/album name for Deezer search
 
         if (!mbid || mbid.startsWith("temp-")) {
             return res.status(400).json({ error: "Valid MBID required" });
         }
 
-        // Fetch from Cover Art Archive (this uses caching internally)
-        const coverUrl = await coverArtService.getCoverArt(mbid);
+        const cacheKey = `caa:${mbid}`;
 
-        if (!coverUrl) {
-            // Return 204 No Content instead of 404 to avoid console spam
-            // Cover Art Archive doesn't have covers for all albums
-            return res.status(204).send();
+        // Check cache first
+        try {
+            const cached = await redisClient.get(cacheKey);
+            if (cached === "NOT_FOUND") {
+                return res.status(204).send(); // No cover exists
+            }
+            if (cached) {
+                // Redirect to cached URL
+                return res.redirect(302, cached);
+            }
+        } catch (err) {
+            // Redis error, continue to fetch
         }
 
-        res.json({ coverUrl });
+        // Cache miss - fetch using imageProviderService (Deezer -> CAA -> Fanart.tv)
+        let coverUrl: string | null = null;
+
+        if (artist && album) {
+            // If artist/album provided, try Deezer first (most reliable)
+            const result = await imageProviderService.getAlbumCover(
+                artist as string,
+                album as string,
+                mbid
+            );
+            coverUrl = result?.url || null;
+        } else {
+            // Fallback to CAA only
+            coverUrl = await coverArtService.getCoverArt(mbid);
+        }
+
+        if (coverUrl) {
+            // Cache and redirect
+            await redisClient.setEx(cacheKey, 30 * 24 * 60 * 60, coverUrl);
+            return res.redirect(302, coverUrl);
+        } else {
+            // Cache the miss
+            await redisClient.setEx(cacheKey, 24 * 60 * 60, "NOT_FOUND");
+            return res.status(204).send();
+        }
     } catch (error) {
         console.error("Get album cover error:", error);
         res.status(500).json({ error: "Failed to fetch cover art" });

@@ -273,6 +273,36 @@ export class MusicScannerService {
     }
 
     /**
+     * Strip disc number suffixes from album titles to merge multi-disc albums.
+     * The actual disc number is read from the disc metadata tag separately.
+     *
+     * Examples:
+     *   "Master Of Reality {2016 Deluxe Ed.} (Disc 1)" -> "Master Of Reality {2016 Deluxe Ed.}"
+     *   "Abbey Road [Disc 2]" -> "Abbey Road"
+     *   "The Wall - CD 1" -> "The Wall"
+     *   "Mellon Collie (Disc One)" -> "Mellon Collie"
+     */
+    private stripDiscSuffix(albumTitle: string): string {
+        // Patterns to remove (case-insensitive):
+        // - (Disc 1), (Disc 2), [Disc 1], {Disc 1}
+        // - (CD 1), (CD 2), [CD 1], {CD 1}
+        // - (Disc One), (Disc Two), etc.
+        // - - Disc 1, - CD 1 (with leading dash)
+        const discPatterns = [
+            /\s*[\(\[\{]\s*(?:disc|cd)\s*\d+\s*[\)\]\}]\s*$/i,
+            /\s*[\(\[\{]\s*(?:disc|cd)\s*(?:one|two|three|four|five|six|seven|eight|nine|ten)\s*[\)\]\}]\s*$/i,
+            /\s*-\s*(?:disc|cd)\s*\d+\s*$/i,
+            /\s*-\s*(?:disc|cd)\s*(?:one|two|three|four|five|six|seven|eight|nine|ten)\s*$/i,
+        ];
+
+        let result = albumTitle;
+        for (const pattern of discPatterns) {
+            result = result.replace(pattern, '');
+        }
+        return result.trim();
+    }
+
+    /**
      * Check if a file path is within the discovery folder
      * Discovery albums are stored in paths like "discovery/Artist/Album/track.flac"
      * or "Discover/Artist/Album/track.flac" (case-insensitive)
@@ -486,6 +516,7 @@ export class MusicScannerService {
             metadata.common.title ||
             path.basename(relativePath, path.extname(relativePath));
         const trackNo = metadata.common.track.no || 0;
+        const discNo = metadata.common.disk?.no || 1;
         const duration = Math.floor(metadata.format.duration || 0);
         const mime = metadata.format.codec || "audio/mpeg";
 
@@ -498,7 +529,8 @@ export class MusicScannerService {
             metadata.common.artist ||
             "Unknown Artist";
 
-        const albumTitle = metadata.common.album || "Unknown Album";
+        const rawAlbumTitle = metadata.common.album || "Unknown Album";
+        const albumTitle = this.stripDiscSuffix(rawAlbumTitle);
         const year = metadata.common.year || null;
 
         // ALWAYS extract primary artist first - this handles both:
@@ -622,6 +654,28 @@ export class MusicScannerService {
                 title: albumTitle,
             },
         });
+
+        // If album exists with temp MBID but file has real MBID, update it
+        const albumMbidFromFile = metadata.common.musicbrainz_releasegroupid;
+        if (album && album.rgMbid?.startsWith("temp-") && albumMbidFromFile) {
+            console.log(`[Scanner] Updating temp MBID for "${albumTitle}" with real MBID from file: ${albumMbidFromFile}`);
+            try {
+                album = await prisma.album.update({
+                    where: { id: album.id },
+                    data: { rgMbid: albumMbidFromFile },
+                });
+                // Also update OwnedAlbum if it exists
+                await prisma.ownedAlbum.updateMany({
+                    where: { artistId: artist.id, rgMbid: { startsWith: "temp-" } },
+                    data: { rgMbid: albumMbidFromFile },
+                });
+            } catch (err: any) {
+                // MBID might already exist for another album (duplicate)
+                if (err.code !== "P2002") {
+                    console.error(`[Scanner] Failed to update MBID for "${albumTitle}":`, err);
+                }
+            }
+        }
 
         if (!album) {
             // Try to find by release group MBID if available
@@ -791,6 +845,7 @@ export class MusicScannerService {
                 albumId: album.id,
                 title,
                 trackNo,
+                discNo,
                 duration,
                 mime,
                 filePath: relativePath,
@@ -801,6 +856,7 @@ export class MusicScannerService {
                 albumId: album.id,
                 title,
                 trackNo,
+                discNo,
                 duration,
                 mime,
                 fileModified: stats.mtime,

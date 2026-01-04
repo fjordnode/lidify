@@ -29,6 +29,24 @@ export interface MoodMixParams {
     limit?: number;
 }
 
+// Album release from Lidarr indexer search
+export interface AlbumRelease {
+    guid: string;
+    title: string;
+    indexer: string;
+    indexerId: number;
+    infoUrl: string | null;
+    size: number;
+    sizeFormatted: string;
+    seeders?: number;
+    leechers?: number;
+    protocol: string;
+    quality: string;
+    approved: boolean;
+    rejected: boolean;
+    rejections: string[];
+}
+
 // OpenRouter model from API
 export interface OpenRouterModel {
     id: string;
@@ -515,6 +533,18 @@ class ApiClient {
             return url;
         }
 
+        // Check if this is an album-cover lazy-load path (served by album-cover endpoint)
+        if (coverId && coverId.startsWith("/api/library/album-cover/")) {
+            // Return with base URL prepended
+            const url = `${baseUrl}${coverId}`;
+            if (this.token) {
+                // Append token to existing query params
+                const separator = coverId.includes("?") ? "&" : "?";
+                return `${url}${separator}token=${encodeURIComponent(this.token)}`;
+            }
+            return url;
+        }
+
         // Check if coverId is an external URL (needs to be proxied)
         if (
             coverId &&
@@ -844,6 +874,39 @@ class ApiClient {
     async deleteDownload(id: string) {
         return this.request<{ success: boolean }>(`/downloads/${id}`, {
             method: "DELETE",
+        });
+    }
+
+    // Interactive Download (search and select specific releases)
+    async getAlbumReleases(
+        albumMbid: string,
+        artistName: string,
+        albumTitle: string
+    ): Promise<{
+        albumMbid: string;
+        lidarrAlbumId: number;
+        releases: AlbumRelease[];
+        total: number;
+    }> {
+        const params = new URLSearchParams({
+            artistName,
+            albumTitle,
+        });
+        return this.request(`/downloads/releases/${albumMbid}?${params.toString()}`);
+    }
+
+    async grabRelease(options: {
+        guid: string;
+        indexerId: number;
+        albumMbid: string;
+        lidarrAlbumId: number;
+        artistName: string;
+        albumTitle: string;
+        title: string;
+    }): Promise<{ success: boolean; jobId: string; message: string }> {
+        return this.request("/downloads/grab", {
+            method: "POST",
+            body: JSON.stringify(options),
         });
     }
 
