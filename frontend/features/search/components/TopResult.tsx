@@ -20,9 +20,11 @@ export function TopResult({ libraryArtist, discoveryArtist }: TopResultProps) {
     // Get the display name
     const name = libraryArtist?.name || discoveryArtist?.name || "";
     
-    // Get the artist ID for linking - prefer MBID for consistent URLs
+    // Get the artist ID for linking
+    // Library artists: always use internal ID (mbid can be temp-*)
+    // Discovery artists: use mbid or encoded name
     const artistId = isLibrary
-        ? libraryArtist!.mbid || libraryArtist!.id
+        ? libraryArtist!.id
         : discoveryArtist?.mbid || encodeURIComponent(name);
 
     // Get the image URL

@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Edit, X, Save, ExternalLink } from "lucide-react";
+import { Edit, X, Save } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { GradientSpinner } from "./ui/GradientSpinner";
+import { MusicBrainzLookup } from "./ui/MusicBrainzLookup";
 
 interface MetadataEditorProps {
     type: "artist" | "album" | "track";
@@ -20,6 +21,7 @@ interface MetadataEditorProps {
         coverUrl?: string;
         heroUrl?: string;
     };
+    artistName?: string; // For album MBID lookup, to filter by artist
     onSave?: (updatedData: any) => void;
 }
 
@@ -32,6 +34,7 @@ export function MetadataEditor({
     type,
     id,
     currentData,
+    artistName,
     onSave,
 }: MetadataEditorProps) {
     const [isOpen, setIsOpen] = useState(false);
@@ -212,51 +215,29 @@ export function MetadataEditor({
                             <div>
                                 <label className="block text-sm font-bold text-white mb-2">
                                     MusicBrainz ID
-                                    <span className="text-xs text-gray-400 ml-2">
-                                        (leave empty to auto-fetch)
-                                    </span>
                                 </label>
-                                <div className="flex gap-2">
-                                    <input
-                                        type="text"
-                                        value={
+                                <MusicBrainzLookup
+                                    type={type === "album" ? "album" : "artist"}
+                                    currentValue={
+                                        type === "artist"
+                                            ? formData.mbid || ""
+                                            : type === "album"
+                                            ? formData.rgMbid || ""
+                                            : formData.mbid || ""
+                                    }
+                                    currentName={formData.name || formData.title}
+                                    artistName={artistName}
+                                    onSelect={(mbid) =>
+                                        handleChange(
                                             type === "artist"
-                                                ? formData.mbid || ""
+                                                ? "mbid"
                                                 : type === "album"
-                                                ? formData.rgMbid || ""
-                                                : formData.mbid || ""
-                                        }
-                                        onChange={(e) =>
-                                            handleChange(
-                                                type === "artist"
-                                                    ? "mbid"
-                                                    : type === "album"
-                                                    ? "rgMbid"
-                                                    : "mbid",
-                                                e.target.value
-                                            )
-                                        }
-                                        placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                                        className="flex-1 px-4 py-2 bg-[#181818] border border-white/10 rounded text-white focus:border-white/30 focus:outline-none font-mono text-sm"
-                                    />
-                                    {((type === "artist" && formData.mbid) ||
-                                      (type === "album" && formData.rgMbid)) &&
-                                      !((type === "artist" ? formData.mbid : formData.rgMbid)?.startsWith("temp-")) && (
-                                        <a
-                                            href={
-                                                type === "artist"
-                                                    ? `https://musicbrainz.org/artist/${formData.mbid}`
-                                                    : `https://musicbrainz.org/release-group/${formData.rgMbid}`
-                                            }
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="px-3 py-2 bg-[#181818] border border-white/10 rounded text-white/70 hover:text-white hover:border-white/30 transition-colors flex items-center gap-1"
-                                            title="Open in MusicBrainz"
-                                        >
-                                            <ExternalLink className="w-4 h-4" />
-                                        </a>
-                                    )}
-                                </div>
+                                                ? "rgMbid"
+                                                : "mbid",
+                                            mbid
+                                        )
+                                    }
+                                />
                             </div>
 
                             {/* Image URL */}
