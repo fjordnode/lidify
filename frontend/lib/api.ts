@@ -1592,6 +1592,41 @@ class ApiClient {
         });
     }
 
+    // MusicBrainz Search (for MBID editor)
+    async searchMusicBrainzArtists(query: string): Promise<{
+        artists: Array<{
+            mbid: string;
+            name: string;
+            disambiguation: string | null;
+            country: string | null;
+            type: string | null;
+            score: number;
+        }>;
+    }> {
+        return this.request(`/enrichment/search/musicbrainz/artists?q=${encodeURIComponent(query)}`);
+    }
+
+    async searchMusicBrainzReleaseGroups(
+        query: string,
+        artistName?: string
+    ): Promise<{
+        albums: Array<{
+            rgMbid: string;
+            title: string;
+            primaryType: string;
+            secondaryTypes: string[];
+            firstReleaseDate: string | null;
+            artistCredit: string;
+            score: number;
+        }>;
+    }> {
+        let url = `/enrichment/search/musicbrainz/release-groups?q=${encodeURIComponent(query)}`;
+        if (artistName) {
+            url += `&artist=${encodeURIComponent(artistName)}`;
+        }
+        return this.request(url);
+    }
+
     // Homepage
     async getHomepageGenres(limit = 4) {
         return this.request<any[]>(`/homepage/genres?limit=${limit}`);

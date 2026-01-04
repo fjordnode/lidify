@@ -273,32 +273,51 @@ export class MusicScannerService {
     }
 
     /**
-     * Strip disc number suffixes from album titles to merge multi-disc albums.
+     * Strip disc number prefixes/suffixes from album titles to merge multi-disc albums.
      * The actual disc number is read from the disc metadata tag separately.
      *
-     * Examples:
+     * Examples (suffixes):
      *   "Master Of Reality {2016 Deluxe Ed.} (Disc 1)" -> "Master Of Reality {2016 Deluxe Ed.}"
      *   "Abbey Road [Disc 2]" -> "Abbey Road"
      *   "The Wall - CD 1" -> "The Wall"
      *   "Mellon Collie (Disc One)" -> "Mellon Collie"
+     * Examples (prefixes):
+     *   "CD1 - (Mankind) The Crafty Ape" -> "(Mankind) The Crafty Ape"
+     *   "Disc 2 - Abbey Road" -> "Abbey Road"
      */
     private stripDiscSuffix(albumTitle: string): string {
-        // Patterns to remove (case-insensitive):
+        // SUFFIX patterns to remove (case-insensitive):
         // - (Disc 1), (Disc 2), [Disc 1], {Disc 1}
         // - (CD 1), (CD 2), [CD 1], {CD 1}
         // - (Disc One), (Disc Two), etc.
         // - - Disc 1, - CD 1 (with leading dash)
-        const discPatterns = [
+        const suffixPatterns = [
             /\s*[\(\[\{]\s*(?:disc|cd)\s*\d+\s*[\)\]\}]\s*$/i,
             /\s*[\(\[\{]\s*(?:disc|cd)\s*(?:one|two|three|four|five|six|seven|eight|nine|ten)\s*[\)\]\}]\s*$/i,
             /\s*-\s*(?:disc|cd)\s*\d+\s*$/i,
             /\s*-\s*(?:disc|cd)\s*(?:one|two|three|four|five|six|seven|eight|nine|ten)\s*$/i,
         ];
 
+        // PREFIX patterns to remove (case-insensitive):
+        // - CD1 - Album, CD 1 - Album, Disc1 - Album, Disc 1 - Album
+        // - CD1: Album, Disc 1: Album (with colon)
+        const prefixPatterns = [
+            /^(?:disc|cd)\s*\d+\s*[-:]\s*/i,
+            /^(?:disc|cd)\s*(?:one|two|three|four|five|six|seven|eight|nine|ten)\s*[-:]\s*/i,
+        ];
+
         let result = albumTitle;
-        for (const pattern of discPatterns) {
+
+        // Remove suffixes
+        for (const pattern of suffixPatterns) {
             result = result.replace(pattern, '');
         }
+
+        // Remove prefixes
+        for (const pattern of prefixPatterns) {
+            result = result.replace(pattern, '');
+        }
+
         return result.trim();
     }
 
@@ -532,6 +551,7 @@ export class MusicScannerService {
         const rawAlbumTitle = metadata.common.album || "Unknown Album";
         const albumTitle = this.stripDiscSuffix(rawAlbumTitle);
         const year = metadata.common.year || null;
+        const genres = metadata.common.genre || []; // Array of genre strings from file tags
 
         // ALWAYS extract primary artist first - this handles both:
         // - Featured artists: "Artist A feat. Artist B" -> "Artist A"  
@@ -677,6 +697,14 @@ export class MusicScannerService {
             }
         }
 
+        // If album exists but has no genres and file has genres, update it
+        if (album && (!album.genres || (Array.isArray(album.genres) && album.genres.length === 0)) && genres.length > 0) {
+            album = await prisma.album.update({
+                where: { id: album.id },
+                data: { genres },
+            });
+        }
+
         if (!album) {
             // Try to find by release group MBID if available
             const albumMbid = metadata.common.musicbrainz_releasegroupid;
@@ -757,6 +785,7 @@ export class MusicScannerService {
                         artistId: artist.id,
                         rgMbid,
                         year,
+                        genres: genres.length > 0 ? genres : undefined,
                         primaryType: "Album",
                         location: isDiscoveryAlbum ? "DISCOVER" : "LIBRARY",
                     },

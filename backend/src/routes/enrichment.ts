@@ -367,6 +367,92 @@ router.post("/repair/album-covers", requireAdmin, async (req, res) => {
 });
 
 /**
+ * GET /enrichment/search/musicbrainz/artists
+ * Search MusicBrainz for artists by name
+ * Used by the MBID editor to help users find the correct artist MBID
+ */
+router.get("/search/musicbrainz/artists", async (req, res) => {
+    try {
+        const query = req.query.q as string;
+        if (!query || query.length < 2) {
+            return res.status(400).json({ error: "Query must be at least 2 characters" });
+        }
+
+        const results = await musicBrainzService.searchArtist(query, 10);
+
+        // Transform results for the UI
+        const artists = results.map((artist: any) => ({
+            mbid: artist.id,
+            name: artist.name,
+            disambiguation: artist.disambiguation || null,
+            country: artist.country || null,
+            type: artist["type"] || null,
+            score: artist.score || 0,
+        }));
+
+        res.json({ artists });
+    } catch (error: any) {
+        console.error("MusicBrainz artist search error:", error);
+        res.status(500).json({ error: error.message || "Search failed" });
+    }
+});
+
+/**
+ * GET /enrichment/search/musicbrainz/release-groups
+ * Search MusicBrainz for release groups (albums) by name
+ * Used by the MBID editor to help users find the correct release group MBID
+ */
+router.get("/search/musicbrainz/release-groups", async (req, res) => {
+    try {
+        const query = req.query.q as string;
+        const artistName = req.query.artist as string;
+
+        if (!query || query.length < 2) {
+            return res.status(400).json({ error: "Query must be at least 2 characters" });
+        }
+
+        // Build search query - optionally filter by artist
+        let searchQuery = `releasegroup:"${query}"`;
+        if (artistName) {
+            searchQuery += ` AND artist:"${artistName}"`;
+        }
+
+        // Direct search using the raw query
+        const response = await fetch(
+            `https://musicbrainz.org/ws/2/release-group?query=${encodeURIComponent(searchQuery)}&limit=10&fmt=json`,
+            {
+                headers: {
+                    "User-Agent": "Lidify/1.0.0 (https://github.com/Chevron7Locked/lidify)",
+                },
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(`MusicBrainz API returned ${response.status}`);
+        }
+
+        const data = await response.json();
+        const releaseGroups = data["release-groups"] || [];
+
+        // Transform results for the UI
+        const albums = releaseGroups.map((rg: any) => ({
+            rgMbid: rg.id,
+            title: rg.title,
+            primaryType: rg["primary-type"] || "Album",
+            secondaryTypes: rg["secondary-types"] || [],
+            firstReleaseDate: rg["first-release-date"] || null,
+            artistCredit: rg["artist-credit"]?.map((ac: any) => ac.name || ac.artist?.name).join(", ") || "Unknown Artist",
+            score: rg.score || 0,
+        }));
+
+        res.json({ albums });
+    } catch (error: any) {
+        console.error("MusicBrainz release-group search error:", error);
+        res.status(500).json({ error: error.message || "Search failed" });
+    }
+});
+
+/**
  * GET /enrichment/repair/status
  * Get counts of albums needing repair
  */

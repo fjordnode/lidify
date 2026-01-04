@@ -116,6 +116,7 @@ export function AlbumHero({
                                         rgMbid: album.rgMbid,
                                         coverUrl: album.coverUrl,
                                     }}
+                                    artistName={album.artist?.name}
                                     onSave={async () => {
                                         await onReload();
                                     }}
