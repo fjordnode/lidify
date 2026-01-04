@@ -133,14 +133,10 @@ export class SearchService {
           ar.name as "artistName",
           a.year,
           a."coverUrl",
-          GREATEST(
-            ts_rank(a."searchVector", to_tsquery('simple', ${tsquery})),
-            ts_rank(ar."searchVector", to_tsquery('simple', ${tsquery}))
-          ) AS rank
+          ts_rank(a."searchVector", to_tsquery('simple', ${tsquery})) AS rank
         FROM "Album" a
         LEFT JOIN "Artist" ar ON a."artistId" = ar.id
         WHERE a."searchVector" @@ to_tsquery('simple', ${tsquery})
-           OR ar."searchVector" @@ to_tsquery('simple', ${tsquery})
         ORDER BY rank DESC, a.title ASC
         LIMIT ${limit}
         OFFSET ${offset}
@@ -149,8 +145,8 @@ export class SearchService {
             return results;
         } catch (error) {
             console.error("Album search error:", error);
-            // Fallback to ranked LIKE query - search both album title and artist name
-            // Rank: title-exact=100, title-starts=75, artist-starts=60, title-word=50, contains=25
+            // Fallback to ranked LIKE query - search album title only
+            // Rank: exact=100, starts-with=75, word-starts-with=50, contains=25
             const results = await prisma.$queryRaw<AlbumSearchResult[]>`
                 SELECT
                     a.id,
@@ -162,14 +158,12 @@ export class SearchService {
                     CASE
                         WHEN LOWER(a.title) = LOWER(${query}) THEN 100
                         WHEN LOWER(a.title) LIKE LOWER(${query + '%'}) THEN 75
-                        WHEN LOWER(ar.name) LIKE LOWER(${query + '%'}) THEN 60
                         WHEN LOWER(a.title) LIKE LOWER(${'% ' + query + '%'}) THEN 50
                         ELSE 25
                     END AS rank
                 FROM "Album" a
                 LEFT JOIN "Artist" ar ON a."artistId" = ar.id
                 WHERE a.title ILIKE ${'%' + query + '%'}
-                   OR ar.name ILIKE ${'%' + query + '%'}
                 ORDER BY rank DESC, a.title ASC
                 LIMIT ${limit}
                 OFFSET ${offset}

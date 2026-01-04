@@ -10,7 +10,17 @@ import { useMemo, useEffect, useRef } from "react";
 export function useArtistData() {
     const params = useParams();
     const router = useRouter();
-    const id = params.id as string;
+    // Decode the ID in case it's still URL-encoded (e.g., special characters like ø, fullwidth chars)
+    const rawId = params.id as string;
+    let id = rawId;
+    if (rawId) {
+        try {
+            id = decodeURIComponent(rawId);
+        } catch {
+            // Invalid URI encoding, use raw value
+            id = rawId;
+        }
+    }
     const { downloadStatus } = useDownloadContext();
     const prevActiveCountRef = useRef(downloadStatus.activeDownloads.length);
 

@@ -22,10 +22,10 @@ export function TopResult({ libraryArtist, discoveryArtist }: TopResultProps) {
     
     // Get the artist ID for linking
     // Library artists: always use internal ID (mbid can be temp-*)
-    // Discovery artists: use mbid or encoded name
+    // Discovery artists: use mbid or name (Next.js Link handles encoding)
     const artistId = isLibrary
         ? libraryArtist!.id
-        : discoveryArtist?.mbid || encodeURIComponent(name);
+        : discoveryArtist?.mbid || name;
 
     // Get the image URL
     const imageUrl = isLibrary 

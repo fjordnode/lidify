@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAudio } from "@/lib/audio-context";
 import { useDownloadContext } from "@/lib/download-context";
@@ -7,6 +8,7 @@ import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { useImageColor } from "@/hooks/useImageColor";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
+import { ReleaseSelectionModal } from "@/components/ui/ReleaseSelectionModal";
 
 // Hooks
 import { useArtistData } from "@/features/artist/hooks/useArtistData";
@@ -98,6 +100,14 @@ export default function ArtistPage() {
   // Download album handler
   function handleDownloadAlbum(album: any, e: React.MouseEvent) {
     downloadAlbum(album, artist?.name || "", e);
+  }
+
+  // Search album handler - opens release selection modal
+  const [searchAlbum, setSearchAlbum] = useState<any | null>(null);
+  function handleSearchAlbum(album: any, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setSearchAlbum(album);
   }
 
   // Start artist radio handler
@@ -223,6 +233,7 @@ export default function ArtistPage() {
             source={source}
             colors={colors}
             onDownloadAlbum={handleDownloadAlbum}
+            onSearchAlbum={handleSearchAlbum}
             isPendingDownload={isPendingByMbid}
           />
 
@@ -235,6 +246,17 @@ export default function ArtistPage() {
           )}
         </div>
       </div>
+
+      {/* Release Selection Modal for manual search */}
+      {searchAlbum && (
+        <ReleaseSelectionModal
+          isOpen={!!searchAlbum}
+          onClose={() => setSearchAlbum(null)}
+          albumMbid={searchAlbum.rgMbid || searchAlbum.mbid || searchAlbum.id}
+          artistName={artist.name}
+          albumTitle={searchAlbum.title}
+        />
+      )}
     </div>
   );
 }

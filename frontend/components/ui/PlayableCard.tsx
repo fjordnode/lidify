@@ -3,7 +3,7 @@
 import { useState, ReactNode, memo, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Play, Pause, Check, Download } from "lucide-react";
+import { Play, Pause, Check, Download, Search } from "lucide-react";
 import { Card, CardProps } from "./Card";
 import { cn } from "@/utils/cn";
 import type { ColorPalette } from "@/hooks/useImageColor";
@@ -20,6 +20,7 @@ export interface PlayableCardProps extends Omit<CardProps, "onPlay"> {
     isPlaying?: boolean;
     onPlay?: (e: React.MouseEvent) => void;
     onDownload?: (e: React.MouseEvent) => void;
+    onSearch?: (e: React.MouseEvent) => void;
     showPlayButton?: boolean;
     circular?: boolean;
     badge?: "owned" | "download" | null;
@@ -37,6 +38,7 @@ const PlayableCard = memo(function PlayableCard({
     isPlaying = false,
     onPlay,
     onDownload,
+    onSearch,
     showPlayButton = true,
     circular = false,
     badge = null,
@@ -133,39 +135,63 @@ const PlayableCard = memo(function PlayableCard({
                         </span>
                     )}
                     {badge === "download" && (
-                        <button
-                            onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                e.nativeEvent.stopImmediatePropagation();
-                                if (!isDownloading && onDownload) {
-                                    onDownload(e);
-                                }
-                            }}
-                            onMouseDown={(e) => {
-                                e.stopPropagation();
-                            }}
-                            disabled={isDownloading}
-                            className={cn(
-                                "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-all",
-                                isDownloading
-                                    ? "bg-gray-500/20 border border-gray-500/30 text-gray-500 cursor-not-allowed"
-                                    : "bg-yellow-500/20 hover:bg-yellow-500/30 border border-yellow-500/30 hover:border-yellow-500/50 text-yellow-400 hover:text-yellow-300"
-                            )}
-                            title={
-                                isDownloading
-                                    ? "Downloading..."
-                                    : "Download Album"
-                            }
-                        >
-                            <Download
+                        <div className="inline-flex items-center gap-1">
+                            {/* Download Button - Icon only */}
+                            <button
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    e.nativeEvent.stopImmediatePropagation();
+                                    if (!isDownloading && onDownload) {
+                                        onDownload(e);
+                                    }
+                                }}
+                                onMouseDown={(e) => {
+                                    e.stopPropagation();
+                                }}
+                                disabled={isDownloading}
                                 className={cn(
-                                    "w-3 h-3",
-                                    isDownloading && "animate-pulse"
+                                    "inline-flex items-center justify-center w-7 h-7 rounded-full transition-all",
+                                    isDownloading
+                                        ? "bg-gray-500/20 border border-gray-500/30 text-gray-500 cursor-not-allowed"
+                                        : "bg-yellow-500/20 hover:bg-yellow-500/30 border border-yellow-500/30 hover:border-yellow-500/50 text-yellow-400 hover:text-yellow-300"
                                 )}
-                            />
-                            {isDownloading ? "Downloading..." : "Download"}
-                        </button>
+                                title={isDownloading ? "Downloading..." : "Quick Download"}
+                            >
+                                <Download
+                                    className={cn(
+                                        "w-3.5 h-3.5",
+                                        isDownloading && "animate-pulse"
+                                    )}
+                                />
+                            </button>
+                            {/* Search Button - Icon only */}
+                            {onSearch && (
+                                <button
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        e.nativeEvent.stopImmediatePropagation();
+                                        if (!isDownloading) {
+                                            onSearch(e);
+                                        }
+                                    }}
+                                    onMouseDown={(e) => {
+                                        e.stopPropagation();
+                                    }}
+                                    disabled={isDownloading}
+                                    className={cn(
+                                        "inline-flex items-center justify-center w-7 h-7 rounded-full transition-all",
+                                        isDownloading
+                                            ? "bg-gray-500/20 border border-gray-500/30 text-gray-500 cursor-not-allowed"
+                                            : "bg-yellow-500/20 hover:bg-yellow-500/30 border border-yellow-500/30 hover:border-yellow-500/50 text-yellow-400 hover:text-yellow-300"
+                                    )}
+                                    title="Search for releases"
+                                >
+                                    <Search className="w-3.5 h-3.5" />
+                                </button>
+                            )}
+                        </div>
                     )}
                 </div>
             )}
