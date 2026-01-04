@@ -27,7 +27,7 @@ export function useSearchData({ query }: UseSearchDataProps): UseSearchDataRetur
         data: discoverData,
         isLoading: isDiscoverSearching,
         isFetching: isDiscoverFetching
-    } = useDiscoverSearchQuery(query, "all", 20);
+    } = useDiscoverSearchQuery(query, "all", 5);
 
     // Extract discover results
     const discoverResults = useMemo(() => {

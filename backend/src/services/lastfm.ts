@@ -532,20 +532,37 @@ class LastFmService {
     }
 
     private async buildArtistSearchResult(artist: any, enrich: boolean) {
+        const lastfmImage = this.getBestImage(artist.image);
+
         const baseResult = {
             type: "music",
             id: artist.mbid || artist.name,
             name: artist.name,
             listeners: parseInt(artist.listeners || "0", 10),
             url: artist.url,
-            image: this.getBestImage(artist.image),
+            image: lastfmImage,
             mbid: artist.mbid,
             bio: null,
             tags: [] as string[],
         };
 
         if (!enrich) {
-            return baseResult;
+            // Use Last.fm image if valid, otherwise try Deezer
+            const hasValidLastfmImage = lastfmImage &&
+                !lastfmImage.includes("2a96cbd8b46e442fc41c2b86b821562f");
+
+            if (hasValidLastfmImage) {
+                return baseResult;
+            }
+
+            // Fallback to Deezer
+            const deezerImage = await deezerService
+                .getArtistImage(artist.name)
+                .catch(() => null);
+            return {
+                ...baseResult,
+                image: deezerImage || lastfmImage,
+            };
         }
 
         const [info, fanartImage, deezerImage] = await Promise.all([
@@ -628,111 +645,22 @@ class LastFmService {
                 artist: query,
                 api_key: this.apiKey,
                 format: "json",
-                limit,
+                limit: limit + 5, // Request a few extra in case of duplicates
             });
 
             const artists = data.results?.artistmatches?.artist || [];
 
             console.log(
-                `\n [LAST.FM SEARCH] Found ${artists.length} artists (before filtering)`
+                `\n [LAST.FM SEARCH] Found ${artists.length} artists for "${query}"`
             );
 
-            const queryLower = query.toLowerCase().trim();
-            const words = queryLower.split(/\s+/).filter(Boolean);
-            const minWordMatches =
-                words.length <= 2
-                    ? words.length
-                    : Math.max(1, words.length - 1);
-
-            const escapeRegex = (text: string) =>
-                text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-            const wordMatchers = words.map((word) => {
-                if (word.length <= 2) {
-                    return (candidate: string) => candidate.includes(word);
-                }
-                const regex = new RegExp(`\\b${escapeRegex(word)}\\b`);
-                return (candidate: string) => regex.test(candidate);
-            });
-
-            const scoredArtists = artists
-                .map((artist: any) => {
-                    const normalizedName = this.normalizeName(artist.name);
-                    const similarity = fuzz.token_set_ratio(
-                        queryLower,
-                        normalizedName
-                    );
-                    const listeners = parseInt(artist.listeners || "0", 10);
-                    const hasMbid = Boolean(artist.mbid);
-                    const wordMatches = wordMatchers.filter((matcher) =>
-                        matcher(normalizedName)
-                    ).length;
-
-                    return {
-                        artist,
-                        similarity,
-                        listeners,
-                        hasMbid,
-                        wordMatches,
-                    };
-                })
-                .filter(({ similarity, wordMatches }) => {
-                    if (!queryLower) return true;
-                    return similarity >= 50 || wordMatches >= minWordMatches;
-                })
-                .sort((a, b) => {
-                    return (
-                        Number(b.hasMbid) - Number(a.hasMbid) ||
-                        b.wordMatches - a.wordMatches ||
-                        b.listeners - a.listeners ||
-                        b.similarity - a.similarity
-                    );
-                });
-
+            // Trust Last.fm's ordering, just deduplicate
             const uniqueArtists: any[] = [];
-
-            for (const entry of scoredArtists) {
-                const artist = entry.artist;
-                if (this.isDuplicateArtist(uniqueArtists, artist)) {
-                    continue;
+            for (const artist of artists) {
+                if (!this.isDuplicateArtist(uniqueArtists, artist)) {
+                    uniqueArtists.push(artist);
                 }
-
-                uniqueArtists.push(artist);
-            }
-
-            if (uniqueArtists.length > 0 && uniqueArtists.length < limit) {
-                const primaryArtist = uniqueArtists[0];
-                try {
-                    const fallbackSimilar = await this.getSimilarArtists(
-                        primaryArtist.mbid || "",
-                        primaryArtist.name,
-                        limit * 2
-                    );
-
-                    for (const similar of fallbackSimilar) {
-                        if (uniqueArtists.length >= limit) {
-                            break;
-                        }
-
-                        const candidate = {
-                            name: similar.name,
-                            mbid: similar.mbid,
-                            listeners: 0,
-                            url: similar.url,
-                            image: [],
-                        };
-
-                        if (this.isDuplicateArtist(uniqueArtists, candidate)) {
-                            continue;
-                        }
-
-                        uniqueArtists.push(candidate);
-                    }
-                } catch (error) {
-                    console.warn(
-                        "[LAST.FM SEARCH] Similar artist fallback failed:",
-                        error
-                    );
-                }
+                if (uniqueArtists.length >= limit) break;
             }
 
             const limitedArtists = uniqueArtists.slice(0, limit);
@@ -741,7 +669,7 @@ class LastFmService {
                 `  → Filtered to ${limitedArtists.length} relevant matches (limit: ${limit})`
             );
 
-            const enrichmentCount = Math.min(5, limitedArtists.length);
+            const enrichmentCount = Math.min(1, limitedArtists.length);
             const [enriched, fast] = await Promise.all([
                 Promise.all(
                     limitedArtists
