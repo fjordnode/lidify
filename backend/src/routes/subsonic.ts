@@ -374,7 +374,7 @@ router.get("/getAlbum.view", async (req: Request, res: Response) => {
             include: {
                 artist: { select: { id: true, name: true } },
                 tracks: {
-                    orderBy: { trackNo: "asc" },
+                    orderBy: [{ discNo: "asc" }, { trackNo: "asc" }],
                 },
             },
         });
