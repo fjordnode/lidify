@@ -118,6 +118,9 @@ export function initializeWebSocket(httpServer: HTTPServer): SocketIOServer {
             credentials: true,
         },
         path: "/api/socket.io",
+        // Increase timeouts to prevent disconnects through reverse proxies (Traefik/nginx)
+        pingTimeout: 60000,     // 60 seconds (default: 20s)
+        pingInterval: 25000,    // 25 seconds (default: 25s)
     });
 
     // Authentication middleware
@@ -226,6 +229,12 @@ export function initializeWebSocket(httpServer: HTTPServer): SocketIOServer {
 
             // Notify all user's devices about the new device
             broadcastDeviceList(io, user.id);
+
+            // Send current active player state to the newly registered device
+            // This is critical for reconnection - ensures the client knows if it should be playing
+            const currentActivePlayer = getActivePlayer(user.id);
+            socket.emit("playback:activePlayer", { deviceId: currentActivePlayer });
+            console.log(`[WebSocket] Sent active player state to ${data.deviceName}: ${currentActivePlayer}`);
         });
 
         // Handle playback state updates from a device
@@ -390,6 +399,15 @@ export function initializeWebSocket(httpServer: HTTPServer): SocketIOServer {
             if (device.lastSeen.getTime() < staleThreshold) {
                 activeDevices.delete(deviceId);
                 console.log(`[WebSocket] Removed stale device: ${device.deviceName}`);
+
+                // If this was the active player for its user, clear it
+                // This handles permanently disconnected devices (not brief reconnects)
+                const activePlayer = getActivePlayer(device.userId);
+                if (activePlayer === deviceId) {
+                    setActivePlayer(device.userId, null);
+                    io.to(`user:${device.userId}`).emit("playback:activePlayer", { deviceId: null });
+                    console.log(`[WebSocket] Cleared stale active player for user: ${device.userId}`);
+                }
             }
         }
     }, 60 * 1000);
