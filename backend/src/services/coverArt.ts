@@ -20,7 +20,7 @@ class CoverArtService {
             // Use rate limiter to prevent overwhelming Cover Art Archive
             const response = await rateLimiter.execute("coverart", () =>
                 axios.get(`${this.baseUrl}/release-group/${rgMbid}`, {
-                    timeout: 5000,
+                    timeout: 8000,
                 })
             );
 
@@ -33,7 +33,7 @@ class CoverArtService {
                     frontImage.thumbnails?.large || frontImage.image;
 
                 try {
-                    await redisClient.setEx(cacheKey, 2592000, coverUrl); // 30 days
+                    await redisClient.setEx(cacheKey, 365 * 24 * 60 * 60, coverUrl); // 1 year
                 } catch (err) {
                     console.warn("Redis set error:", err);
                 }
@@ -41,17 +41,17 @@ class CoverArtService {
                 return coverUrl;
             }
             
-            // No front image found - cache negative result
+            // No front image found - cache negative result (short TTL for potential transient issues)
             try {
-                await redisClient.setEx(cacheKey, 604800, "NOT_FOUND"); // 7 days
+                await redisClient.setEx(cacheKey, 3600, "NOT_FOUND"); // 1 hour
             } catch (err) {
                 // Ignore
             }
         } catch (error: any) {
             if (error.response?.status === 404) {
-                // No cover art available - cache the negative result
+                // No cover art available - cache the negative result (short TTL)
                 try {
-                    await redisClient.setEx(cacheKey, 604800, "NOT_FOUND"); // 7 days
+                    await redisClient.setEx(cacheKey, 3600, "NOT_FOUND"); // 1 hour
                 } catch (err) {
                     // Ignore
                 }
