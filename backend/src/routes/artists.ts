@@ -649,35 +649,38 @@ router.get("/discover/:nameOrMbid", async (req, res) => {
                     }
                 );
 
-                // Process albums with Deezer fallback
+                // Process albums with lazy-load cover URLs
+                // Instead of fetching covers inline (which causes rate limiting issues),
+                // return URLs that the frontend will lazy-load via /api/library/album-cover
                 albums = await Promise.all(
                     filteredReleaseGroups.map(async (rg: any) => {
-                        // Default to Cover Art Archive URL
-                        let coverUrl = `https://coverartarchive.org/release-group/${rg.id}/front-500`;
+                        let coverUrl: string | null = null;
+                        const cacheKey = `caa:${rg.id}`;
 
-                        // For first 10 albums, try Deezer as fallback if Cover Art Archive doesn't have it
-                        // (to avoid too many requests)
-                        const index = filteredReleaseGroups.indexOf(rg);
-                        if (index < 10) {
-                            try {
-                                const response = await fetch(coverUrl, {
-                                    method: "HEAD",
-                                    signal: AbortSignal.timeout(2000),
+                        try {
+                            const cached = await redisClient.get(cacheKey);
+                            if (cached === "NOT_FOUND") {
+                                // Already tried, nothing found
+                                coverUrl = null;
+                            } else if (cached) {
+                                // Use cached URL directly
+                                coverUrl = cached;
+                            } else {
+                                // Cache miss - return lazy-load endpoint URL
+                                // Frontend will fetch this, endpoint handles Deezer -> CAA -> Fanart.tv fallback
+                                const params = new URLSearchParams({
+                                    artist: artistName,
+                                    album: rg.title,
                                 });
-                                if (!response.ok) {
-                                    // Cover Art Archive doesn't have it, try Deezer
-                                    const deezerCover =
-                                        await deezerService.getAlbumCover(
-                                            artistName,
-                                            rg.title
-                                        );
-                                    if (deezerCover) {
-                                        coverUrl = deezerCover;
-                                    }
-                                }
-                            } catch (error) {
-                                // Silently fail and keep Cover Art Archive URL
+                                coverUrl = `/api/library/album-cover/${rg.id}?${params}`;
                             }
+                        } catch {
+                            // Redis error - return lazy-load URL as fallback
+                            const params = new URLSearchParams({
+                                artist: artistName,
+                                album: rg.title,
+                            });
+                            coverUrl = `/api/library/album-cover/${rg.id}?${params}`;
                         }
 
                         return {

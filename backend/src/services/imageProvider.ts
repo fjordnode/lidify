@@ -9,6 +9,7 @@
  */
 
 import axios from "axios";
+import { rateLimiter } from "./rateLimiter";
 
 export interface ImageSearchOptions {
     preferredSize?: "small" | "medium" | "large" | "extralarge" | "mega";
@@ -34,7 +35,7 @@ export class ImageProviderService {
         mbid?: string,
         options: ImageSearchOptions = {}
     ): Promise<ImageResult | null> {
-        const { timeout = 5000 } = options;
+        const { timeout = 8000 } = options;
 
         console.log(`[IMAGE] Searching for artist image: ${artistName}`);
 
@@ -109,7 +110,7 @@ export class ImageProviderService {
         rgMbid?: string,
         options: ImageSearchOptions = {}
     ): Promise<ImageResult | null> {
-        const { timeout = 5000 } = options;
+        const { timeout = 8000 } = options;
 
         console.log(
             `[IMAGE] Searching for album cover: ${artistName} - ${albumTitle}`
@@ -344,12 +345,15 @@ export class ImageProviderService {
         timeout: number
     ): Promise<ImageResult | null> {
         try {
-            const response = await axios.get(
-                `https://coverartarchive.org/release-group/${rgMbid}`,
-                {
-                    timeout,
-                    validateStatus: (status) => status === 200,
-                }
+            // Use rate limiter to prevent overwhelming Cover Art Archive
+            const response = await rateLimiter.execute("coverart", () =>
+                axios.get(
+                    `https://coverartarchive.org/release-group/${rgMbid}`,
+                    {
+                        timeout,
+                        validateStatus: (status) => status === 200,
+                    }
+                )
             );
 
             if (response.data.images && response.data.images.length > 0) {

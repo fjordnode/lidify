@@ -2279,18 +2279,29 @@ router.get("/cover-art/:id?", imageLimiter, async (req, res) => {
         // Generate ETag from content
         const etag = crypto.createHash("md5").update(imageBuffer).digest("hex");
 
-        // Cache in Redis for 7 days
+        // Cache in Redis for 90 days (cover art images are permanent)
         try {
             const contentType = imageResponse.headers.get("content-type");
             await redisClient.setEx(
                 cacheKey,
-                7 * 24 * 60 * 60, // 7 days
+                90 * 24 * 60 * 60, // 90 days
                 JSON.stringify({
                     etag,
                     contentType,
                     data: imageBuffer.toString("base64"),
                 })
             );
+
+            // If this was a CAA URL, also update the caa: cache so artist overview can find it
+            // This syncs the two caching systems
+            if (coverUrl.includes("coverartarchive.org/release-group/")) {
+                const mbidMatch = coverUrl.match(/release-group\/([a-f0-9-]+)/i);
+                if (mbidMatch) {
+                    const mbid = mbidMatch[1];
+                    await redisClient.setEx(`caa:${mbid}`, 365 * 24 * 60 * 60, coverUrl);
+                    console.log(`[COVER-ART] Also cached caa:${mbid} for artist overview`);
+                }
+            }
         } catch (cacheError) {
             console.warn("Redis cache write error:", cacheError);
         }
@@ -2322,10 +2333,12 @@ router.get("/cover-art/:id?", imageLimiter, async (req, res) => {
 // GET /library/album-cover/:mbid - Fetch and cache album cover by MBID
 // Returns a redirect to the cover image (Deezer -> CAA -> Fanart.tv fallback chain)
 // Used by frontend for lazy-loading covers without blocking page load
+// Add ?json=true to get JSON response instead of redirect (for JS fetch calls)
 router.get("/album-cover/:mbid", imageLimiter, async (req, res) => {
     try {
         const { mbid } = req.params;
-        const { artist, album } = req.query; // Optional: artist/album name for Deezer search
+        const { artist, album, json } = req.query; // Optional: artist/album name for Deezer search
+        const wantsJson = json === "true" || req.headers.accept?.includes("application/json");
 
         if (!mbid || mbid.startsWith("temp-")) {
             return res.status(400).json({ error: "Valid MBID required" });
@@ -2337,9 +2350,15 @@ router.get("/album-cover/:mbid", imageLimiter, async (req, res) => {
         try {
             const cached = await redisClient.get(cacheKey);
             if (cached === "NOT_FOUND") {
+                if (wantsJson) {
+                    return res.json({ coverUrl: null });
+                }
                 return res.status(204).send(); // No cover exists
             }
             if (cached) {
+                if (wantsJson) {
+                    return res.json({ coverUrl: cached });
+                }
                 // Redirect to cached URL
                 return res.redirect(302, cached);
             }
@@ -2364,12 +2383,30 @@ router.get("/album-cover/:mbid", imageLimiter, async (req, res) => {
         }
 
         if (coverUrl) {
-            // Cache and redirect
-            await redisClient.setEx(cacheKey, 30 * 24 * 60 * 60, coverUrl);
+            // Cache in Redis (1 year - cover art URLs are permanent)
+            await redisClient.setEx(cacheKey, 365 * 24 * 60 * 60, coverUrl);
+
+            // Persist to database if this album exists in library
+            // This ensures covers survive Redis cache flushes
+            try {
+                await prisma.album.updateMany({
+                    where: { rgMbid: mbid, coverUrl: null },
+                    data: { coverUrl },
+                });
+            } catch {
+                // Silently ignore - album may not exist in library (discovery albums)
+            }
+
+            if (wantsJson) {
+                return res.json({ coverUrl });
+            }
             return res.redirect(302, coverUrl);
         } else {
             // Cache the miss
             await redisClient.setEx(cacheKey, 24 * 60 * 60, "NOT_FOUND");
+            if (wantsJson) {
+                return res.json({ coverUrl: null });
+            }
             return res.status(204).send();
         }
     } catch (error) {

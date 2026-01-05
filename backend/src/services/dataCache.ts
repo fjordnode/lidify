@@ -17,10 +17,10 @@ import { deezerService } from "./deezer";
 import { lastFmService } from "./lastfm";
 import { coverArtService } from "./coverArt";
 
-// Cache TTLs
-const ARTIST_IMAGE_TTL = 7 * 24 * 60 * 60; // 7 days
-const ALBUM_COVER_TTL = 30 * 24 * 60 * 60; // 30 days
-const NEGATIVE_CACHE_TTL = 24 * 60 * 60; // 1 day for "not found" results
+// Cache TTLs - images are permanent, use long TTLs
+const ARTIST_IMAGE_TTL = 90 * 24 * 60 * 60; // 90 days - artist images rarely change
+const ALBUM_COVER_TTL = 365 * 24 * 60 * 60; // 1 year - cover art is permanent
+const NEGATIVE_CACHE_TTL = 60 * 60; // 1 hour for "not found" results (allow retry)
 
 class DataCacheService {
     /**
