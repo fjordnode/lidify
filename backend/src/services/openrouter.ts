@@ -564,28 +564,38 @@ Return ONLY valid JSON:
             .map(a => `${a.name} (${a.playCount} plays, genres: ${a.genres.slice(0, 3).join(", ") || "unknown"})`)
             .join("\n");
 
-        const prompt = `Based on this user's recent listening history, recommend 8 NEW artists they would enjoy.
+        // Sort library artists alphabetically for easier AI lookup
+        const sortedLibrary = [...libraryArtists].sort((a, b) =>
+            a.toLowerCase().localeCompare(b.toLowerCase())
+        );
+        const libraryJson = JSON.stringify(sortedLibrary.slice(0, 150));
+
+        const prompt = `Help this user DISCOVER new artists who SOUND similar to their recent listening.
 
 RECENT LISTENING (past week):
 ${listeningProfile}
 
-USER'S LIBRARY (${libraryArtists.length} artists - DO NOT recommend these):
-${libraryArtists.slice(0, 100).join(", ")}${libraryArtists.length > 100 ? "..." : ""}
+ARTISTS USER ALREADY OWNS (alphabetical JSON - do NOT recommend any of these):
+${libraryJson}
+
+YOUR TASK:
+Recommend 16 NEW artists for discovery. These must be artists NOT in the owned list above.
 
 GUIDELINES:
-1. Recommend artists SIMILAR to their listening but NOT in their library
-2. Consider the genres and styles they clearly enjoy
-3. Mix well-known names with lesser-known gems
-4. Explain WHY each artist fits their taste
-5. Suggest a good album to start with
+1. SONIC SIMILARITY: Recommend artists who sound alike in production, instrumentation, vocals, and energy
+2. Match the tempo, mood, and sonic textures of their recently played artists
+3. Mix well-known names with lesser-known gems that share the sound
+4. For each recommendation, VERIFY it is not in the owned list above
+5. Explain the sonic connection (production style, similar vibes, etc.)
+6. Suggest a specific album that showcases the sonic similarity
 
 Return ONLY valid JSON:
 {
   "recommendations": [
     {
       "artistName": "Artist Name",
-      "reason": "Why they'd like this based on their listening (1-2 sentences)",
-      "startWith": "Best album to start with"
+      "reason": "Sonic connection to their listening (1-2 sentences)",
+      "startWith": "Album that best showcases the similar sound"
     }
   ]
 }`;
@@ -601,7 +611,7 @@ Return ONLY valid JSON:
                     },
                     { role: "user", content: prompt },
                 ],
-                max_tokens: 1500,
+                max_tokens: 2000,
                 temperature: 0.7,
             });
 

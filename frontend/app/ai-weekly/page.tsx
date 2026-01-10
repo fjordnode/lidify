@@ -26,6 +26,7 @@ interface AIWeeklyData {
 
 interface ArtistDetails {
     image: string | null;
+    mbid: string | null;
     topTracks: Array<{
         title: string;  // Backend returns 'title', not 'name'
         playCount?: number;
@@ -162,7 +163,7 @@ export default function AIWeeklyPage() {
             })
         );
 
-        // Update artist details with images only (preserve existing topTracks if any)
+        // Update artist details with images only (preserve existing topTracks/mbid if any)
         setArtistDetails(prev => {
             const updated = { ...prev };
             for (const result of results) {
@@ -170,6 +171,7 @@ export default function AIWeeklyPage() {
                     const existing = updated[result.value.artistName];
                     updated[result.value.artistName] = {
                         image: result.value.image,
+                        mbid: existing?.mbid || null,
                         topTracks: existing?.topTracks || [],
                     };
                 }
@@ -203,6 +205,7 @@ export default function AIWeeklyPage() {
                 ...prev,
                 [artistName]: {
                     image: existing?.image || details.image || null,
+                    mbid: details.mbid || details.id || null,
                     topTracks,
                 }
             }));
@@ -246,7 +249,7 @@ export default function AIWeeklyPage() {
             console.error(`Failed to load artist details for ${artistName}:`, err);
             setArtistDetails(prev => ({
                 ...prev,
-                [artistName]: { image: existing?.image || null, topTracks: [] }
+                [artistName]: { image: existing?.image || null, mbid: existing?.mbid || null, topTracks: [] }
             }));
         } finally {
             setLoadingArtist(null);
@@ -378,7 +381,7 @@ export default function AIWeeklyPage() {
             >
                 <div className="flex items-end gap-6">
                     {/* Icon */}
-                    <div className="w-[140px] h-[140px] md:w-[192px] md:h-[192px] bg-gradient-to-br from-purple-600 to-purple-900 rounded shadow-2xl shrink-0 flex items-center justify-center">
+                    <div className="w-[140px] h-[140px] md:w-[192px] md:h-[192px] bg-gradient-to-br from-yellow-600 to-amber-900 rounded shadow-2xl shrink-0 flex items-center justify-center">
                         <Sparkles className="w-20 h-20 md:w-24 md:h-24 text-white" />
                     </div>
 
@@ -411,7 +414,7 @@ export default function AIWeeklyPage() {
                         <button
                             onClick={() => handleGenerate(false)}
                             disabled={loading}
-                            className="px-6 py-3 bg-purple-600 hover:bg-purple-500 text-white font-semibold rounded-full transition-colors disabled:opacity-50"
+                            className="px-6 py-3 bg-yellow-500 hover:bg-yellow-400 text-black font-semibold rounded-full transition-colors disabled:opacity-50"
                         >
                             {loading ? "Generating..." : "Discover Artists"}
                         </button>
@@ -487,8 +490,11 @@ export default function AIWeeklyPage() {
                                                     {artist.artistName}
                                                 </p>
                                                 <Link
-                                                    href={`/search?q=${encodeURIComponent(artist.artistName)}`}
-                                                    className="text-xs text-purple-400 hover:text-purple-300 shrink-0"
+                                                    href={details?.mbid
+                                                        ? `/artist/${details.mbid}`
+                                                        : `/search?q=${encodeURIComponent(artist.artistName)}`
+                                                    }
+                                                    className="text-xs text-yellow-400 hover:text-yellow-300 shrink-0"
                                                     onClick={(e) => e.stopPropagation()}
                                                 >
                                                     View →
@@ -498,7 +504,7 @@ export default function AIWeeklyPage() {
                                                 {artist.reason}
                                             </p>
                                             {artist.startWith && (
-                                                <p className="text-xs text-purple-400 mt-1 flex items-center gap-1">
+                                                <p className="text-xs text-yellow-400 mt-1 flex items-center gap-1">
                                                     <Disc3 className="w-3 h-3" />
                                                     Start with: {artist.startWith}
                                                 </p>
@@ -526,7 +532,7 @@ export default function AIWeeklyPage() {
 
                                             {isLoadingDetails ? (
                                                 <div className="flex items-center justify-center py-4">
-                                                    <div className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                                                    <div className="w-5 h-5 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" />
                                                     <span className="ml-2 text-sm text-gray-400">Loading tracks...</span>
                                                 </div>
                                             ) : details.topTracks.length > 0 ? (
@@ -540,18 +546,19 @@ export default function AIWeeklyPage() {
                                                         return (
                                                             <div
                                                                 key={trackIdx}
+                                                                onClick={() => handlePreview(artist.artistName, track.title)}
                                                                 className={cn(
-                                                                    "flex items-center gap-3 p-2 rounded hover:bg-white/5 transition-colors group",
+                                                                    "flex items-center gap-3 p-2 rounded hover:bg-white/5 transition-colors group cursor-pointer",
                                                                     isThisPlaying && "bg-white/10"
                                                                 )}
                                                             >
                                                                 {/* Track Number */}
                                                                 <span className={cn(
                                                                     "w-5 text-center text-sm",
-                                                                    isThisPlaying ? "text-purple-400" : "text-gray-500"
+                                                                    isThisPlaying ? "text-yellow-400" : "text-gray-500"
                                                                 )}>
                                                                     {isThisPlaying && previewPlaying ? (
-                                                                        <Music className="w-4 h-4 text-purple-400 animate-pulse inline" />
+                                                                        <Music className="w-4 h-4 text-yellow-400 animate-pulse inline" />
                                                                     ) : (
                                                                         trackIdx + 1
                                                                     )}
@@ -579,7 +586,7 @@ export default function AIWeeklyPage() {
                                                                 <div className="flex-1 min-w-0">
                                                                     <p className={cn(
                                                                         "text-sm truncate",
-                                                                        isThisPlaying ? "text-purple-400" : "text-white"
+                                                                        isThisPlaying ? "text-yellow-400" : "text-white"
                                                                     )}>
                                                                         {track.title}
                                                                     </p>
@@ -600,7 +607,7 @@ export default function AIWeeklyPage() {
                                                                     className={cn(
                                                                         "p-2 rounded-full transition-all",
                                                                         isThisPlaying
-                                                                            ? "bg-purple-600/30 text-purple-400"
+                                                                            ? "bg-yellow-500/20 text-yellow-400"
                                                                             : "hover:bg-white/10 text-gray-400 hover:text-white",
                                                                         isLoading && "opacity-50"
                                                                     )}
@@ -633,8 +640,8 @@ export default function AIWeeklyPage() {
             {/* Empty State */}
             {!loading && !data && (
                 <div className="flex flex-col items-center justify-center py-24 text-center px-4">
-                    <div className="w-20 h-20 bg-purple-600/20 rounded-full flex items-center justify-center mb-4">
-                        <Sparkles className="w-10 h-10 text-purple-400" />
+                    <div className="w-20 h-20 bg-yellow-500/20 rounded-full flex items-center justify-center mb-4">
+                        <Sparkles className="w-10 h-10 text-yellow-400" />
                     </div>
                     <h3 className="text-lg font-medium text-white mb-1">Discover New Artists</h3>
                     <p className="text-sm text-gray-500 max-w-md">
