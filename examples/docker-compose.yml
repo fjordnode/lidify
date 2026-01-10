@@ -1,0 +1,49 @@
+# Lidify All-in-One Docker Compose
+# Single container with embedded PostgreSQL, Redis, and audio analyzer
+#
+# Usage: Place this file in a folder, then run:
+#   docker compose up -d --build
+
+services:
+  lidify:
+    # Build from source (default)
+    build: ../
+    image: lidify:latest
+    #
+    # Or use pre-built image (when available):
+    # image: ghcr.io/fjordnode/lidify:latest
+    container_name: lidify
+    restart: unless-stopped
+    ports:
+      - "3030:3030"   # Web UI
+      - "3006:3006"   # API (optional, for external access)
+    volumes:
+      # Music library (read-only)
+      - /path/to/your/music:/music:ro
+      # Persistent data (database, cache, logs)
+      - /path/to/appdata/lidify:/data:rw
+    environment:
+      - TZ=Europe/Oslo
+      # Optional: AI-powered recommendations (get key at https://openrouter.ai)
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      # Optional: Last.fm integration (get key at https://www.last.fm/api)
+      - LASTFM_API_KEY=${LASTFM_API_KEY:-}
+    extra_hosts:
+      # Allows container to reach host services (e.g., Lidarr on host)
+      - "host.docker.internal:host-gateway"
+
+    # --- Traefik reverse proxy labels (optional) ---
+    # Uncomment if using Traefik for HTTPS
+    # networks:
+    #   - traefik
+    # labels:
+    #   - traefik.enable=true
+    #   - traefik.http.routers.lidify.entrypoints=websecure
+    #   - traefik.http.routers.lidify.tls.certresolver=letsencrypt
+    #   - traefik.http.routers.lidify.rule=Host(`lidify.yourdomain.com`)
+    #   - traefik.http.services.lidify.loadbalancer.server.port=3030
+
+# Uncomment if using Traefik
+# networks:
+#   traefik:
+#     external: true
