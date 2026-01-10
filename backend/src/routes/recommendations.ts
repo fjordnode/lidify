@@ -528,15 +528,15 @@ router.get("/ai-weekly", async (req, res) => {
                 genres: Array.from(a.genres),
             }));
 
-        // Get user's library artists for context
+        // Get ALL user's library artists for filtering (no limit)
         const libraryArtists = await prisma.artist.findMany({
             select: { name: true },
-            take: 200,
         });
         const libraryArtistNames = libraryArtists.map(a => a.name);
 
         console.log(`[AI Weekly] User ${userId}: ${recentPlays.length} plays, ${topArtists.length} top artists in last ${daysNum} days`);
         console.log(`[AI Weekly] Top artist: ${topArtists[0]?.name} (${topArtists[0]?.playCount} plays)`);
+        console.log(`[AI Weekly] Library has ${libraryArtistNames.length} artists for filtering`);
 
         // Call AI to recommend artists based on listening
         console.log(`[AI Weekly] Calling AI for artist recommendations...`);
@@ -545,16 +545,42 @@ router.get("/ai-weekly", async (req, res) => {
             libraryArtists: libraryArtistNames,
         });
         console.log(`[AI Weekly] Got ${aiArtists.length} artist recommendations from AI`);
-        if (aiArtists.length > 0) {
-            console.log(`[AI Weekly] Sample artist:`, JSON.stringify(aiArtists[0]));
-        }
+
+        // Safety net: Filter out any library artists the AI recommended anyway
+        // Normalize names to handle variations like "The Rolling Stones" vs "Rolling Stones"
+        const normalizeArtistName = (name: string): string => {
+            return name
+                .toLowerCase()
+                .replace(/^the\s+/i, '')  // Remove leading "The "
+                .replace(/\s+/g, ' ')      // Normalize whitespace
+                .trim();
+        };
+
+        const libraryNamesNormalized = new Set(libraryArtistNames.map(normalizeArtistName));
+        // Also keep exact lowercase for exact matches
+        const libraryNamesLower = new Set(libraryArtistNames.map(n => n.toLowerCase()));
+
+        const filteredArtists = aiArtists.filter(rec => {
+            const recLower = rec.artistName.toLowerCase();
+            const recNormalized = normalizeArtistName(rec.artistName);
+            const isInLibrary = libraryNamesLower.has(recLower) || libraryNamesNormalized.has(recNormalized);
+            if (isInLibrary) {
+                console.log(`[AI Weekly] Filtered out library artist: ${rec.artistName}`);
+            }
+            return !isInLibrary;
+        });
+        console.log(`[AI Weekly] After filtering: ${filteredArtists.length} artists (removed ${aiArtists.length - filteredArtists.length} library artists)`);
+
+        // Take top 8 after filtering (AI returns 12 to account for filtering)
+        const finalArtists = filteredArtists.slice(0, 8);
+        console.log(`[AI Weekly] Returning ${finalArtists.length} artists`);
 
         // Return AI artists - Deezer photos and top tracks fetched on-demand by frontend
         res.json({
             period: `${daysNum} days`,
             totalPlays: recentPlays.length,
             topArtists: topArtists.slice(0, 5),
-            artists: aiArtists,
+            artists: finalArtists,
             generatedAt: new Date().toISOString(),
         });
     } catch (error: any) {
