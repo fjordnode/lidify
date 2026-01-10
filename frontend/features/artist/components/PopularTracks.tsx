@@ -62,9 +62,13 @@ export const PopularTracks: React.FC<PopularTracksProps> = ({
                         !track.album?.id ||
                         !track.album?.title ||
                         track.album.title === "Unknown Album";
-                    const coverUrl = track.album?.coverArt
-                        ? api.getCoverArtUrl(track.album.coverArt, 80)
-                        : null;
+                    // Use Deezer album cover for previews, fall back to track's album art
+                    const previewCover = previewAlbumInfo?.[track.id]?.cover;
+                    const coverUrl = previewCover
+                        ? previewCover  // Deezer cover is already a full URL
+                        : track.album?.coverArt
+                            ? api.getCoverArtUrl(track.album.coverArt, 80)
+                            : null;
 
                     return (
                         <div

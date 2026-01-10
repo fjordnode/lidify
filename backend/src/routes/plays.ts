@@ -9,13 +9,16 @@ router.use(requireAuth);
 
 const playSchema = z.object({
     trackId: z.string(),
+    playedSeconds: z.number().min(0).optional(),
 });
 
 // POST /plays
 router.post("/", async (req, res) => {
     try {
         const userId = req.session.userId!;
-        const { trackId } = playSchema.parse(req.body);
+        const { trackId, playedSeconds } = playSchema.parse(req.body);
+        const minPlaySeconds = 30;
+        const effectivePlayedSeconds = playedSeconds ?? 0;
 
         // Verify track exists
         const track = await prisma.track.findUnique({
@@ -24,6 +27,23 @@ router.post("/", async (req, res) => {
 
         if (!track) {
             return res.status(404).json({ error: "Track not found" });
+        }
+
+        if (effectivePlayedSeconds < minPlaySeconds) {
+            return res.json({ skipped: true });
+        }
+
+        const recentPlay = await prisma.play.findFirst({
+            where: {
+                userId,
+                trackId,
+                playedAt: { gte: new Date(Date.now() - minPlaySeconds * 1000) },
+            },
+            orderBy: { playedAt: "desc" },
+        });
+
+        if (recentPlay) {
+            return res.json({ skipped: true });
         }
 
         const play = await prisma.play.create({

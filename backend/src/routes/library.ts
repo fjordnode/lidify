@@ -1,5 +1,6 @@
 import { Router, Response } from "express";
-import { requireAuth, requireAuthOrToken } from "../middleware/auth";
+import { Prisma } from "@prisma/client";
+import { requireAuth, requireAuthOrToken, requireAdmin } from "../middleware/auth";
 import { imageLimiter, apiLimiter } from "../middleware/rateLimiter";
 import { lastFmService } from "../services/lastfm";
 import { prisma } from "../utils/db";
@@ -20,9 +21,15 @@ import { getSystemSettings } from "../utils/systemSettings";
 import { AudioStreamingService } from "../services/audioStreaming";
 import { scanQueue } from "../workers/queues";
 import { organizeSingles } from "../workers/organizeSingles";
-import { enrichSimilarArtist } from "../workers/artistEnrichment";
+import { enrichSimilarArtist, prefetchDiscographyCovers } from "../workers/artistEnrichment";
 import { extractColorsFromImage } from "../utils/colorExtractor";
 import { dataCacheService } from "../services/dataCache";
+import { fetchExternalImage, normalizeExternalImageUrl } from "../services/imageProxy";
+// MusicBrainz secondary types to exclude from discography
+const EXCLUDED_SECONDARY_TYPES = [
+    "Live", "Compilation", "Soundtrack", "Remix", "DJ-mix",
+    "Mixtape/Street", "Demo", "Interview", "Audio drama", "Audiobook", "Spokenword",
+];
 
 // Helper to enforce artist diversity - max N tracks per artist
 function diversifyTracksByArtist<T extends { album: { artist?: { id: string } } }>(
@@ -738,7 +745,7 @@ router.get("/artists", async (req, res) => {
             limit: limitParam = "500",
             offset: offsetParam = "0",
             filter = "owned", // owned (default), discovery, all
-            sortBy = "name", // name, name-desc, tracks, dateAdded
+            sortBy = "name", // name, name-desc, tracks, dateAdded, lastPlayed
         } = req.query;
         const limit = parseInt(limitParam as string, 10) || 500; // No max cap - support unlimited pagination
         const offset = parseInt(offsetParam as string, 10) || 0;
@@ -817,21 +824,143 @@ router.get("/artists", async (req, res) => {
                 ? undefined
                 : "LIBRARY";
 
-        // Determine orderBy based on sortBy parameter
-        let orderBy: any = { name: "asc" };
-        switch (sortBy) {
-            case "name-desc":
-                orderBy = { name: "desc" };
-                break;
-            case "dateAdded":
-                orderBy = { lastSynced: "desc" };
-                break;
-            // "tracks" sorting requires post-processing since it's a count
-            // "name" is default
-        }
+        let artistsWithAlbums: Array<{
+            id: string;
+            mbid: string;
+            name: string;
+            heroUrl: string | null;
+            lastSynced: Date;
+            albums: { id: string }[];
+        }> = [];
+        const total = await prisma.artist.count({ where });
+        const lastPlayedMap = new Map<string, Date | null>();
 
-        const [artistsWithAlbums, total] = await Promise.all([
-            prisma.artist.findMany({
+        if (sortBy === "lastPlayed") {
+            const userId = req.user!.id;
+            const whereClauses: Prisma.Sql[] = [];
+            if (query) {
+                whereClauses.push(
+                    Prisma.sql`a.name ILIKE ${`%${query}%`}`
+                );
+            }
+
+            if (filter === "owned") {
+                whereClauses.push(Prisma.sql`
+                    (
+                        EXISTS (
+                            SELECT 1 FROM "Album" al2
+                            JOIN "Track" t2 ON t2."albumId" = al2.id
+                            WHERE al2."artistId" = a.id
+                              AND al2."location" = 'LIBRARY'
+                        )
+                        OR (
+                            EXISTS (
+                                SELECT 1 FROM "OwnedAlbum" oa
+                                WHERE oa."artistId" = a.id
+                            )
+                            AND EXISTS (
+                                SELECT 1 FROM "Album" al3
+                                JOIN "Track" t3 ON t3."albumId" = al3.id
+                                WHERE al3."artistId" = a.id
+                            )
+                        )
+                    )
+                `);
+            } else if (filter === "discovery") {
+                whereClauses.push(Prisma.sql`
+                    EXISTS (
+                        SELECT 1 FROM "Album" al2
+                        JOIN "Track" t2 ON t2."albumId" = al2.id
+                        WHERE al2."artistId" = a.id
+                          AND al2."location" = 'DISCOVER'
+                    )
+                    AND NOT EXISTS (
+                        SELECT 1 FROM "Album" al3
+                        WHERE al3."artistId" = a.id
+                          AND al3."location" = 'LIBRARY'
+                    )
+                `);
+            }
+
+            const whereSql =
+                whereClauses.length > 0
+                    ? Prisma.sql`WHERE ${Prisma.join(whereClauses, Prisma.sql` AND `)}`
+                    : Prisma.sql``;
+
+            const orderedArtists = await prisma.$queryRaw<
+                { id: string; name: string; lastPlayedAt: Date | null }[]
+            >`
+                SELECT a.id, a.name, MAX(p."playedAt") AS "lastPlayedAt"
+                FROM "Artist" a
+                JOIN "Album" al ON al."artistId" = a.id
+                JOIN "Track" t ON t."albumId" = al.id
+                LEFT JOIN "Play" p ON p."trackId" = t.id
+                    AND p."userId" = ${userId}
+                    AND p."source" IN ('LIBRARY', 'DISCOVERY_KEPT')
+                    AND al."location" = 'LIBRARY'
+                ${whereSql}
+                GROUP BY a.id, a.name
+                ORDER BY "lastPlayedAt" DESC NULLS LAST, a.name ASC
+                LIMIT ${limit} OFFSET ${offset}
+            `;
+
+            const orderedIds = orderedArtists.map((artist) => artist.id);
+            orderedArtists.forEach((artist) => {
+                lastPlayedMap.set(artist.id, artist.lastPlayedAt);
+            });
+
+            if (orderedIds.length === 0) {
+                return res.json({
+                    artists: [],
+                    total,
+                    offset,
+                    limit,
+                });
+            }
+
+            artistsWithAlbums = await prisma.artist.findMany({
+                where: { id: { in: orderedIds } },
+                select: {
+                    id: true,
+                    mbid: true,
+                    name: true,
+                    heroUrl: true,
+                    lastSynced: true,
+                    albums: {
+                        where: {
+                            ...(albumLocationFilter
+                                ? { location: albumLocationFilter }
+                                : {}),
+                            tracks: { some: {} },
+                        },
+                        select: {
+                            id: true,
+                        },
+                    },
+                },
+            });
+
+            const artistsById = new Map(
+                artistsWithAlbums.map((artist) => [artist.id, artist])
+            );
+            artistsWithAlbums = orderedIds
+                .map((id) => artistsById.get(id))
+                .filter(Boolean) as typeof artistsWithAlbums;
+        } else {
+            // Determine orderBy based on sortBy parameter
+            let orderBy: any = { name: "asc" };
+            switch (sortBy) {
+                case "name-desc":
+                    orderBy = { name: "desc" };
+                    break;
+                case "dateAdded":
+                    orderBy = { lastSynced: "desc" };
+                    break;
+                // "tracks" sorting requires post-processing since it's a count
+                // "name" is default
+            }
+
+            artistsWithAlbums = await prisma.artist.findMany({
                 where,
                 skip: offset,
                 take: limit,
@@ -854,9 +983,8 @@ router.get("/artists", async (req, res) => {
                         },
                     },
                 },
-            }),
-            prisma.artist.count({ where }),
-        ]);
+            });
+        }
 
         // Use DataCacheService for batch image lookup (DB + Redis, no API calls for lists)
         const imageMap = await dataCacheService.getArtistImagesBatch(
@@ -873,6 +1001,7 @@ router.get("/artists", async (req, res) => {
                 coverArt, // Alias for frontend consistency
                 albumCount: artist.albums.length,
                 lastSynced: artist.lastSynced,
+                lastPlayedAt: lastPlayedMap.get(artist.id) || null,
             };
         });
 
@@ -1006,6 +1135,7 @@ router.post("/retry-enrichment", async (req, res) => {
 router.get("/artists/:id", async (req, res) => {
     try {
         const idParam = req.params.id;
+        const includeExternal = req.query.includeExternal === "true";
 
         const artistInclude = {
             albums: {
@@ -1068,6 +1198,11 @@ router.get("/artists/:id", async (req, res) => {
             return res.status(404).json({ error: "Artist not found" });
         }
 
+        const isOwnedArtist = artist.albums.some(
+            (album) => album.tracks.length > 0
+        );
+        const skipExternal = isOwnedArtist && !includeExternal;
+
         // ========== DISCOGRAPHY HANDLING ==========
         // For enriched artists with ownedAlbums, skip expensive MusicBrainz calls
         // Only fetch from MusicBrainz if the artist hasn't been enriched yet
@@ -1078,7 +1213,7 @@ router.get("/artists/:id", async (req, res) => {
 
         // If artist has temp MBID, try to find real MBID by searching MusicBrainz
         let effectiveMbid = artist.mbid;
-        if (!effectiveMbid || effectiveMbid.startsWith("temp-")) {
+        if (!skipExternal && (!effectiveMbid || effectiveMbid.startsWith("temp-"))) {
             console.log(
                 ` Artist has temp/no MBID, searching MusicBrainz for ${artist.name}...`
             );
@@ -1128,34 +1263,13 @@ router.get("/artists/:id", async (req, res) => {
             const hasValidMbid = album.rgMbid && !album.rgMbid.startsWith("temp-");
             let coverArt = album.coverUrl;
 
-            // If no cover in DB, check Redis cache or return lazy-load endpoint URL
+            // If no cover in DB, return lazy-load endpoint URL
             if (!coverArt && hasValidMbid) {
-                const cacheKey = `caa:${album.rgMbid}`;
-                try {
-                    const cached = await redisClient.get(cacheKey);
-                    if (cached === "NOT_FOUND") {
-                        // Already tried, nothing found
-                        coverArt = null;
-                    } else if (cached) {
-                        // Use cached URL directly
-                        coverArt = cached;
-                    } else {
-                        // Cache miss - return endpoint URL for lazy loading
-                        // Browser will fetch this, endpoint will try Deezer -> CAA -> Fanart.tv
-                        const params = new URLSearchParams({
-                            artist: artistName,
-                            album: album.title,
-                        });
-                        coverArt = `/api/library/album-cover/${album.rgMbid}?${params}`;
-                    }
-                } catch (err) {
-                    // Redis error - return endpoint URL as fallback
-                    const params = new URLSearchParams({
-                        artist: artistName,
-                        album: album.title,
-                    });
-                    coverArt = `/api/library/album-cover/${album.rgMbid}?${params}`;
-                }
+                const params = new URLSearchParams({
+                    artist: artistName,
+                    album: album.title,
+                });
+                coverArt = `/api/library/album-cover/${album.rgMbid}?${params}`;
             }
 
             return {
@@ -1174,13 +1288,16 @@ router.get("/artists/:id", async (req, res) => {
         // ========== Supplement with MusicBrainz discography for "available to download" ==========
         // Always fetch discography if we have a valid MBID - users need to see what's available
         const hasDbAlbums = dbAlbums.length > 0;
-        const shouldFetchDiscography =
+        const hasValidMbid =
             effectiveMbid && !effectiveMbid.startsWith("temp-");
+        const shouldFetchDiscography = hasValidMbid;
+        const discoCacheKey = hasValidMbid
+            ? `discography:${effectiveMbid}`
+            : null;
 
         if (shouldFetchDiscography) {
             try {
                 // Check Redis cache first (cache for 24 hours)
-                const discoCacheKey = `discography:${effectiveMbid}`;
                 let releaseGroups: any[] = [];
 
                 const cachedDisco = await redisClient.get(discoCacheKey);
@@ -1211,35 +1328,10 @@ router.get("/artists/:id", async (req, res) => {
                 );
 
                 // Filter out live albums, compilations, soundtracks, remixes, etc.
-                const excludedSecondaryTypes = [
-                    "Live",
-                    "Compilation",
-                    "Soundtrack",
-                    "Remix",
-                    "DJ-mix",
-                    "Mixtape/Street",
-                    "Demo",
-                    "Interview",
-                    "Audio drama",
-                    "Audiobook",
-                    "Spokenword",
-                ];
-
-                const filteredReleaseGroups = releaseGroups.filter(
-                    (rg: any) => {
-                        // Keep if no secondary types (pure studio album/EP)
-                        if (
-                            !rg["secondary-types"] ||
-                            rg["secondary-types"].length === 0
-                        ) {
-                            return true;
-                        }
-                        // Exclude if any secondary type matches our exclusion list
-                        return !rg["secondary-types"].some((type: string) =>
-                            excludedSecondaryTypes.includes(type)
-                        );
-                    }
-                );
+                const filteredReleaseGroups = releaseGroups.filter((rg: any) => {
+                    const types = rg["secondary-types"] || [];
+                    return !types.some((t: string) => EXCLUDED_SECONDARY_TYPES.includes(t));
+                });
 
                 console.log(
                     `  Filtered to ${filteredReleaseGroups.length} studio albums/EPs`
@@ -1249,33 +1341,11 @@ router.get("/artists/:id", async (req, res) => {
                 // Don't wait for cover fetches - return endpoint URL for lazy loading
                 const mbAlbums = await Promise.all(
                     filteredReleaseGroups.map(async (rg: any) => {
-                        let coverUrl = null;
-
-                        const cacheKey = `caa:${rg.id}`;
-                        try {
-                            const cached = await redisClient.get(cacheKey);
-                            if (cached === "NOT_FOUND") {
-                                // Already tried, nothing found
-                                coverUrl = null;
-                            } else if (cached) {
-                                // Use cached URL directly
-                                coverUrl = cached;
-                            } else {
-                                // Cache miss - return endpoint URL for lazy loading
-                                const params = new URLSearchParams({
-                                    artist: artist.name,
-                                    album: rg.title,
-                                });
-                                coverUrl = `/api/library/album-cover/${rg.id}?${params}`;
-                            }
-                        } catch (err) {
-                            // Redis error - return endpoint URL as fallback
-                            const params = new URLSearchParams({
-                                artist: artist.name,
-                                album: rg.title,
-                            });
-                            coverUrl = `/api/library/album-cover/${rg.id}?${params}`;
-                        }
+                        const params = new URLSearchParams({
+                            artist: artist.name,
+                            album: rg.title,
+                        });
+                        const coverUrl = `/api/library/album-cover/${rg.id}?${params}`;
 
                         return {
                             id: rg.id,
@@ -1298,6 +1368,29 @@ router.get("/artists/:id", async (req, res) => {
                     })
                 );
 
+                // Deduplicate MusicBrainz albums by title
+                // MusicBrainz often has multiple release groups for the same album (regional releases, reissues)
+                // Prefer the one with cover art, or earliest release date
+                const mbAlbumsByTitle = new Map<string, typeof mbAlbums[0]>();
+                for (const album of mbAlbums) {
+                    const titleKey = album.title.toLowerCase();
+                    const existing = mbAlbumsByTitle.get(titleKey);
+                    if (!existing) {
+                        mbAlbumsByTitle.set(titleKey, album);
+                    } else {
+                        // Prefer album with actual cover URL over lazy-load endpoint or null
+                        const existingHasCover = existing.coverUrl && !existing.coverUrl.startsWith("/api/") && existing.coverUrl !== "NOT_FOUND";
+                        const newHasCover = album.coverUrl && !album.coverUrl.startsWith("/api/") && album.coverUrl !== "NOT_FOUND";
+                        if (newHasCover && !existingHasCover) {
+                            mbAlbumsByTitle.set(titleKey, album);
+                        } else if (!existingHasCover && !newHasCover && album.year && (!existing.year || album.year < existing.year)) {
+                            // If neither has cover, prefer earlier release
+                            mbAlbumsByTitle.set(titleKey, album);
+                        }
+                    }
+                }
+                const deduplicatedMbAlbums = Array.from(mbAlbumsByTitle.values());
+
                 // Merge database albums with MusicBrainz albums
                 // Database albums take precedence (they have actual files!)
                 // Deduplicate by MBID first (most accurate), then by title as fallback
@@ -1307,7 +1400,7 @@ router.get("/artists/:id", async (req, res) => {
                 const dbAlbumTitles = new Set(
                     dbAlbums.map((a) => a.title.toLowerCase())
                 );
-                const mbAlbumsFiltered = mbAlbums.filter(
+                const mbAlbumsFiltered = deduplicatedMbAlbums.filter(
                     (a) => !dbAlbumMbids.has(a.rgMbid) && !dbAlbumTitles.has(a.title.toLowerCase())
                 );
 
@@ -1332,11 +1425,99 @@ router.get("/artists/:id", async (req, res) => {
                 albumsWithOwnership = dbAlbums;
             }
         } else {
-            // No valid MBID - just use database albums
-            console.log(
-                `[Artist] No valid MBID, using ${dbAlbums.length} albums from database`
-            );
-            albumsWithOwnership = dbAlbums;
+            if (discoCacheKey) {
+                let usedCachedDiscography = false;
+                try {
+                    const cachedDisco = await redisClient.get(discoCacheKey);
+                    if (cachedDisco && cachedDisco !== "NOT_FOUND") {
+                        usedCachedDiscography = true;
+                        const releaseGroups = JSON.parse(cachedDisco);
+                        const filteredReleaseGroups = releaseGroups.filter(
+                            (rg: any) => {
+                                const types = rg["secondary-types"] || [];
+                                return !types.some((t: string) =>
+                                    EXCLUDED_SECONDARY_TYPES.includes(t)
+                                );
+                            }
+                        );
+                        const mbAlbums = filteredReleaseGroups.map((rg: any) => {
+                            const params = new URLSearchParams({
+                                artist: artist.name,
+                                album: rg.title,
+                            });
+                            const coverUrl = `/api/library/album-cover/${rg.id}?${params}`;
+
+                            return {
+                                id: rg.id,
+                                rgMbid: rg.id,
+                                title: rg.title,
+                                year: rg["first-release-date"]
+                                    ? parseInt(
+                                          rg["first-release-date"].substring(
+                                              0,
+                                              4
+                                          )
+                                      )
+                                    : null,
+                                type: rg["primary-type"],
+                                coverUrl,
+                                coverArt: coverUrl,
+                                artistId: artist.id,
+                                owned: ownedRgMbids.has(rg.id),
+                                trackCount: 0,
+                                tracks: [],
+                                source: "musicbrainz" as const,
+                            };
+                        });
+
+                        const dbAlbumMbids = new Set(
+                            dbAlbums
+                                .map((a) => a.rgMbid)
+                                .filter((m) => m && !m.startsWith("temp-"))
+                        );
+                        const dbAlbumTitles = new Set(
+                            dbAlbums.map((a) => a.title.toLowerCase())
+                        );
+                        const mbAlbumsFiltered = mbAlbums.filter(
+                            (a: any) =>
+                                !dbAlbumMbids.has(a.rgMbid) &&
+                                !dbAlbumTitles.has(a.title.toLowerCase())
+                        );
+                        albumsWithOwnership = [...dbAlbums, ...mbAlbumsFiltered];
+                    } else {
+                        albumsWithOwnership = dbAlbums;
+                    }
+                } catch {
+                    albumsWithOwnership = dbAlbums;
+                }
+
+                if (!shouldFetchDiscography && !usedCachedDiscography) {
+                    // Warm the cache in the background for next load
+                    void (async () => {
+                        try {
+                            const releaseGroups =
+                                await musicBrainzService.getReleaseGroups(
+                                    effectiveMbid as string,
+                                    ["album", "ep"],
+                                    100
+                                );
+                            await redisClient.setEx(
+                                discoCacheKey,
+                                24 * 60 * 60,
+                                JSON.stringify(releaseGroups)
+                            );
+                        } catch {
+                            // Best-effort only
+                        }
+                    })();
+                }
+            } else {
+                // No valid MBID - just use database albums
+                console.log(
+                    `[Artist] No valid MBID, using ${dbAlbums.length} albums from database`
+                );
+                albumsWithOwnership = dbAlbums;
+            }
         }
 
         // Extract top tracks from library first
@@ -1362,98 +1543,8 @@ router.get("/artists/:id", async (req, res) => {
             userPlays.map((p) => [p.trackId, p._count.id])
         );
 
-        // Fetch Last.fm top tracks (cached for 24 hours)
-        const topTracksCacheKey = `top-tracks:${artist.id}`;
-        try {
-            // Check cache first
-            const cachedTopTracks = await redisClient.get(topTracksCacheKey);
-            let lastfmTopTracks: any[] = [];
-
-            if (cachedTopTracks && cachedTopTracks !== "NOT_FOUND") {
-                lastfmTopTracks = JSON.parse(cachedTopTracks);
-                console.log(
-                    `[Artist] Using cached top tracks (${lastfmTopTracks.length})`
-                );
-            } else {
-                // Cache miss - fetch from Last.fm
-                const validMbid =
-                    effectiveMbid && !effectiveMbid.startsWith("temp-")
-                        ? effectiveMbid
-                        : "";
-                lastfmTopTracks = await lastFmService.getArtistTopTracks(
-                    validMbid,
-                    artist.name,
-                    10
-                );
-                // Cache for 24 hours
-                await redisClient.setEx(
-                    topTracksCacheKey,
-                    24 * 60 * 60,
-                    JSON.stringify(lastfmTopTracks)
-                );
-                console.log(
-                    `[Artist] Cached ${lastfmTopTracks.length} top tracks`
-                );
-            }
-
-            // For each Last.fm track, try to match with library track or add as unowned
-            const combinedTracks: any[] = [];
-
-            for (const lfmTrack of lastfmTopTracks) {
-                // Try to find matching track in library
-                const matchedTrack = allTracks.find(
-                    (t) => t.title.toLowerCase() === lfmTrack.name.toLowerCase()
-                );
-
-                if (matchedTrack) {
-                    // Track exists in library - include user play count
-                    combinedTracks.push({
-                        ...matchedTrack,
-                        playCount: lfmTrack.playcount
-                            ? parseInt(lfmTrack.playcount)
-                            : matchedTrack.playCount,
-                        listeners: lfmTrack.listeners
-                            ? parseInt(lfmTrack.listeners)
-                            : 0,
-                        userPlayCount: userPlayCounts.get(matchedTrack.id) || 0,
-                        album: {
-                            ...matchedTrack.album,
-                            coverArt: matchedTrack.album.coverUrl,
-                        },
-                    });
-                } else {
-                    // Track NOT in library - add as preview-only track
-                    combinedTracks.push({
-                        id: `lastfm-${artist.mbid || artist.name}-${
-                            lfmTrack.name
-                        }`,
-                        title: lfmTrack.name,
-                        playCount: lfmTrack.playcount
-                            ? parseInt(lfmTrack.playcount)
-                            : 0,
-                        listeners: lfmTrack.listeners
-                            ? parseInt(lfmTrack.listeners)
-                            : 0,
-                        duration: lfmTrack.duration
-                            ? Math.floor(parseInt(lfmTrack.duration) / 1000)
-                            : 0,
-                        url: lfmTrack.url,
-                        album: {
-                            title: lfmTrack.album?.["#text"] || "Unknown Album",
-                        },
-                        userPlayCount: 0,
-                        // NO album.id - this indicates track is not in library
-                    });
-                }
-            }
-
-            topTracks = combinedTracks.slice(0, 10);
-        } catch (error) {
-            console.error(
-                `Failed to get Last.fm top tracks for ${artist.name}:`,
-                error
-            );
-            // If Last.fm fails, add user play counts to library tracks
+        // For owned artists, return library-only top tracks immediately
+        if (skipExternal) {
             topTracks = topTracks.map((t) => ({
                 ...t,
                 userPlayCount: userPlayCounts.get(t.id) || 0,
@@ -1462,212 +1553,415 @@ router.get("/artists/:id", async (req, res) => {
                     coverArt: t.album.coverUrl,
                 },
             }));
+        } else {
+            // Fetch Last.fm top tracks (cached for 24 hours)
+            const topTracksCacheKey = `top-tracks:${artist.id}`;
+            try {
+                // Check cache first
+                const cachedTopTracks = await redisClient.get(topTracksCacheKey);
+                let lastfmTopTracks: any[] = [];
+
+                if (cachedTopTracks && cachedTopTracks !== "NOT_FOUND") {
+                    lastfmTopTracks = JSON.parse(cachedTopTracks);
+                    console.log(
+                        `[Artist] Using cached top tracks (${lastfmTopTracks.length})`
+                    );
+                } else {
+                    // Cache miss - fetch from Last.fm
+                    const validMbid =
+                        effectiveMbid && !effectiveMbid.startsWith("temp-")
+                            ? effectiveMbid
+                            : "";
+                    lastfmTopTracks = await lastFmService.getArtistTopTracks(
+                        validMbid,
+                        artist.name,
+                        10
+                    );
+                    // Cache for 24 hours
+                    await redisClient.setEx(
+                        topTracksCacheKey,
+                        24 * 60 * 60,
+                        JSON.stringify(lastfmTopTracks)
+                    );
+                    console.log(
+                        `[Artist] Cached ${lastfmTopTracks.length} top tracks`
+                    );
+                }
+
+                // For each Last.fm track, try to match with library track or add as unowned
+                const combinedTracks: any[] = [];
+
+                // Collect non-library tracks that need cover fetching
+                const tracksNeedingCovers: Array<{ index: number; albumTitle: string; trackTitle?: string }> = [];
+
+                for (let i = 0; i < lastfmTopTracks.length; i++) {
+                    const lfmTrack = lastfmTopTracks[i];
+                    // Try to find matching track in library
+                    const matchedTrack = allTracks.find(
+                        (t) => t.title.toLowerCase() === lfmTrack.name.toLowerCase()
+                    );
+
+                    if (matchedTrack) {
+                        // Track exists in library - include user play count
+                        combinedTracks.push({
+                            ...matchedTrack,
+                            playCount: lfmTrack.playcount
+                                ? parseInt(lfmTrack.playcount)
+                                : matchedTrack.playCount,
+                            listeners: lfmTrack.listeners
+                                ? parseInt(lfmTrack.listeners)
+                                : 0,
+                            userPlayCount: userPlayCounts.get(matchedTrack.id) || 0,
+                            album: {
+                                ...matchedTrack.album,
+                                coverArt: matchedTrack.album.coverUrl,
+                            },
+                        });
+                    } else {
+                        // Track NOT in library - add as preview-only track
+                        const albumTitle = lfmTrack.album?.["#text"] || null;
+                        combinedTracks.push({
+                            id: `lastfm-${artist.mbid || artist.name}-${
+                                lfmTrack.name
+                            }`,
+                            title: lfmTrack.name,
+                            playCount: lfmTrack.playcount
+                                ? parseInt(lfmTrack.playcount)
+                                : 0,
+                            listeners: lfmTrack.listeners
+                                ? parseInt(lfmTrack.listeners)
+                                : 0,
+                            duration: lfmTrack.duration
+                                ? Math.floor(parseInt(lfmTrack.duration) / 1000)
+                                : 0,
+                            url: lfmTrack.url,
+                            album: {
+                                title: albumTitle || "Unknown Album",
+                                coverArt: null, // Will be filled in below
+                            },
+                            userPlayCount: 0,
+                            // NO album.id - this indicates track is not in library
+                        });
+                        // Mark for cover fetching - use track title as fallback search term
+                        tracksNeedingCovers.push({
+                            index: combinedTracks.length - 1,
+                            albumTitle: albumTitle || lfmTrack.name, // Use track name if no album
+                            trackTitle: lfmTrack.name,
+                        });
+                    }
+                }
+
+                // Fetch covers for non-library tracks in parallel
+                if (tracksNeedingCovers.length > 0) {
+                    console.log(`[Artist] Fetching covers for ${tracksNeedingCovers.length} unowned tracks...`);
+                    const coverPromises = tracksNeedingCovers.map(async ({ index, albumTitle, trackTitle }) => {
+                        try {
+                            // Try to get cover via track search on Deezer (most reliable for popular tracks)
+                            if (trackTitle) {
+                                const trackInfo = await deezerService.getTrackPreviewWithInfo(
+                                    artist.name,
+                                    trackTitle
+                                );
+                                if (trackInfo?.albumCover) {
+                                    combinedTracks[index].album.coverArt = trackInfo.albumCover;
+                                    // Also update album title if we got it from Deezer
+                                    if (trackInfo.albumTitle && trackInfo.albumTitle !== "Unknown Album") {
+                                        combinedTracks[index].album.title = trackInfo.albumTitle;
+                                    }
+                                    return;
+                                }
+                            }
+                            // Fallback to album search if track search failed
+                            const result = await imageProviderService.getAlbumCover(
+                                artist.name,
+                                albumTitle
+                            );
+                            if (result?.url) {
+                                combinedTracks[index].album.coverArt = result.url;
+                            }
+                        } catch (err) {
+                            // Cover fetch failed, leave as null
+                        }
+                    });
+                    await Promise.all(coverPromises);
+                }
+
+                topTracks = combinedTracks.slice(0, 10);
+            } catch (error) {
+                console.error(
+                    `Failed to get Last.fm top tracks for ${artist.name}:`,
+                    error
+                );
+                // If Last.fm fails, add user play counts to library tracks
+                topTracks = topTracks.map((t) => ({
+                    ...t,
+                    userPlayCount: userPlayCounts.get(t.id) || 0,
+                    album: {
+                        ...t.album,
+                        coverArt: t.album.coverUrl,
+                    },
+                }));
+            }
         }
 
         // ========== HERO IMAGE FETCHING ==========
-        // Use DataCacheService: DB -> Redis -> API -> save to both
-        const heroUrl = await dataCacheService.getArtistImage(
-            artist.id,
-            artist.name,
-            effectiveMbid
-        );
+        // Use DataCacheService: DB -> API -> save to DB
+        const heroUrl = skipExternal
+            ? artist.heroUrl
+            : await dataCacheService.getArtistImage(
+                  artist.id,
+                  artist.name,
+                  effectiveMbid
+              );
 
         // ========== SIMILAR ARTISTS (from enriched JSON or Last.fm API) ==========
         let similarArtists: any[] = [];
         const similarCacheKey = `similar-artists:${artist.id}`;
 
-        // Check if artist has pre-enriched similar artists JSON (full Last.fm data)
-        const enrichedSimilar = artist.similarArtistsJson as Array<{
-            name: string;
-            mbid: string | null;
-            match: number;
-        }> | null;
-
-        if (enrichedSimilar && enrichedSimilar.length > 0) {
-            // Use pre-enriched data from database (fast path)
-            console.log(
-                `[Artist] Using ${enrichedSimilar.length} similar artists from enriched JSON`
-            );
-
-            // First, batch lookup which similar artists exist in our library
-            const similarNames = enrichedSimilar.slice(0, 10).map((s) => s.name.toLowerCase());
-            const similarMbids = enrichedSimilar.slice(0, 10).map((s) => s.mbid).filter(Boolean) as string[];
-            
-            // Find library artists matching by name or mbid
-            const libraryMatches = await prisma.artist.findMany({
-                where: {
-                    OR: [
-                        { normalizedName: { in: similarNames } },
-                        ...(similarMbids.length > 0 ? [{ mbid: { in: similarMbids } }] : []),
-                    ],
-                },
-                select: {
-                    id: true,
-                    name: true,
-                    normalizedName: true,
-                    mbid: true,
-                    heroUrl: true,
-                    _count: {
-                        select: {
-                            albums: {
-                                where: { location: "LIBRARY", tracks: { some: {} } },
-                            },
-                        },
-                    },
-                },
-            });
-            
-            // Create lookup maps for quick matching
-            const libraryByName = new Map(libraryMatches.map((a) => [a.normalizedName?.toLowerCase() || a.name.toLowerCase(), a]));
-            const libraryByMbid = new Map(libraryMatches.filter((a) => a.mbid).map((a) => [a.mbid!, a]));
-
-            // Fetch images in parallel from Deezer (cached in Redis)
-            const similarWithImages = await Promise.all(
-                enrichedSimilar.slice(0, 10).map(async (s) => {
-                    // Check if this artist is in our library
-                    const libraryArtist = (s.mbid && libraryByMbid.get(s.mbid)) || libraryByName.get(s.name.toLowerCase());
-                    
-                    let image = libraryArtist?.heroUrl || null;
-                    
-                    // If no library image, try Deezer
-                    if (!image) {
-                        try {
-                            // Check Redis cache first
-                            const cacheKey = `deezer-artist-image:${s.name}`;
-                            const cached = await redisClient.get(cacheKey);
-                            if (cached && cached !== "NOT_FOUND") {
-                                image = cached;
-                            } else {
-                                image = await deezerService.getArtistImage(s.name);
-                                if (image) {
-                                    await redisClient.setEx(
-                                        cacheKey,
-                                        24 * 60 * 60,
-                                        image
-                                    );
-                                }
-                            }
-                        } catch (err) {
-                            // Deezer failed, leave null
-                        }
-                    }
-
-                    return {
-                        id: libraryArtist?.id || s.name,
-                        name: s.name,
-                        mbid: s.mbid || null,
-                        coverArt: image,
-                        albumCount: 0, // Would require MusicBrainz lookup - skip for performance
-                        ownedAlbumCount: libraryArtist?._count?.albums || 0,
-                        weight: s.match,
-                        inLibrary: !!libraryArtist,
-                    };
-                })
-            );
-
-            similarArtists = similarWithImages;
+        if (skipExternal) {
+            similarArtists = [];
         } else {
-            // No enriched data - fetch from Last.fm API with Redis cache
-            const cachedSimilar = await redisClient.get(similarCacheKey);
-            if (cachedSimilar && cachedSimilar !== "NOT_FOUND") {
-                similarArtists = JSON.parse(cachedSimilar);
+            // Check if artist has pre-enriched similar artists JSON (full Last.fm data)
+            const enrichedSimilar = artist.similarArtistsJson as Array<{
+                name: string;
+                mbid: string | null;
+                match: number;
+            }> | null;
+
+            if (enrichedSimilar && enrichedSimilar.length > 0) {
+                // Use pre-enriched data from database (fast path)
                 console.log(
-                    `[Artist] Using cached similar artists (${similarArtists.length})`
-                );
-            } else {
-                // Cache miss - fetch from Last.fm
-                console.log(
-                    `[Artist] Fetching similar artists from Last.fm...`
+                    `[Artist] Using ${enrichedSimilar.length} similar artists from enriched JSON`
                 );
 
-                try {
-                    const validMbid =
-                        effectiveMbid && !effectiveMbid.startsWith("temp-")
-                            ? effectiveMbid
-                            : undefined;
-                    const lastfmSimilar = await lastFmService.getSimilarArtists(
-                        validMbid,
-                        artist.name,
-                        10
-                    );
+                // First, batch lookup which similar artists exist in our library
+                const similarNames = enrichedSimilar
+                    .slice(0, 10)
+                    .map((s) => s.name.toLowerCase());
+                const similarMbids = enrichedSimilar
+                    .slice(0, 10)
+                    .map((s) => s.mbid)
+                    .filter(Boolean) as string[];
 
-                    // Batch lookup which similar artists exist in our library
-                    const similarNames = lastfmSimilar.map((s: any) => s.name.toLowerCase());
-                    const similarMbids = lastfmSimilar.map((s: any) => s.mbid).filter(Boolean) as string[];
-                    
-                    const libraryMatches = await prisma.artist.findMany({
-                        where: {
-                            OR: [
-                                { normalizedName: { in: similarNames } },
-                                ...(similarMbids.length > 0 ? [{ mbid: { in: similarMbids } }] : []),
-                            ],
-                        },
-                        select: {
-                            id: true,
-                            name: true,
-                            normalizedName: true,
-                            mbid: true,
-                            heroUrl: true,
-                            _count: {
-                                select: {
-                                    albums: {
-                                        where: { location: "LIBRARY", tracks: { some: {} } },
+                // Find library artists matching by name or mbid
+                const libraryMatches = await prisma.artist.findMany({
+                    where: {
+                        OR: [
+                            { normalizedName: { in: similarNames } },
+                            ...(similarMbids.length > 0
+                                ? [{ mbid: { in: similarMbids } }]
+                                : []),
+                        ],
+                    },
+                    select: {
+                        id: true,
+                        name: true,
+                        normalizedName: true,
+                        mbid: true,
+                        heroUrl: true,
+                        _count: {
+                            select: {
+                                albums: {
+                                    where: {
+                                        location: "LIBRARY",
+                                        tracks: { some: {} },
                                     },
                                 },
                             },
                         },
-                    });
-                    
-                    const libraryByName = new Map(libraryMatches.map((a) => [a.normalizedName?.toLowerCase() || a.name.toLowerCase(), a]));
-                    const libraryByMbid = new Map(libraryMatches.filter((a) => a.mbid).map((a) => [a.mbid!, a]));
+                    },
+                });
 
-                    // Fetch images in parallel (Deezer only - fastest source)
-                    const similarWithImages = await Promise.all(
-                        lastfmSimilar.map(async (s: any) => {
-                            const libraryArtist = (s.mbid && libraryByMbid.get(s.mbid)) || libraryByName.get(s.name.toLowerCase());
-                            
-                            let image = libraryArtist?.heroUrl || null;
-                            
-                            if (!image) {
-                                try {
+                // Create lookup maps for quick matching
+                const libraryByName = new Map(
+                    libraryMatches.map((a) => [
+                        a.normalizedName?.toLowerCase() ||
+                            a.name.toLowerCase(),
+                        a,
+                    ])
+                );
+                const libraryByMbid = new Map(
+                    libraryMatches
+                        .filter((a) => a.mbid)
+                        .map((a) => [a.mbid!, a])
+                );
+
+                // Fetch images in parallel from Deezer (cached in Redis)
+                const similarWithImages = await Promise.all(
+                    enrichedSimilar.slice(0, 10).map(async (s) => {
+                        // Check if this artist is in our library
+                        const libraryArtist =
+                            (s.mbid && libraryByMbid.get(s.mbid)) ||
+                            libraryByName.get(s.name.toLowerCase());
+
+                        let image = libraryArtist?.heroUrl || null;
+
+                        // If no library image, try Deezer
+                        if (!image) {
+                            try {
+                                // Check Redis cache first
+                                const cacheKey = `deezer-artist-image:${s.name}`;
+                                const cached = await redisClient.get(cacheKey);
+                                if (cached && cached !== "NOT_FOUND") {
+                                    image = cached;
+                                } else {
                                     image = await deezerService.getArtistImage(
                                         s.name
                                     );
-                                } catch (err) {
-                                    // Deezer failed, leave null
+                                    if (image) {
+                                        await redisClient.setEx(
+                                            cacheKey,
+                                            24 * 60 * 60,
+                                            image
+                                        );
+                                    }
                                 }
+                            } catch (err) {
+                                // Deezer failed, leave null
                             }
+                        }
 
-                            return {
-                                id: libraryArtist?.id || s.name,
-                                name: s.name,
-                                mbid: s.mbid || null,
-                                coverArt: image,
-                                albumCount: 0,
-                                ownedAlbumCount: libraryArtist?._count?.albums || 0,
-                                weight: s.match,
-                                inLibrary: !!libraryArtist,
-                            };
-                        })
-                    );
+                        return {
+                            id: libraryArtist?.id || s.name,
+                            name: s.name,
+                            mbid: s.mbid || null,
+                            coverArt: image,
+                            albumCount: 0, // Would require MusicBrainz lookup - skip for performance
+                            ownedAlbumCount: libraryArtist?._count?.albums || 0,
+                            weight: s.match,
+                            inLibrary: !!libraryArtist,
+                        };
+                    })
+                );
 
-                    similarArtists = similarWithImages;
-
-                    // Cache for 24 hours
-                    await redisClient.setEx(
-                        similarCacheKey,
-                        24 * 60 * 60,
-                        JSON.stringify(similarArtists)
-                    );
+                similarArtists = similarWithImages;
+            } else {
+                // No enriched data - fetch from Last.fm API with Redis cache
+                const cachedSimilar = await redisClient.get(similarCacheKey);
+                if (cachedSimilar && cachedSimilar !== "NOT_FOUND") {
+                    similarArtists = JSON.parse(cachedSimilar);
                     console.log(
-                        `[Artist] Cached ${similarArtists.length} similar artists`
+                        `[Artist] Using cached similar artists (${similarArtists.length})`
                     );
-                } catch (error) {
-                    console.error(
-                        `[Artist] Failed to fetch similar artists:`,
-                        error
+                } else {
+                    // Cache miss - fetch from Last.fm
+                    console.log(
+                        `[Artist] Fetching similar artists from Last.fm...`
                     );
-                    similarArtists = [];
+
+                    try {
+                        const validMbid =
+                            effectiveMbid && !effectiveMbid.startsWith("temp-")
+                                ? effectiveMbid
+                                : undefined;
+                        const lastfmSimilar =
+                            await lastFmService.getSimilarArtists(
+                                validMbid,
+                                artist.name,
+                                10
+                            );
+
+                        // Batch lookup which similar artists exist in our library
+                        const similarNames = lastfmSimilar.map((s: any) =>
+                            s.name.toLowerCase()
+                        );
+                        const similarMbids = lastfmSimilar
+                            .map((s: any) => s.mbid)
+                            .filter(Boolean) as string[];
+
+                        const libraryMatches = await prisma.artist.findMany({
+                            where: {
+                                OR: [
+                                    { normalizedName: { in: similarNames } },
+                                    ...(similarMbids.length > 0
+                                        ? [{ mbid: { in: similarMbids } }]
+                                        : []),
+                                ],
+                            },
+                            select: {
+                                id: true,
+                                name: true,
+                                normalizedName: true,
+                                mbid: true,
+                                heroUrl: true,
+                                _count: {
+                                    select: {
+                                        albums: {
+                                            where: {
+                                                location: "LIBRARY",
+                                                tracks: { some: {} },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        });
+
+                        const libraryByName = new Map(
+                            libraryMatches.map((a) => [
+                                a.normalizedName?.toLowerCase() ||
+                                    a.name.toLowerCase(),
+                                a,
+                            ])
+                        );
+                        const libraryByMbid = new Map(
+                            libraryMatches
+                                .filter((a) => a.mbid)
+                                .map((a) => [a.mbid!, a])
+                        );
+
+                        // Fetch images in parallel (Deezer only - fastest source)
+                        const similarWithImages = await Promise.all(
+                            lastfmSimilar.map(async (s: any) => {
+                                const libraryArtist =
+                                    (s.mbid && libraryByMbid.get(s.mbid)) ||
+                                    libraryByName.get(s.name.toLowerCase());
+
+                                let image = libraryArtist?.heroUrl || null;
+
+                                if (!image) {
+                                    try {
+                                        image =
+                                            await deezerService.getArtistImage(
+                                                s.name
+                                            );
+                                    } catch (err) {
+                                        // Deezer failed, leave null
+                                    }
+                                }
+
+                                return {
+                                    id: libraryArtist?.id || s.name,
+                                    name: s.name,
+                                    mbid: s.mbid || null,
+                                    coverArt: image,
+                                    albumCount: 0,
+                                    ownedAlbumCount:
+                                        libraryArtist?._count?.albums || 0,
+                                    weight: s.match,
+                                    inLibrary: !!libraryArtist,
+                                };
+                            })
+                        );
+
+                        similarArtists = similarWithImages;
+
+                        // Cache for 24 hours
+                        await redisClient.setEx(
+                            similarCacheKey,
+                            24 * 60 * 60,
+                            JSON.stringify(similarArtists)
+                        );
+                        console.log(
+                            `[Artist] Cached ${similarArtists.length} similar artists`
+                        );
+                    } catch (error) {
+                        console.error(
+                            `[Artist] Failed to fetch similar artists:`,
+                            error
+                        );
+                        similarArtists = [];
+                    }
                 }
             }
         }
@@ -1905,15 +2199,13 @@ router.get("/cover-art/:id?", imageLimiter, async (req, res) => {
     try {
         const { size, url } = req.query;
         let coverUrl: string;
-        let isAudiobook = false;
 
         // Check if a full URL was provided as a query parameter
         if (url) {
-            const decodedUrl = decodeURIComponent(url as string);
+            const decodedUrl = Array.isArray(url) ? url[0] : url;
 
             // Check if this is an audiobook cover (prefixed with "audiobook__")
             if (decodedUrl.startsWith("audiobook__")) {
-                isAudiobook = true;
                 const audiobookPath = decodedUrl.replace("audiobook__", "");
 
                 // Get Audiobookshelf settings
@@ -2028,7 +2320,7 @@ router.get("/cover-art/:id?", imageLimiter, async (req, res) => {
                     .json({ error: "No cover ID or URL provided" });
             }
 
-            const decodedId = decodeURIComponent(coverId);
+            const decodedId = coverId;
 
             // Check if this is a native cover (prefixed with "native:")
             if (decodedId.startsWith("native:")) {
@@ -2103,7 +2395,6 @@ router.get("/cover-art/:id?", imageLimiter, async (req, res) => {
 
             // Check if this is an audiobook cover (prefixed with "audiobook__")
             if (decodedId.startsWith("audiobook__")) {
-                isAudiobook = true;
                 const audiobookPath = decodedId.replace("audiobook__", "");
 
                 // Get Audiobookshelf settings
@@ -2178,152 +2469,61 @@ router.get("/cover-art/:id?", imageLimiter, async (req, res) => {
             }
         }
 
-        // Create cache key from URL + size
-        const cacheKey = `cover-art:${crypto
-            .createHash("md5")
-            .update(`${coverUrl}-${size || "original"}`)
-            .digest("hex")}`;
+        const cacheKeySuffix = size ? String(size) : "original";
+        const result = await fetchExternalImage({
+            url: coverUrl,
+            cacheKeySuffix,
+        });
 
-        // Try to get from Redis cache first
-        try {
-            const cached = await redisClient.get(cacheKey);
-            if (cached) {
-                const cachedData = JSON.parse(cached);
-
-                // Check if this is a cached 404
-                if (cachedData.notFound) {
-                    console.log(
-                        `[COVER-ART] Cached 404 for ${coverUrl.substring(
-                            0,
-                            60
-                        )}...`
-                    );
-                    return res
-                        .status(404)
-                        .json({ error: "Cover art not found" });
-                }
-
+        if (!result.ok) {
+            if (result.status === "invalid_url") {
+                console.warn(
+                    `[COVER-ART] Blocked invalid cover URL: ${result.url}`
+                );
+                return res
+                    .status(400)
+                    .json({ error: "Invalid cover art URL" });
+            }
+            if (result.status === "not_found") {
                 console.log(
-                    `[COVER-ART] Cache HIT for ${coverUrl.substring(0, 60)}...`
-                );
-                const imageBuffer = Buffer.from(cachedData.data, "base64");
-
-                // Check if client has cached version
-                if (req.headers["if-none-match"] === cachedData.etag) {
-                    console.log(`[COVER-ART] Client has cached version (304)`);
-                    return res.status(304).end();
-                }
-
-                // Set headers and send cached image
-                if (cachedData.contentType) {
-                    res.setHeader("Content-Type", cachedData.contentType);
-                }
-                applyCoverArtCorsHeaders(
-                    res,
-                    req.headers.origin as string | undefined
-                );
-                res.setHeader(
-                    "Cache-Control",
-                    "public, max-age=31536000, immutable"
-                );
-                res.setHeader("ETag", cachedData.etag);
-                return res.send(imageBuffer);
-            } else {
-                console.log(
-                    `[COVER-ART] ✗ Cache MISS for ${coverUrl.substring(
+                    `[COVER-ART] Cached 404 for ${result.url.substring(
                         0,
                         60
                     )}...`
                 );
+                return res
+                    .status(404)
+                    .json({ error: "Cover art not found" });
             }
-        } catch (cacheError) {
-            console.warn("[COVER-ART] Redis cache read error:", cacheError);
-        }
-
-        // Fetch the image and proxy it to avoid CORS issues
-        console.log(`[COVER-ART] Fetching: ${coverUrl.substring(0, 100)}...`);
-        const imageResponse = await fetch(coverUrl, {
-            headers: {
-                "User-Agent": "Lidify/1.0",
-            },
-        });
-        if (!imageResponse.ok) {
             console.error(
-                `[COVER-ART] Failed to fetch: ${coverUrl} (${imageResponse.status} ${imageResponse.statusText})`
+                `[COVER-ART] Failed to fetch: ${result.url} (${result.message || "fetch error"})`
             );
-
-            // Cache 404s for 1 hour to avoid repeatedly trying to fetch missing images
-            if (imageResponse.status === 404) {
-                try {
-                    await redisClient.setEx(
-                        cacheKey,
-                        60 * 60, // 1 hour
-                        JSON.stringify({ notFound: true })
-                    );
-                    console.log(`[COVER-ART] Cached 404 response for 1 hour`);
-                } catch (cacheError) {
-                    console.warn(
-                        "[COVER-ART] Redis cache write error:",
-                        cacheError
-                    );
-                }
-            }
-
-            return res.status(404).json({ error: "Cover art not found" });
+            // Fallback to direct redirect so the browser can try fetching the image itself
+            return res.redirect(302, result.url);
         }
-        console.log(`[COVER-ART] Successfully fetched, caching...`);
 
-        const buffer = await imageResponse.arrayBuffer();
-        const imageBuffer = Buffer.from(buffer);
-
-        // Generate ETag from content
-        const etag = crypto.createHash("md5").update(imageBuffer).digest("hex");
-
-        // Cache in Redis for 90 days (cover art images are permanent)
-        try {
-            const contentType = imageResponse.headers.get("content-type");
-            await redisClient.setEx(
-                cacheKey,
-                90 * 24 * 60 * 60, // 90 days
-                JSON.stringify({
-                    etag,
-                    contentType,
-                    data: imageBuffer.toString("base64"),
-                })
+        if (!result.fromCache) {
+            console.log(`[COVER-ART] Successfully fetched, caching...`);
+        } else {
+            console.log(
+                `[COVER-ART] Cache HIT for ${result.url.substring(0, 60)}...`
             );
-
-            // If this was a CAA URL, also update the caa: cache so artist overview can find it
-            // This syncs the two caching systems
-            if (coverUrl.includes("coverartarchive.org/release-group/")) {
-                const mbidMatch = coverUrl.match(/release-group\/([a-f0-9-]+)/i);
-                if (mbidMatch) {
-                    const mbid = mbidMatch[1];
-                    await redisClient.setEx(`caa:${mbid}`, 365 * 24 * 60 * 60, coverUrl);
-                    console.log(`[COVER-ART] Also cached caa:${mbid} for artist overview`);
-                }
-            }
-        } catch (cacheError) {
-            console.warn("Redis cache write error:", cacheError);
         }
 
         // Check if client has cached version
-        if (req.headers["if-none-match"] === etag) {
+        if (req.headers["if-none-match"] === result.etag) {
+            console.log(`[COVER-ART] Client has cached version (304)`);
             return res.status(304).end();
         }
 
-        // Set appropriate headers
-        const contentType = imageResponse.headers.get("content-type");
-        if (contentType) {
-            res.setHeader("Content-Type", contentType);
+        if (result.contentType) {
+            res.setHeader("Content-Type", result.contentType);
         }
 
-        // Set aggressive caching headers
         applyCoverArtCorsHeaders(res, req.headers.origin as string | undefined);
-        res.setHeader("Cache-Control", "public, max-age=31536000, immutable"); // Cache for 1 year
-        res.setHeader("ETag", etag);
-
-        // Send the image
-        res.send(imageBuffer);
+        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        res.setHeader("ETag", result.etag);
+        res.send(result.buffer);
     } catch (error) {
         console.error("Get cover art error:", error);
         res.status(500).json({ error: "Failed to fetch cover art" });
@@ -2344,50 +2544,67 @@ router.get("/album-cover/:mbid", imageLimiter, async (req, res) => {
             return res.status(400).json({ error: "Valid MBID required" });
         }
 
-        const cacheKey = `caa:${mbid}`;
+        const existingAlbum = await prisma.album.findFirst({
+            where: { rgMbid: mbid, coverUrl: { not: null } },
+            select: { coverUrl: true },
+        });
 
-        // Check cache first
-        try {
-            const cached = await redisClient.get(cacheKey);
-            if (cached === "NOT_FOUND") {
-                if (wantsJson) {
-                    return res.json({ coverUrl: null });
-                }
-                return res.status(204).send(); // No cover exists
-            }
-            if (cached) {
-                if (wantsJson) {
-                    return res.json({ coverUrl: cached });
-                }
-                // Redirect to cached URL
-                return res.redirect(302, cached);
-            }
-        } catch (err) {
-            // Redis error, continue to fetch
-        }
-
-        // Cache miss - fetch using imageProviderService (Deezer -> CAA -> Fanart.tv)
+        // Cache key for URL lookups (separate from disk cache for image bytes)
+        const urlCacheKey = `album-cover-url:${mbid}`;
         let coverUrl: string | null = null;
 
-        if (artist && album) {
-            // If artist/album provided, try Deezer first (most reliable)
-            const result = await imageProviderService.getAlbumCover(
-                artist as string,
-                album as string,
-                mbid
-            );
-            coverUrl = result?.url || null;
+        if (existingAlbum?.coverUrl && existingAlbum.coverUrl.trim() !== "") {
+            // 1. Found in database
+            coverUrl = existingAlbum.coverUrl;
         } else {
-            // Fallback to CAA only
-            coverUrl = await coverArtService.getCoverArt(mbid);
+            // 2. Check Redis cache for URL (avoids slow API calls on repeat visits)
+            try {
+                const cachedUrl = await redisClient.get(urlCacheKey);
+                if (cachedUrl === "NOT_FOUND") {
+                    // Already tried, no cover exists
+                    coverUrl = null;
+                } else if (cachedUrl) {
+                    coverUrl = cachedUrl;
+                }
+            } catch {
+                // Redis error - continue to API lookup
+            }
+
+            // 3. Cache miss - fetch using imageProviderService (Deezer -> CAA -> Fanart.tv)
+            if (coverUrl === null && artist && album) {
+                const result = await imageProviderService.getAlbumCover(
+                    artist as string,
+                    album as string,
+                    mbid
+                );
+                coverUrl = result?.url || null;
+
+                // Cache the URL lookup result (7 days) - much faster than re-querying Deezer
+                try {
+                    await redisClient.setEx(
+                        urlCacheKey,
+                        7 * 24 * 60 * 60,
+                        coverUrl || "NOT_FOUND"
+                    );
+                } catch {
+                    // Redis error - non-critical
+                }
+            } else if (coverUrl === null) {
+                // Fallback to CAA only (no artist/album provided)
+                coverUrl = await coverArtService.getCoverArt(mbid);
+
+                if (coverUrl) {
+                    try {
+                        await redisClient.setEx(urlCacheKey, 7 * 24 * 60 * 60, coverUrl);
+                    } catch {
+                        // Redis error - non-critical
+                    }
+                }
+            }
         }
 
         if (coverUrl) {
-            // Cache in Redis (1 year - cover art URLs are permanent)
-            await redisClient.setEx(cacheKey, 365 * 24 * 60 * 60, coverUrl);
-
             // Persist to database if this album exists in library
-            // This ensures covers survive Redis cache flushes
             try {
                 await prisma.album.updateMany({
                     where: { rgMbid: mbid, coverUrl: null },
@@ -2397,13 +2614,20 @@ router.get("/album-cover/:mbid", imageLimiter, async (req, res) => {
                 // Silently ignore - album may not exist in library (discovery albums)
             }
 
-            if (wantsJson) {
-                return res.json({ coverUrl });
+            const token =
+                typeof req.query.token === "string" ? req.query.token : null;
+            const proxiedParams = new URLSearchParams({
+                url: coverUrl,
+            });
+            if (token) {
+                proxiedParams.append("token", token);
             }
-            return res.redirect(302, coverUrl);
+            const proxiedCoverUrl = `/api/library/cover-art?${proxiedParams.toString()}`;
+            if (wantsJson) {
+                return res.json({ coverUrl: proxiedCoverUrl });
+            }
+            return res.redirect(302, proxiedCoverUrl);
         } else {
-            // Cache the miss
-            await redisClient.setEx(cacheKey, 24 * 60 * 60, "NOT_FOUND");
             if (wantsJson) {
                 return res.json({ coverUrl: null });
             }
@@ -2424,12 +2648,17 @@ router.get("/cover-art-colors", imageLimiter, async (req, res) => {
             return res.status(400).json({ error: "URL parameter required" });
         }
 
-        const imageUrl = decodeURIComponent(url as string);
+        const imageUrl = Array.isArray(url) ? url[0] : url;
+        const normalizedImageUrl = normalizeExternalImageUrl(imageUrl);
+        if (!normalizedImageUrl) {
+            console.warn(`[COLORS] Blocked invalid image URL: ${imageUrl}`);
+            return res.status(400).json({ error: "Invalid image URL" });
+        }
 
         // Handle placeholder images - return default fallback colors
         if (
-            imageUrl.includes("placeholder") ||
-            imageUrl.startsWith("/placeholder")
+            normalizedImageUrl.includes("placeholder") ||
+            normalizedImageUrl.startsWith("/placeholder")
         ) {
             console.log(
                 `[COLORS] Placeholder image detected, returning fallback colors`
@@ -2447,7 +2676,7 @@ router.get("/cover-art-colors", imageLimiter, async (req, res) => {
         // Create cache key for colors
         const cacheKey = `colors:${crypto
             .createHash("md5")
-            .update(imageUrl)
+            .update(normalizedImageUrl)
             .digest("hex")}`;
 
         // Try to get from Redis cache first
@@ -2455,12 +2684,12 @@ router.get("/cover-art-colors", imageLimiter, async (req, res) => {
             const cached = await redisClient.get(cacheKey);
             if (cached) {
                 console.log(
-                    `[COLORS] Cache HIT for ${imageUrl.substring(0, 60)}...`
+                    `[COLORS] Cache HIT for ${normalizedImageUrl.substring(0, 60)}...`
                 );
                 return res.json(JSON.parse(cached));
             } else {
                 console.log(
-                    `[COLORS] ✗ Cache MISS for ${imageUrl.substring(0, 60)}...`
+                    `[COLORS] ✗ Cache MISS for ${normalizedImageUrl.substring(0, 60)}...`
                 );
             }
         } catch (cacheError) {
@@ -2469,26 +2698,28 @@ router.get("/cover-art-colors", imageLimiter, async (req, res) => {
 
         // Fetch the image
         console.log(
-            `[COLORS] Fetching image: ${imageUrl.substring(0, 100)}...`
+            `[COLORS] Fetching image: ${normalizedImageUrl.substring(0, 100)}...`
         );
-        const imageResponse = await fetch(imageUrl, {
-            headers: {
-                "User-Agent": "Lidify/1.0",
-            },
+        const imageResult = await fetchExternalImage({
+            url: normalizedImageUrl,
+            cacheKeySuffix: "original",
         });
 
-        if (!imageResponse.ok) {
+        if (!imageResult.ok) {
+            if (imageResult.status === "not_found") {
+                console.error(
+                    `[COLORS] Failed to fetch image: ${imageResult.url} (404)`
+                );
+                return res.status(404).json({ error: "Image not found" });
+            }
             console.error(
-                `[COLORS] Failed to fetch image: ${imageUrl} (${imageResponse.status})`
+                `[COLORS] Failed to fetch image: ${imageResult.url} (${imageResult.message || "fetch error"})`
             );
-            return res.status(404).json({ error: "Image not found" });
+            return res.status(504).json({ error: "Image fetch failed" });
         }
 
-        const buffer = await imageResponse.arrayBuffer();
-        const imageBuffer = Buffer.from(buffer);
-
         // Extract colors using sharp
-        const colors = await extractColorsFromImage(imageBuffer);
+        const colors = await extractColorsFromImage(imageResult.buffer);
 
         console.log(`[COLORS] Extracted colors:`, colors);
 
@@ -2530,28 +2761,6 @@ router.get("/tracks/:id/stream", async (req, res) => {
         if (!track) {
             console.log("[STREAM] Track not found");
             return res.status(404).json({ error: "Track not found" });
-        }
-
-        // Log play start - only if this is a new playback session
-        const recentPlay = await prisma.play.findFirst({
-            where: {
-                userId,
-                trackId: track.id,
-                playedAt: {
-                    gte: new Date(Date.now() - 30 * 1000),
-                },
-            },
-            orderBy: { playedAt: "desc" },
-        });
-
-        if (!recentPlay) {
-            await prisma.play.create({
-                data: {
-                    userId,
-                    trackId: track.id,
-                },
-            });
-            console.log("[STREAM] Logged new play for track:", track.title);
         }
 
         // Get user's quality preference
@@ -4616,6 +4825,71 @@ router.get("/radio", async (req, res) => {
     } catch (error) {
         console.error("Radio endpoint error:", error);
         res.status(500).json({ error: "Failed to get radio tracks" });
+    }
+});
+
+// Track if a cover prefetch job is running to prevent concurrent runs
+let prefetchJobRunning = false;
+
+// POST /library/admin/prefetch-covers - Prefetch album covers for all library artists
+// This is an admin-only endpoint to backfill covers for existing artists
+router.post("/admin/prefetch-covers", requireAuth, requireAdmin, async (req, res) => {
+    try {
+        // Prevent concurrent prefetch jobs
+        if (prefetchJobRunning) {
+            return res.status(409).json({
+                error: "A cover prefetch job is already running. Please wait for it to complete.",
+            });
+        }
+
+        // Get all artists with valid MBIDs
+        const artists = await prisma.artist.findMany({
+            where: {
+                mbid: { not: { startsWith: "temp-" } },
+            },
+            select: {
+                id: true,
+                name: true,
+                mbid: true,
+            },
+            orderBy: { name: "asc" },
+        });
+
+        console.log(`[ADMIN] Starting cover prefetch for ${artists.length} artists`);
+        prefetchJobRunning = true;
+
+        // Return immediately with job info - actual work happens in background
+        res.json({
+            message: `Started cover prefetch for ${artists.length} artists`,
+            artists: artists.length,
+        });
+
+        // Process artists in background (don't await)
+        (async () => {
+            let processed = 0;
+            for (const artist of artists) {
+                try {
+                    await prefetchDiscographyCovers(artist.mbid, artist.name);
+                    processed++;
+                    if (processed % 10 === 0) {
+                        console.log(`[ADMIN] Prefetch progress: ${processed}/${artists.length}`);
+                    }
+                } catch (err) {
+                    console.error(`[ADMIN] Failed to prefetch covers for ${artist.name}:`, err);
+                }
+                // Small delay between artists to avoid overwhelming APIs
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+            console.log(`[ADMIN] Cover prefetch complete: ${processed}/${artists.length} artists processed`);
+        })().catch(err => {
+            console.error("[ADMIN] Prefetch background task failed:", err);
+        }).finally(() => {
+            prefetchJobRunning = false;
+        });
+    } catch (error) {
+        prefetchJobRunning = false;
+        console.error("Admin prefetch covers error:", error);
+        res.status(500).json({ error: "Failed to start cover prefetch" });
     }
 });
 

@@ -29,6 +29,7 @@ services:
             MUSIC_PATH: /music
             TRANSCODE_CACHE_PATH: /app/cache/transcodes
             TRANSCODE_CACHE_MAX_GB: ${TRANSCODE_CACHE_MAX_GB:-10}
+            IMAGE_CACHE_MAX_GB: ${IMAGE_CACHE_MAX_GB:-2}
 
             # CORS
             ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3030}

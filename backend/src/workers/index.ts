@@ -15,6 +15,8 @@ import { prisma } from "../utils/db";
 import { startDiscoverWeeklyCron, stopDiscoverWeeklyCron } from "./discoverCron";
 import { runDataIntegrityCheck } from "./dataIntegrity";
 import { simpleDownloadManager } from "../services/simpleDownloadManager";
+import { cleanupExternalImageCache } from "../services/imageCacheCleanup";
+import { config } from "../config";
 
 // Track intervals and timeouts for cleanup
 const intervals: NodeJS.Timeout[] = [];
@@ -169,6 +171,40 @@ setInterval(() => {
 );
 
 console.log("Data integrity check scheduled (every 24 hours)");
+
+// Run external image cache cleanup every 6 hours
+const imageCacheMaxGb = config.music.imageCacheMaxGb;
+if (imageCacheMaxGb > 0) {
+    timeouts.push(
+        setTimeout(() => {
+            cleanupExternalImageCache(imageCacheMaxGb)
+                .then((result) => {
+                    console.log(
+                        `Image cache cleanup: removed ${result.removedMb} MB (${result.removedFiles} files), remaining ${result.remainingMb} MB (limit ${result.limitMb} MB)`
+                    );
+                })
+                .catch((err) => {
+                    console.error("Image cache cleanup failed:", err);
+                });
+        }, 30 * 1000)
+    );
+
+    intervals.push(
+        setInterval(() => {
+            cleanupExternalImageCache(imageCacheMaxGb)
+                .then((result) => {
+                    console.log(
+                        `Image cache cleanup: removed ${result.removedMb} MB (${result.removedFiles} files), remaining ${result.remainingMb} MB (limit ${result.limitMb} MB)`
+                    );
+                })
+                .catch((err) => {
+                    console.error("Image cache cleanup failed:", err);
+                });
+        }, 6 * 60 * 60 * 1000)
+    );
+
+    console.log("Image cache cleanup scheduled (every 6 hours)");
+}
 
 // Run stale download cleanup every 2 minutes
 // This catches downloads that timed out even if the queue cleaner isn't running

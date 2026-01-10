@@ -115,42 +115,11 @@ router.get("/for-you", async (req, res) => {
             albumCounts.map((ac) => [ac.artistId, ac._count.rgMbid])
         );
 
-        // ========== CACHE-ONLY IMAGE LOOKUP FOR RECOMMENDATIONS ==========
-        // Only use cached data (DB heroUrl or Redis cache) - no API calls during page loads
-        // Background enrichment worker will populate cache over time
-        const { redisClient } = await import("../utils/redis");
-
-        // Get all cached images in a single Redis call for efficiency
+        // ========== IMAGE LOOKUP FOR RECOMMENDATIONS ==========
+        // Only use DB heroUrl - no API calls during page loads
         const artistsToCheck = newArtists.slice(0, limitNum);
-        const cacheKeys = artistsToCheck
-            .filter(a => !a.heroUrl)
-            .map(a => `hero:${a.id}`);
-        
-        let cachedImages: (string | null)[] = [];
-        if (cacheKeys.length > 0) {
-            try {
-                cachedImages = await redisClient.mGet(cacheKeys);
-            } catch (err) {
-                // Redis errors are non-critical
-            }
-        }
-
-        // Build a map from cache results
-        const cachedImageMap = new Map<string, string>();
-        let cacheIndex = 0;
-        for (const artist of artistsToCheck) {
-            if (!artist.heroUrl) {
-                const cached = cachedImages[cacheIndex];
-                if (cached && cached !== "NOT_FOUND") {
-                    cachedImageMap.set(artist.id, cached);
-                }
-                cacheIndex++;
-            }
-        }
-
         const artistsWithMetadata = artistsToCheck.map((artist) => {
-            // Use DB heroUrl first, then Redis cache, otherwise null
-            const coverArt = artist.heroUrl || cachedImageMap.get(artist.id) || null;
+            const coverArt = artist.heroUrl || null;
 
             return {
                 ...artist,

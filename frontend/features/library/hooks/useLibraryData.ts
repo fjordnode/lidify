@@ -4,7 +4,13 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
 export type LibraryFilter = "owned" | "discovery" | "all";
-export type SortOption = "name" | "name-desc" | "recent" | "tracks" | "dateAdded";
+export type SortOption =
+    | "name"
+    | "name-desc"
+    | "recent"
+    | "tracks"
+    | "dateAdded"
+    | "lastPlayed";
 
 interface UseLibraryDataProps {
     activeTab: Tab;

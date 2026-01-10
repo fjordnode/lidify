@@ -425,8 +425,15 @@ class ApiClient {
         });
     }
 
-    async getArtist(id: string) {
-        return this.request<any>(`/library/artists/${id}`);
+    async getArtist(id: string, options?: { includeExternal?: boolean }) {
+        const params = new URLSearchParams();
+        if (options?.includeExternal) {
+            params.set("includeExternal", "true");
+        }
+        const query = params.toString();
+        return this.request<any>(
+            `/library/artists/${id}${query ? `?${query}` : ""}`
+        );
     }
 
     async getAlbums(params?: {
@@ -539,6 +546,16 @@ class ApiClient {
             const url = `${baseUrl}${coverId}`;
             if (this.token) {
                 // Append token to existing query params
+                const separator = coverId.includes("?") ? "&" : "?";
+                return `${url}${separator}token=${encodeURIComponent(this.token)}`;
+            }
+            return url;
+        }
+
+        // Check if this is an already-proxied cover-art path
+        if (coverId && coverId.startsWith("/api/library/cover-art")) {
+            const url = `${baseUrl}${coverId}`;
+            if (this.token) {
                 const separator = coverId.includes("?") ? "&" : "?";
                 return `${url}${separator}token=${encodeURIComponent(this.token)}`;
             }
@@ -700,10 +717,10 @@ class ApiClient {
     }
 
     // Play tracking
-    async logPlay(trackId: string) {
+    async logPlay(trackId: string, playedSeconds?: number) {
         return this.request<any>("/plays", {
             method: "POST",
-            body: JSON.stringify({ trackId }),
+            body: JSON.stringify({ trackId, playedSeconds }),
         });
     }
 
@@ -1062,15 +1079,15 @@ class ApiClient {
     }
 
     async getTrackPreview(artistName: string, trackTitle: string) {
+        const params = new URLSearchParams({
+            artist: artistName,
+            track: trackTitle,
+        });
         return this.request<{
             previewUrl: string;
             albumTitle?: string;
             albumCover?: string | null;
-        }>(
-            `/artists/preview/${encodeURIComponent(
-                artistName
-            )}/${encodeURIComponent(trackTitle)}`
-        );
+        }>(`/artists/preview?${params.toString()}`);
     }
 
     async getAISimilarArtists(artistId: string) {

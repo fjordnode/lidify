@@ -9,6 +9,7 @@ export interface Album {
     name: string;
   };
   year?: number;
+  genres?: string[];
   genre?: string;
   coverArt?: string;
   coverUrl?: string;
@@ -21,6 +22,7 @@ export interface Album {
   owned?: boolean;
   tracks?: Track[];
   similarAlbums?: SimilarAlbum[];
+  bio?: string;
 }
 
 export interface Track {

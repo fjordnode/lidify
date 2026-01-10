@@ -26,6 +26,7 @@ interface ServiceConfig {
     deezer: RateLimitConfig;
     lidarr: RateLimitConfig;
     coverart: RateLimitConfig;
+    fanart: RateLimitConfig;
 }
 
 // Service-specific rate limit configurations
@@ -62,6 +63,13 @@ const SERVICE_CONFIGS: ServiceConfig = {
         intervalCap: 5, // Cover Art Archive - conservative rate
         interval: 1000,
         concurrency: 3,
+        maxRetries: 2,
+        baseDelay: 1000,
+    },
+    fanart: {
+        intervalCap: 2, // Fanart.tv free tier is 2 req/s
+        interval: 1000,
+        concurrency: 2,
         maxRetries: 2,
         baseDelay: 1000,
     },

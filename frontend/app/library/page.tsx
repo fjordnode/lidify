@@ -309,7 +309,10 @@ export default function LibraryPage() {
                                 <option value="recent">Year (Newest)</option>
                             )}
                             {activeTab === "artists" && (
-                                <option value="tracks">Most Tracks</option>
+                                <>
+                                    <option value="lastPlayed">Last Played</option>
+                                    <option value="tracks">Most Tracks</option>
+                                </>
                             )}
                         </select>
 

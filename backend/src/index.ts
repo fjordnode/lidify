@@ -248,17 +248,10 @@ httpServer.listen(config.port, "0.0.0.0", async () => {
 
     // Enrichment worker enabled for OWNED content only
     // - Background enrichment: Genres, MBIDs, similar artists for owned albums/artists
-    // - On-demand fetching: Artist images, bios when browsing (cached in Redis 7 days)
+    // - On-demand fetching: Artist images, bios when browsing (cached on disk)
     console.log(
         "Background enrichment enabled for owned content (genres, MBIDs, etc.)"
     );
-
-    // Warm up Redis cache from database on startup
-    // This populates Redis with existing artist images and album covers
-    // so first page loads are instant instead of waiting for cache population
-    dataCacheService.warmupCache().catch((err) => {
-        console.error("Cache warmup failed:", err);
-    });
 
     // Podcast cache cleanup - runs daily to remove cached episodes older than 30 days
     const { cleanupExpiredCache } = await import("./services/podcastDownload");

@@ -9,6 +9,7 @@ export interface MusicConfig {
     musicPath: string;
     transcodeCachePath: string;
     transcodeCacheMaxGb: number;
+    imageCacheMaxGb: number;
 }
 
 /**
@@ -93,6 +94,18 @@ export async function validateMusicConfig(): Promise<MusicConfig> {
         );
     }
 
+    const imageCacheMaxGb = parseInt(
+        process.env.IMAGE_CACHE_MAX_GB || "2",
+        10
+    );
+    if (isNaN(imageCacheMaxGb) || imageCacheMaxGb < 0) {
+        throw new AppError(
+            ErrorCode.INVALID_CONFIG,
+            ErrorCategory.FATAL,
+            `Invalid image cache size: must be 0 or a positive integer. Got: ${imageCacheMaxGb}`
+        );
+    }
+
     // VALIDATE BUNDLED FFMPEG (from @ffmpeg-installer/ffmpeg)
     try {
         // Check if bundled FFmpeg binary exists
@@ -123,10 +136,12 @@ export async function validateMusicConfig(): Promise<MusicConfig> {
     console.log(`   Music path: ${musicPath}`);
     console.log(`   Transcode cache: ${transcodeCachePath}`);
     console.log(`   Cache limit: ${transcodeCacheMaxGb} GB`);
+    console.log(`   Image cache limit: ${imageCacheMaxGb} GB`);
 
     return {
         musicPath,
         transcodeCachePath,
         transcodeCacheMaxGb,
+        imageCacheMaxGb,
     };
 }

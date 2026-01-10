@@ -1,9 +1,10 @@
 import axios from "axios";
 import { redisClient } from "../utils/redis";
+import { normalizeQuotes } from "../utils/stringNormalization";
 
 /**
  * Deezer Service
- * 
+ *
  * Fetches images, previews, and public playlist data from Deezer.
  * No authentication required - Deezer's API is completely public.
  */
@@ -105,13 +106,14 @@ class DeezerService {
      * Search for an artist and get their image URL
      */
     async getArtistImage(artistName: string): Promise<string | null> {
-        const cacheKey = `artist:${artistName.toLowerCase()}`;
+        const normalizedName = normalizeQuotes(artistName);
+        const cacheKey = `artist:${normalizedName.toLowerCase()}`;
         const cached = await this.getCached(cacheKey);
         if (cached) return cached === "null" ? null : cached;
 
         try {
             const response = await axios.get(`${DEEZER_API}/search/artist`, {
-                params: { q: artistName, limit: 1 },
+                params: { q: normalizedName, limit: 1 },
                 timeout: 5000,
             });
 
@@ -131,13 +133,14 @@ class DeezerService {
      * This prevents conflating similar artist names (e.g., "GHOST" vs "ghøst")
      */
     async getArtistImageStrict(artistName: string): Promise<string | null> {
-        const cacheKey = `artist-strict:${artistName.toLowerCase()}`;
+        const normalizedName = normalizeQuotes(artistName);
+        const cacheKey = `artist-strict:${normalizedName.toLowerCase()}`;
         const cached = await this.getCached(cacheKey);
         if (cached) return cached === "null" ? null : cached;
 
         try {
             const response = await axios.get(`${DEEZER_API}/search/artist`, {
-                params: { q: artistName, limit: 5 },
+                params: { q: normalizedName, limit: 5 },
                 timeout: 5000,
             });
 
@@ -172,13 +175,15 @@ class DeezerService {
      * Search for an album and get its cover art URL
      */
     async getAlbumCover(artistName: string, albumName: string): Promise<string | null> {
-        const cacheKey = `album:${artistName.toLowerCase()}:${albumName.toLowerCase()}`;
+        const normalizedArtist = normalizeQuotes(artistName);
+        const normalizedAlbum = normalizeQuotes(albumName);
+        const cacheKey = `album:${normalizedArtist.toLowerCase()}:${normalizedAlbum.toLowerCase()}`;
         const cached = await this.getCached(cacheKey);
         if (cached) return cached === "null" ? null : cached;
 
         try {
             const response = await axios.get(`${DEEZER_API}/search/album`, {
-                params: { q: `artist:"${artistName}" album:"${albumName}"`, limit: 5 },
+                params: { q: `artist:"${normalizedArtist}" album:"${normalizedAlbum}"`, limit: 5 },
                 timeout: 5000,
             });
 
@@ -217,7 +222,11 @@ class DeezerService {
         albumTitle: string;
         albumCover: string | null;
     } | null> {
-        const cacheKey = `preview-info:${artistName.toLowerCase()}:${trackName.toLowerCase()}`;
+        // Normalize quotes for Deezer compatibility (MusicBrainz uses curly quotes)
+        const normalizedArtist = normalizeQuotes(artistName);
+        const normalizedTrack = normalizeQuotes(trackName);
+
+        const cacheKey = `preview-info:${normalizedArtist.toLowerCase()}:${normalizedTrack.toLowerCase()}`;
         const cached = await this.getCached(cacheKey);
         if (cached) {
             if (cached === "null") return null;
@@ -230,7 +239,7 @@ class DeezerService {
 
         try {
             const response = await axios.get(`${DEEZER_API}/search/track`, {
-                params: { q: `artist:"${artistName}" track:"${trackName}"`, limit: 1 },
+                params: { q: `artist:"${normalizedArtist}" track:"${normalizedTrack}"`, limit: 1 },
                 timeout: 5000,
             });
 

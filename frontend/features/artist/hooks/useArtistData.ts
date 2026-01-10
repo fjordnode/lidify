@@ -1,6 +1,6 @@
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/hooks/useQueries";
 import { api } from "@/lib/api";
 import { useDownloadContext } from "@/lib/download-context";
@@ -23,6 +23,8 @@ export function useArtistData() {
     }
     const { downloadStatus } = useDownloadContext();
     const prevActiveCountRef = useRef(downloadStatus.activeDownloads.length);
+    const queryClient = useQueryClient();
+    const externalLoadedRef = useRef(false);
 
     // Use React Query - no polling needed, webhook events trigger refresh via download context
     const {
@@ -85,6 +87,24 @@ export function useArtistData() {
         if (!artist) return null;
         return artist.id && !artist.id.includes("-") ? "library" : "discovery";
     }, [artist]);
+
+    useEffect(() => {
+        if (!id || !artist || source !== "library") {
+            return;
+        }
+        if (externalLoadedRef.current) {
+            return;
+        }
+        externalLoadedRef.current = true;
+
+        api.getArtist(id, { includeExternal: true })
+            .then((fullArtist) => {
+                queryClient.setQueryData(queryKeys.artist(id), fullArtist);
+            })
+            .catch(() => {
+                // Ignore background fetch errors
+            });
+    }, [artist, id, source, queryClient]);
 
     // Sort albums by year (newest first, nulls last) - memoized
     const albums = useMemo(() => {

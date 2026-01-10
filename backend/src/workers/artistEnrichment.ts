@@ -8,7 +8,13 @@ import { musicBrainzService } from "../services/musicbrainz";
 import { normalizeArtistName } from "../utils/artistNormalization";
 import { coverArtService } from "../services/coverArt";
 import { imageProviderService } from "../services/imageProvider";
-import { redisClient } from "../utils/redis";
+import { fetchExternalImage } from "../services/imageProxy";
+
+// MusicBrainz secondary types to exclude from discography
+const EXCLUDED_SECONDARY_TYPES = [
+    "Live", "Compilation", "Soundtrack", "Remix", "DJ-mix",
+    "Mixtape/Street", "Demo", "Interview", "Audio drama", "Audiobook", "Spokenword",
+];
 
 /**
  * Enriches an artist with metadata from Wikidata and Last.fm
@@ -347,18 +353,11 @@ export async function enrichSimilarArtist(artist: Artist): Promise<void> {
         // Fetch covers for all albums belonging to this artist that don't have covers yet
         await enrichAlbumCovers(artist.id, heroUrl);
 
-        // Cache artist image in Redis for faster access
-        if (heroUrl) {
-            try {
-                await redisClient.setEx(
-                    `hero:${artist.id}`,
-                    7 * 24 * 60 * 60,
-                    heroUrl
-                );
-            } catch (err) {
-                // Redis errors are non-critical
-            }
+        // Pre-fetch covers for MusicBrainz discography (so artist page loads fast)
+        if (!artist.mbid.startsWith("temp-")) {
+            await prefetchDiscographyCovers(artist.mbid, artist.name);
         }
+
     } catch (error: any) {
         console.error(
             `${logPrefix} ENRICHMENT FAILED:`,
@@ -448,17 +447,6 @@ async function enrichAlbumCovers(
                                 data: { coverUrl },
                             });
 
-                            // Cache in Redis
-                            try {
-                                await redisClient.setEx(
-                                    `album-cover:${album.id}`,
-                                    30 * 24 * 60 * 60, // 30 days
-                                    coverUrl
-                                );
-                            } catch (err) {
-                                // Redis errors are non-critical
-                            }
-
                             fetchedCount++;
                         } else {
                             console.log(`      No cover found for: ${album.title}`);
@@ -482,5 +470,95 @@ async function enrichAlbumCovers(
     } catch (error) {
         console.error(`    Failed to enrich album covers:`, error);
         // Don't throw - album cover failures shouldn't fail the entire enrichment
+    }
+}
+
+/**
+ * Pre-fetch covers for an artist's MusicBrainz discography
+ * This prefetches album images into the disk cache for faster page loads
+ * Exported for use by admin endpoints to backfill existing artists
+ */
+export async function prefetchDiscographyCovers(
+    artistMbid: string,
+    artistName: string
+): Promise<void> {
+    try {
+        console.log(`    Pre-fetching discography covers for ${artistName}...`);
+
+        // Get discography from MusicBrainz
+        const releaseGroups = await musicBrainzService.getReleaseGroups(artistMbid);
+
+        // Filter to albums and EPs only (same filter as library endpoint)
+        const filteredReleaseGroups = releaseGroups.filter((rg: any) => {
+            const isPrimaryType =
+                rg["primary-type"] === "Album" || rg["primary-type"] === "EP";
+            if (!isPrimaryType) return false;
+
+            const types = rg["secondary-types"] || [];
+            return !types.some((t: string) => EXCLUDED_SECONDARY_TYPES.includes(t));
+        });
+
+        if (filteredReleaseGroups.length === 0) {
+            console.log(`    No albums/EPs found in discography`);
+            return;
+        }
+
+        const albumsToFetch = filteredReleaseGroups.map((rg: any) => ({
+            id: rg.id,
+            title: rg.title,
+        }));
+
+        console.log(
+            `    Fetching ${albumsToFetch.length}/${filteredReleaseGroups.length} covers...`
+        );
+
+        let fetchedCount = 0;
+        const BATCH_SIZE = 3;
+
+        for (let i = 0; i < albumsToFetch.length; i += BATCH_SIZE) {
+            const batch = albumsToFetch.slice(i, i + BATCH_SIZE);
+
+            await Promise.all(
+                batch.map(async (album) => {
+                    try {
+                        // Try imageProviderService which does Deezer -> CAA -> Fanart.tv
+                        const result = await imageProviderService.getAlbumCover(
+                            artistName,
+                            album.title,
+                            album.id
+                        );
+
+                        if (result?.url) {
+                            await fetchExternalImage({
+                                url: result.url,
+                                cacheKeySuffix: "original",
+                            });
+                            fetchedCount++;
+                        } else {
+                            console.log(
+                                `      [PREFETCH] No cover found: "${album.title}" (${album.id})`
+                            );
+                        }
+                    } catch (err: any) {
+                        // Log the actual error for debugging
+                        const errorMsg = err?.message || err?.code || String(err);
+                        console.error(`      [PREFETCH] ERROR for "${album.title}": ${errorMsg}`);
+                        // Don't cache - allow retry on next prefetch
+                    }
+                })
+            );
+
+            // Delay between batches to respect rate limits
+            if (i + BATCH_SIZE < albumsToFetch.length) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+        }
+
+        console.log(
+            `    Pre-fetched ${fetchedCount}/${albumsToFetch.length} discography covers`
+        );
+    } catch (error) {
+        console.error(`    Failed to pre-fetch discography covers:`, error);
+        // Don't throw - this is best-effort
     }
 }

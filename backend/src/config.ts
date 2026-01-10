@@ -41,6 +41,7 @@ let musicConfig: MusicConfig = {
         process.env.TRANSCODE_CACHE_MAX_GB || "10",
         10
     ),
+    imageCacheMaxGb: parseInt(process.env.IMAGE_CACHE_MAX_GB || "2", 10),
 };
 
 // Initialize music configuration asynchronously

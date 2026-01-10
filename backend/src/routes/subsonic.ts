@@ -1138,26 +1138,6 @@ router.get("/stream.view", async (req: Request, res: Response) => {
             );
         }
 
-        // Log play
-        if (req.user?.id) {
-            const recentPlay = await prisma.play.findFirst({
-                where: {
-                    userId: req.user.id,
-                    trackId: track.id,
-                    playedAt: { gte: new Date(Date.now() - 30 * 1000) },
-                },
-            });
-
-            if (!recentPlay) {
-                await prisma.play.create({
-                    data: {
-                        userId: req.user.id,
-                        trackId: track.id,
-                    },
-                });
-            }
-        }
-
         // Determine quality from maxBitRate
         let quality: Quality = "original";
         if (maxBitRate) {

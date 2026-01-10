@@ -118,10 +118,9 @@ RUN npm run build
 # SECURITY HARDENING
 # ============================================
 # Remove dangerous tools and build dependencies AFTER all builds are complete
-# Keep: bash (supervisor), gosu (postgres user switching), python3 (audio analyzer)
+# Keep: bash (supervisor), gosu (postgres user switching), python3 (audio analyzer), curl (debugging)
 RUN apt-get purge -y --auto-remove build-essential python3-dev 2>/dev/null || true && \
     rm -f /usr/bin/wget /bin/wget 2>/dev/null || true && \
-    rm -f /usr/bin/curl /bin/curl 2>/dev/null || true && \
     rm -f /usr/bin/nc /bin/nc /usr/bin/ncat /usr/bin/netcat 2>/dev/null || true && \
     rm -f /usr/bin/ftp /usr/bin/tftp /usr/bin/telnet 2>/dev/null || true && \
     rm -rf /var/lib/apt/lists/*

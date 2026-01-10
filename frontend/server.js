@@ -11,6 +11,15 @@ const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:3006";
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
+// Streaming proxy for long-lived audio responses
+const streamProxy = createProxyMiddleware({
+    target: backendUrl,
+    changeOrigin: true,
+    logLevel: "warn",
+    timeout: 600000, // 10 minute timeout for audio streaming
+    proxyTimeout: 600000,
+});
+
 // WebSocket proxy for Socket.io
 const wsProxy = createProxyMiddleware({
     target: backendUrl,
@@ -50,6 +59,16 @@ app.prepare().then(() => {
         const parsedUrl = parse(req.url, true);
         const { pathname } = parsedUrl;
 
+        // Proxy streaming endpoints directly to backend with long timeouts
+        if (
+            pathname.startsWith("/api/library/") && pathname.endsWith("/stream") ||
+            pathname.startsWith("/api/audiobooks/") && pathname.endsWith("/stream") ||
+            pathname.startsWith("/api/podcasts/") && pathname.includes("/stream")
+        ) {
+            streamProxy(req, res);
+            return;
+        }
+
         // Proxy Subsonic API requests (for desktop clients like Supersonic)
         if (pathname.startsWith("/rest/")) {
             subsonicProxy(req, res);
@@ -64,7 +83,8 @@ app.prepare().then(() => {
 
         // Proxy long-running AI endpoints with extended timeout
         if (pathname.startsWith("/api/recommendations/ai-weekly") ||
-            pathname.startsWith("/api/artists/ai-chat")) {
+            pathname.startsWith("/api/artists/ai-chat") ||
+            pathname.startsWith("/api/search/discover")) {
             longRunningProxy(req, res);
             return;
         }

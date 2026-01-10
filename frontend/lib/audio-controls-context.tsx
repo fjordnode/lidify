@@ -117,6 +117,12 @@ export function AudioControlsProvider({ children }: { children: ReactNode }) {
 
     // Ref to track repeat-one timeout for cleanup
     const repeatTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const playLoggedRef = useRef(false);
+    const playAccumulatedSecondsRef = useRef(0);
+    const lastPlayTimeRef = useRef(0);
+    const lastTrackIdRef = useRef<string | null>(null);
+    const minPlaySeconds = 30;
+    const maxDeltaSeconds = 5;
 
     // Cleanup timeout on unmount
     useEffect(() => {
@@ -128,6 +134,67 @@ export function AudioControlsProvider({ children }: { children: ReactNode }) {
             queueDebugLog("AudioControlsProvider unmounted");
         };
     }, []);
+
+    useEffect(() => {
+        if (state.playbackType !== "track") {
+            playLoggedRef.current = false;
+            playAccumulatedSecondsRef.current = 0;
+            lastPlayTimeRef.current = 0;
+            lastTrackIdRef.current = null;
+            return;
+        }
+
+        const trackId = state.currentTrack?.id || null;
+        if (trackId !== lastTrackIdRef.current) {
+            playLoggedRef.current = false;
+            playAccumulatedSecondsRef.current = 0;
+            lastPlayTimeRef.current = playback.currentTime;
+            lastTrackIdRef.current = trackId;
+        }
+    }, [state.playbackType, state.currentTrack?.id, playback.currentTime]);
+
+    useEffect(() => {
+        if (state.playbackType !== "track") {
+            return;
+        }
+
+        const trackId = state.currentTrack?.id;
+        if (!trackId || playLoggedRef.current) {
+            lastPlayTimeRef.current = playback.currentTime;
+            return;
+        }
+
+        if (!playback.isPlaying || playback.isBuffering) {
+            lastPlayTimeRef.current = playback.currentTime;
+            return;
+        }
+
+        const delta = playback.currentTime - lastPlayTimeRef.current;
+        if (delta > 0 && delta <= maxDeltaSeconds) {
+            playAccumulatedSecondsRef.current += delta;
+        } else if (delta > 0) {
+            lastPlayTimeRef.current = playback.currentTime;
+            return;
+        }
+
+        lastPlayTimeRef.current = playback.currentTime;
+
+        if (playAccumulatedSecondsRef.current >= minPlaySeconds) {
+            playLoggedRef.current = true;
+            api.logPlay(trackId, playAccumulatedSecondsRef.current).catch(
+                (error) => {
+                    console.error("Failed to log play:", error);
+                    playLoggedRef.current = false;
+                }
+            );
+        }
+    }, [
+        playback.currentTime,
+        playback.isPlaying,
+        playback.isBuffering,
+        state.currentTrack?.id,
+        state.playbackType,
+    ]);
 
     // Keep a stable "Up Next" insertion cursor like Spotify:
     // - When the current track changes, reset to "right after current"

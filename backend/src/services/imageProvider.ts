@@ -10,6 +10,7 @@
 
 import axios from "axios";
 import { rateLimiter } from "./rateLimiter";
+import { normalizeQuotes } from "../utils/stringNormalization";
 
 export interface ImageSearchOptions {
     preferredSize?: "small" | "medium" | "large" | "extralarge" | "mega";
@@ -95,6 +96,24 @@ export class ImageProviderService {
                     }`
                 );
             }
+        }
+
+        // Try Last.fm as fallback
+        try {
+            const lastfmImage = await this.getArtistImageFromLastFm(
+                artistName,
+                mbid
+            );
+            if (lastfmImage) {
+                console.log(`  Found image from Last.fm`);
+                return lastfmImage;
+            }
+        } catch (error) {
+            console.log(
+                `Last.fm failed: ${
+                    error instanceof Error ? error.message : "Unknown error"
+                }`
+            );
         }
 
         console.log(`  ✗ No artist image found from any source`);
@@ -186,12 +205,12 @@ export class ImageProviderService {
         artistName: string,
         timeout: number
     ): Promise<ImageResult | null> {
-        const response = await axios.get(
-            `${this.DEEZER_API_URL}/search/artist`,
-            {
-                params: { q: artistName, limit: 1 },
+        const normalizedName = normalizeQuotes(artistName);
+        const response = await rateLimiter.execute("deezer", () =>
+            axios.get(`${this.DEEZER_API_URL}/search/artist`, {
+                params: { q: normalizedName, limit: 1 },
                 timeout,
-            }
+            })
         );
 
         if (response.data.data && response.data.data.length > 0) {
@@ -219,23 +238,25 @@ export class ImageProviderService {
         albumTitle: string,
         timeout: number
     ): Promise<ImageResult | null> {
-        const response = await axios.get(
-            `${this.DEEZER_API_URL}/search/album`,
-            {
+        const normalizedArtist = normalizeQuotes(artistName);
+        const normalizedAlbum = normalizeQuotes(albumTitle);
+        const response = await rateLimiter.execute("deezer", () =>
+            axios.get(`${this.DEEZER_API_URL}/search/album`, {
                 params: {
-                    q: `artist:"${artistName}" album:"${albumTitle}"`,
+                    q: `artist:"${normalizedArtist}" album:"${normalizedAlbum}"`,
                     limit: 5,
                 },
                 timeout,
-            }
+            })
         );
 
         if (response.data.data && response.data.data.length > 0) {
             // Try to find exact match first
             let album = response.data.data.find(
                 (a: any) =>
-                    a.title.toLowerCase() === albumTitle.toLowerCase() &&
-                    a.artist.name.toLowerCase() === artistName.toLowerCase()
+                    a.title.toLowerCase() === normalizedAlbum.toLowerCase() &&
+                    a.artist.name.toLowerCase() ===
+                        normalizedArtist.toLowerCase()
             );
 
             // Fall back to first result
@@ -268,12 +289,11 @@ export class ImageProviderService {
             return null;
         }
 
-        const response = await axios.get(
-            `${this.FANART_API_URL}/music/${mbid}`,
-            {
+        const response = await rateLimiter.execute("fanart", () =>
+            axios.get(`${this.FANART_API_URL}/music/${mbid}`, {
                 params: { api_key: this.FANART_API_KEY },
                 timeout,
-            }
+            })
         );
 
         // Fanart.tv provides multiple image types, prefer artistthumb
@@ -302,12 +322,11 @@ export class ImageProviderService {
             return null;
         }
 
-        const response = await axios.get(
-            `${this.FANART_API_URL}/music/albums/${rgMbid}`,
-            {
+        const response = await rateLimiter.execute("fanart", () =>
+            axios.get(`${this.FANART_API_URL}/music/albums/${rgMbid}`, {
                 params: { api_key: this.FANART_API_KEY },
                 timeout,
-            }
+            })
         );
 
         // Prefer albumcover, fall back to cdart

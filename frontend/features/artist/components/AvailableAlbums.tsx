@@ -35,12 +35,10 @@ function LazyAlbumCard({
     index: number;
 }) {
     const [coverArt, setCoverArt] = useState<string | null>(() => {
-        // Initial cover art from props
-        if (source === "library" && album.coverArt) {
-            return api.getCoverArtUrl(album.coverArt, 300);
-        }
-        if (album.coverUrl) {
-            return api.getCoverArtUrl(album.coverUrl, 300);
+        // Initial cover art from props - check both coverArt and coverUrl for compatibility
+        const cover = album.coverArt || album.coverUrl;
+        if (cover) {
+            return api.getCoverArtUrl(cover, 300);
         }
         return null;
     });

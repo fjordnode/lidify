@@ -5,6 +5,7 @@ import { fanartService } from "../services/fanart";
 import { deezerService } from "../services/deezer";
 import { redisClient } from "../utils/redis";
 import { openRouterService, SimilarArtistRecommendation, ChatMessage } from "../services/openrouter";
+import { normalizeQuotes, normalizeFullwidth } from "../utils/stringNormalization";
 import crypto from "crypto";
 import { prisma } from "../utils/db";
 
@@ -12,22 +13,6 @@ const router = Router();
 
 // Cache TTL for discovery content (shorter since it's not owned)
 const DISCOVERY_CACHE_TTL = 24 * 60 * 60; // 24 hours
-
-/**
- * Normalize fullwidth Unicode characters to ASCII equivalents for discovery lookups.
- * ONLY handles fullwidth characters (ＧＨＯＳＴ -> GHOST) which are stylistic variants.
- * Does NOT normalize diacritics (ø, é, ñ) - those represent distinct artists.
- */
-function normalizeFullwidth(name: string): string {
-    return name
-        // Convert fullwidth characters (U+FF01-U+FF5E) to ASCII (U+0021-U+007E)
-        .replace(/[\uFF01-\uFF5E]/g, (char) =>
-            String.fromCharCode(char.charCodeAt(0) - 0xFEE0)
-        )
-        // Convert fullwidth space to regular space
-        .replace(/\u3000/g, " ")
-        .trim();
-}
 
 /**
  * Safely decode a URI component, returning the original string if decoding fails.
@@ -420,6 +405,49 @@ router.post("/ai-chat/:artistId", async (req, res) => {
 });
 
 // GET /artists/preview/:artistName/:trackTitle - Get Deezer preview URL for a track
+// Preferred: use /artists/preview?artist=...&track=... to avoid path encoding issues
+router.get("/preview", async (req, res) => {
+    try {
+        const artistParam = req.query.artist;
+        const trackParam = req.query.track;
+
+        if (typeof artistParam !== "string" || typeof trackParam !== "string") {
+            return res.status(400).json({
+                error: "Missing artist or track query parameter",
+            });
+        }
+
+        const decodedArtist = safeDecodeURIComponent(artistParam);
+        const decodedTrack = safeDecodeURIComponent(trackParam);
+
+        console.log(
+            `Getting preview for "${decodedTrack}" by ${decodedArtist}`
+        );
+
+        const previewInfo = await deezerService.getTrackPreviewWithInfo(
+            decodedArtist,
+            decodedTrack
+        );
+
+        if (previewInfo) {
+            return res.json({
+                previewUrl: previewInfo.previewUrl,
+                albumTitle: previewInfo.albumTitle,
+                albumCover: previewInfo.albumCover,
+            });
+        }
+
+        return res.status(404).json({ error: "Preview not found" });
+    } catch (error: any) {
+        console.error("Preview fetch error:", error);
+        return res.status(500).json({
+            error: "Failed to fetch preview",
+            message: error.message,
+        });
+    }
+});
+
+// Legacy path-based preview endpoint
 router.get("/preview/:artistName/:trackTitle", async (req, res) => {
     try {
         const { artistName, trackTitle } = req.params;
@@ -458,8 +486,18 @@ router.get("/discover/:nameOrMbid", async (req, res) => {
     try {
         const { nameOrMbid } = req.params;
 
+        // Check if it's an MBID (UUID format) or name - needed for cache key normalization
+        const isMbid =
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+                nameOrMbid
+            );
+
         // Check Redis cache first for discovery content
-        const cacheKey = `discovery:artist:${nameOrMbid}`;
+        // Normalize the cache key so "ＧＨＯＳＴ" and "GHOST" share the same cache entry
+        const normalizedCacheKey = isMbid
+            ? nameOrMbid
+            : normalizeFullwidth(safeDecodeURIComponent(nameOrMbid)).toLowerCase();
+        const cacheKey = `discovery:artist:${normalizedCacheKey}`;
         try {
             const cached = await redisClient.get(cacheKey);
             if (cached) {
@@ -469,12 +507,6 @@ router.get("/discover/:nameOrMbid", async (req, res) => {
         } catch (err) {
             // Redis errors are non-critical
         }
-
-        // Check if it's an MBID (UUID format) or name
-        const isMbid =
-            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-                nameOrMbid
-            );
 
         let mbid: string | null = isMbid ? nameOrMbid : null;
         // Keep original name for display, use normalized for lookups
@@ -488,31 +520,36 @@ router.get("/discover/:nameOrMbid", async (req, res) => {
             let mbResults = await musicBrainzService.searchArtist(artistName, 10);
 
             // Look for exact match with original name (case-insensitive)
+            // Normalize quotes because MusicBrainz uses typographic quotes (') but URLs use straight (')
+            const normalizedArtistName = normalizeQuotes(artistName.toLowerCase());
             let exactMatch = mbResults.find((r: any) =>
-                r.name.toLowerCase() === artistName.toLowerCase()
+                normalizeQuotes(r.name.toLowerCase()) === normalizedArtistName
             );
 
             if (exactMatch) {
                 mbid = exactMatch.id;
-                artistName = exactMatch.name;
+                // Use normalized name (straight quotes) for external API compatibility
+                // MusicBrainz uses typographic quotes which Last.fm doesn't recognize
+                artistName = normalizeQuotes(exactMatch.name);
             } else if (normalizedName.toLowerCase() !== artistName.toLowerCase()) {
                 // Step 2: Only if normalization actually changed the name,
                 // try searching with normalized name (handles ＧＨＯＳＴ -> GHOST)
                 mbResults = await musicBrainzService.searchArtist(normalizedName, 10);
 
                 // Look for match where normalized names are equal
+                const normalizedSearchName = normalizeQuotes(normalizedName.toLowerCase());
                 exactMatch = mbResults.find((r: any) =>
-                    normalizeFullwidth(r.name).toLowerCase() === normalizedName.toLowerCase()
+                    normalizeQuotes(normalizeFullwidth(r.name).toLowerCase()) === normalizedSearchName
                 );
 
                 if (exactMatch) {
                     mbid = exactMatch.id;
-                    artistName = exactMatch.name;
+                    artistName = normalizeQuotes(exactMatch.name);
                 } else if (mbResults.length > 0) {
                     // Fallback to first result only for normalized searches
                     // (e.g., ＧＨＯＳＴ where there's no exact "ＧＨＯＳＴ" artist)
                     mbid = mbResults[0].id;
-                    artistName = mbResults[0].name;
+                    artistName = normalizeQuotes(mbResults[0].name);
                 }
             }
             // If original search had results but no exact match,
@@ -520,10 +557,16 @@ router.get("/discover/:nameOrMbid", async (req, res) => {
             // This prevents "Ghøst" from matching "GHØST GIRL"
         }
 
+        // If no MusicBrainz match was found, at least normalize fullwidth characters
+        // for external API compatibility (Last.fm, Deezer won't recognize "ＧＨＯＳＴ")
+        if (!mbid && artistName === originalName && normalizedName !== originalName) {
+            artistName = normalizedName;
+        }
+
         // If we have MBID but no name, get it from MusicBrainz
         if (mbid && !artistName) {
             const mbArtist = await musicBrainzService.getArtist(mbid);
-            artistName = mbArtist.name;
+            artistName = normalizeQuotes(mbArtist.name);
         }
 
         if (!artistName) {
@@ -654,34 +697,11 @@ router.get("/discover/:nameOrMbid", async (req, res) => {
                 // return URLs that the frontend will lazy-load via /api/library/album-cover
                 albums = await Promise.all(
                     filteredReleaseGroups.map(async (rg: any) => {
-                        let coverUrl: string | null = null;
-                        const cacheKey = `caa:${rg.id}`;
-
-                        try {
-                            const cached = await redisClient.get(cacheKey);
-                            if (cached === "NOT_FOUND") {
-                                // Already tried, nothing found
-                                coverUrl = null;
-                            } else if (cached) {
-                                // Use cached URL directly
-                                coverUrl = cached;
-                            } else {
-                                // Cache miss - return lazy-load endpoint URL
-                                // Frontend will fetch this, endpoint handles Deezer -> CAA -> Fanart.tv fallback
-                                const params = new URLSearchParams({
-                                    artist: artistName,
-                                    album: rg.title,
-                                });
-                                coverUrl = `/api/library/album-cover/${rg.id}?${params}`;
-                            }
-                        } catch {
-                            // Redis error - return lazy-load URL as fallback
-                            const params = new URLSearchParams({
-                                artist: artistName,
-                                album: rg.title,
-                            });
-                            coverUrl = `/api/library/album-cover/${rg.id}?${params}`;
-                        }
+                        const params = new URLSearchParams({
+                            artist: artistName,
+                            album: rg.title,
+                        });
+                        const coverUrl = `/api/library/album-cover/${rg.id}?${params}`;
 
                         return {
                             id: rg.id, // MBID - used for linking
@@ -695,7 +715,7 @@ router.get("/discover/:nameOrMbid", async (req, res) => {
                                   )
                                 : null,
                             releaseDate: rg["first-release-date"] || null,
-                            coverUrl,
+                            coverArt: coverUrl, // Use coverArt to match library endpoint
                             owned: false, // Discovery albums are never owned
                         };
                     })
@@ -971,8 +991,7 @@ router.get("/album/:mbid", async (req, res) => {
                 ? parseInt(release.date.substring(0, 4))
                 : null,
             type: releaseGroup?.["primary-type"] || "Album",
-            coverUrl,
-            coverArt: coverUrl, // Alias for compatibility
+            coverArt: coverUrl, // Use coverArt to match library endpoint
             bio: lastFmInfo?.wiki?.summary || null,
             tags: lastFmInfo?.tags?.tag?.map((t: any) => t.name) || [],
             tracks: tracks.map((track: any, index: number) => ({

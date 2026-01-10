@@ -6,6 +6,7 @@ import { getSystemSettings } from "../utils/systemSettings";
 import { fanartService } from "./fanart";
 import { deezerService } from "./deezer";
 import { rateLimiter } from "./rateLimiter";
+import { normalizeQuotes } from "../utils/stringNormalization";
 
 interface SimilarArtist {
     name: string;
@@ -311,7 +312,10 @@ class LastFmService {
         artistName: string,
         limit = 10
     ) {
-        const cacheKey = `lastfm:toptracks:${artistMbid || artistName}`;
+        // Always use artist name - Last.fm's MBID database is incomplete
+        // and MBID-only lookups often fail even for well-known artists
+        const normalizedName = normalizeQuotes(artistName);
+        const cacheKey = `lastfm:toptracks:${normalizedName.toLowerCase()}`;
 
         try {
             const cached = await redisClient.get(cacheKey);
@@ -328,13 +332,8 @@ class LastFmService {
                 api_key: this.apiKey,
                 format: "json",
                 limit,
+                artist: normalizedName,
             };
-
-            if (artistMbid) {
-                params.mbid = artistMbid;
-            } else {
-                params.artist = artistName;
-            }
 
             const data = await this.request(params);
 
@@ -363,7 +362,9 @@ class LastFmService {
         artistName: string,
         limit = 10
     ) {
-        const cacheKey = `lastfm:topalbums:${artistMbid || artistName}`;
+        // Always use artist name - Last.fm's MBID database is incomplete
+        const normalizedName = normalizeQuotes(artistName);
+        const cacheKey = `lastfm:topalbums:${normalizedName.toLowerCase()}`;
 
         try {
             const cached = await redisClient.get(cacheKey);
@@ -380,13 +381,8 @@ class LastFmService {
                 api_key: this.apiKey,
                 format: "json",
                 limit,
+                artist: normalizedName,
             };
-
-            if (artistMbid) {
-                params.mbid = artistMbid;
-            } else {
-                params.artist = artistName;
-            }
 
             const data = await this.request(params);
 
@@ -411,21 +407,23 @@ class LastFmService {
     }
 
     /**
-     * Get detailed artist info including real images
+     * Get detailed artist info including real images.
+     *
+     * @param artistName - The artist name to look up (required)
+     * @param _mbid - Unused. Last.fm's MBID database is incomplete and MBID-only
+     *                lookups often fail even for well-known artists. Kept for API
+     *                compatibility but intentionally ignored.
      */
-    async getArtistInfo(artistName: string, mbid?: string) {
+    async getArtistInfo(artistName: string, _mbid?: string) {
         try {
+            // Always use artist name - MBID lookups are unreliable on Last.fm
+            const normalizedName = normalizeQuotes(artistName);
             const params: any = {
                 method: "artist.getinfo",
                 api_key: this.apiKey,
                 format: "json",
+                artist: normalizedName,
             };
-
-            if (mbid) {
-                params.mbid = mbid;
-            } else {
-                params.artist = artistName;
-            }
 
             const data = await this.request(params);
             return data.artist;

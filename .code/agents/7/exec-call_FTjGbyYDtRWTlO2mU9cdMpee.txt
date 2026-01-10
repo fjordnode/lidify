@@ -1,0 +1,1444 @@
+README.md:237:Create a `docker-compose.yml` file:
+README.md:263:docker compose up -d
+README.md:269:docker compose pull
+README.md:270:docker compose up -d
+README.md:381:The webhook requires Lidarr to be able to reach Lidify. By default, Lidify uses `host.docker.internal:3030` which works automatically when using the provided docker-compose files (they include `extra_hosts` to enable this on Linux).
+README.md:680:3. Include logs from `docker compose logs` if relevant
+DEVELOPMENT_HISTORY.md:225:docker compose up -d --force-recreate
+DEVELOPMENT_HISTORY.md:236:- The docker-compose.yml is in `/mnt/cache/appdata/compose/lidify/`
+DEVELOPMENT_HISTORY.md:384:**Important:** Lidarr's docker-compose needs `extra_hosts` for the webhook to work on Linux:
+DEVELOPMENT_HISTORY.md:515:- "Chill Mix" containing death metal, "Happy Vibes" containing black metal
+DEVELOPMENT_HISTORY.md:715:- `docker-compose.yml` - Environment variable renamed
+DEVELOPMENT_HISTORY.md:754:# In docker-compose.yml or .env
+CLAUDE.md:16:docker compose up -d --force-recreate
+docs/HANDOFF_BUGS.md:137:npm run dev        # Dev server with hot reload
+docs/HANDOFF_BUGS.md:138:npm run build      # Production build
+docs/HANDOFF_BUGS.md:143:npm run dev        # Dev server
+docs/HANDOFF_BUGS.md:144:npm run build      # Production build
+plans/refactor-code-review-findings.md:10:**Issue:** The similar artists loop makes 30+ HTTP requests (Fanart.tv → Deezer → Last.fm for each of 10 artists).
+plans/refactor-code-review-findings.md:105:**Issue:** Some methods silently return null/empty, others throw. Inconsistent behavior makes debugging harder.
+docs/dev-notes/plans/production-cleanup-plan-f0350f33.plan.md:149:- [ ] Fix Lidarr webhook URL to include /api prefix and make configurable
+frontend/components/PWAInstallPrompt.tsx:111:                        className="w-full mt-3 py-2 px-4 bg-[#ecb200] text-black font-semibold text-sm rounded-lg hover:bg-[#ffc933] transition-colors flex items-center justify-center gap-2"
+frontend/components/MetadataEditor.tsx:95:                className="p-2 rounded-full bg-black/40 hover:bg-black/60 transition-all"
+frontend/components/MetadataEditor.tsx:103:                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+frontend/components/MetadataEditor.tsx:308:                                className="px-6 py-2 rounded-full bg-[#ecb200] hover:bg-[#d4a000] text-black font-bold transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+docs/scripts/smoke.ts:12: *   npm run test:smoke
+backend/.dockerignore:3:npm-debug.log
+backend/.dockerignore:4:yarn-error.log
+docs/scripts/predeploy-test.sh:7:# - Starts a clean docker compose stack (core services only)
+docs/scripts/predeploy-test.sh:13:# - Docker + docker compose plugin
+docs/scripts/predeploy-test.sh:14:# - Node/npm available (to run the test runners)
+docs/scripts/predeploy-test.sh:22:# - LIDIFY_COMPOSE_FILE (default: docker-compose.yml)
+docs/scripts/predeploy-test.sh:28:COMPOSE_FILE="${LIDIFY_COMPOSE_FILE:-docker-compose.yml}"
+docs/scripts/predeploy-test.sh:47:if ! docker compose version >/dev/null 2>&1; then
+docs/scripts/predeploy-test.sh:48:  echo "[predeploy] ERROR: docker compose plugin not available (try: docker --version, docker compose version)"
+docs/scripts/predeploy-test.sh:54:    echo "[predeploy] tearing down docker compose stack..."
+docs/scripts/predeploy-test.sh:55:    docker compose -p "$PROJECT" -f "$COMPOSE_FILE" down -v
+docs/scripts/predeploy-test.sh:62:echo "[predeploy] starting docker compose (core services only)..."
+docs/scripts/predeploy-test.sh:63:docker compose -p "$PROJECT" -f "$COMPOSE_FILE" up -d postgres redis backend frontend
+docs/scripts/predeploy-test.sh:112:  npm run test:smoke)
+docs/scripts/predeploy-test.sh:115:(cd frontend && npx playwright install chromium)
+docs/scripts/predeploy-test.sh:122:  npm run test:e2e)
+backend/Dockerfile:11:RUN npm ci && \
+backend/Dockerfile:12:    npm cache clean --force
+backend/Dockerfile:44:# NOTE: We keep /bin/sh because npm/npx require it to spawn processes
+backend/docker-entrypoint.sh:15:  echo "║    - user: root in docker-compose.yml                        ║"
+docs/implementation-summaries/vibe-matching/IMPLEMENTATION_PLAN.md:14:2. 🔄 Fix Enhanced mode FIRST - make it actually use the ML models
+frontend/components/layout/Sidebar.tsx:234:                            <h2 className="text-2xl font-black text-white tracking-tight">
+frontend/components/layout/Sidebar.tsx:283:                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-3 py-2 bg-black/90 border border-white/10 rounded-lg text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none">
+frontend/components/layout/Sidebar.tsx:297:                                    ? "bg-white text-black"
+frontend/components/layout/Sidebar.tsx:368:                        <span className="text-[10px] font-black text-gray-500 group-hover/link:text-transparent group-hover/link:bg-clip-text group-hover/link:bg-gradient-to-r group-hover/link:from-purple-400 group-hover/link:to-pink-400 transition-all duration-300 uppercase tracking-[0.15em]">
+docs/implementation-summaries/curated-vibe-mixes/IMPLEMENTATION.md:39:| **Vocal Detox** | Instrumental escape 🧘 | instrumentalness > 0.75 |
+frontend/components/layout/AuthenticatedLayout.tsx:67:            <div className="min-h-screen flex items-center justify-center bg-black">
+frontend/components/layout/AuthenticatedLayout.tsx:97:                    <div className="h-screen bg-black overflow-hidden flex flex-col">
+frontend/components/layout/AuthenticatedLayout.tsx:114:                            className="flex-1 bg-gradient-to-b from-[#1a1a1a] via-black to-black mx-2 mb-2 rounded-lg overflow-y-auto relative"
+frontend/components/layout/AuthenticatedLayout.tsx:141:                    className="h-screen bg-black overflow-hidden flex flex-col"
+frontend/components/layout/AuthenticatedLayout.tsx:148:                        <main className="flex-1 bg-gradient-to-b from-[#1a1a1a] via-black to-black rounded-lg overflow-y-auto relative">
+frontend/components/layout/AuthenticatedLayout.tsx:168:        <div className="min-h-screen flex items-center justify-center bg-black">
+frontend/components/layout/MobileSidebar.tsx:40:        // eslint-disable-next-line react-hooks/exhaustive-deps
+frontend/components/layout/MobileSidebar.tsx:78:                className="fixed inset-0 bg-black/60  z-50 transition-opacity"
+frontend/components/layout/BottomNavigation.tsx:47:            className="fixed bottom-0 left-0 right-0 z-40 bg-black border-t border-white/10"
+frontend/components/layout/ActivityPanel.tsx:65:                    className="fixed inset-0 bg-black/60  z-[100]"
+frontend/components/layout/ActivityPanel.tsx:118:                                                    : "bg-[#f5c518] text-black"
+frontend/components/layout/ActivityPanel.tsx:219:                                                : "bg-[#ecb200] text-black"
+frontend/components/layout/TopBar.tsx:184:        // eslint-disable-next-line react-hooks/exhaustive-deps
+frontend/components/layout/TopBar.tsx:189:            className="fixed top-0 left-0 right-0 bg-black flex items-center px-3 z-50"
+frontend/components/layout/TopBar.tsx:215:                                ? "bg-white text-black"
+frontend/components/layout/TopBar.tsx:289:                                    ? "bg-white text-black"
+frontend/components/layout/TopBar.tsx:359:                                <div className="absolute right-0 top-full mt-2 px-3 py-2 bg-black/90 border border-white/10 rounded-lg text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none">
+frontend/components/layout/TopBar.tsx:373:                                    ? "bg-white text-black"
+docs/implementation-summaries/spotify-ui-overhaul/MODIFIED_FILES.md:287:| Header title     | `text-3xl md:text-4xl font-black` | `text-2xl font-bold`                   |
+docs/implementation-summaries/spotify-ui-overhaul/MODIFIED_FILES.md:374:- Primary action: rounded-full, bg-[#ecb200] text-black
+docs/implementation-summaries/spotify-ui-overhaul/MODIFIED_FILES.md:633:| `docker-compose.yml`                                           | Added `audio-analyzer` service (optional)       |
+docs/implementation-summaries/spotify-ui-overhaul/MODIFIED_FILES.md:667:docker-compose --profile audio-analysis up -d
+docs/implementation-summaries/spotify-ui-overhaul/MODIFIED_FILES.md:673:docker-compose up audio-analyzer -d
+frontend/components/player/DeviceSelector.tsx:333:                                                    <Pause className="w-4 h-4 text-black" />
+docs/frontend/DESIGN.md:19:- **Primary CTA**: `bg-brand hover:bg-brand-hover text-black font-bold rounded-lg py-3`
+frontend/components/player/KeyboardShortcutsTooltip.tsx:34:                <div className="absolute bottom-full right-0 mb-2 w-64 bg-[#1a1a1a] border border-white/10 rounded-lg shadow-2xl shadow-black/50 p-4 z-50 backdrop-blur-xl">
+backend/src/index.ts:171:// No rate limiting - Subsonic clients make many rapid requests
+frontend/components/player/MiniPlayer.tsx:339:                    <ChevronLeft className="w-4 h-4 text-black" />
+frontend/components/player/MiniPlayer.tsx:341:                        <div className="relative w-8 h-8 rounded-full overflow-hidden ring-2 ring-black/20">
+frontend/components/player/MiniPlayer.tsx:352:                        <div className="w-8 h-8 rounded-full bg-black/30 flex items-center justify-center">
+frontend/components/player/MiniPlayer.tsx:398:                    <div className="flex items-center gap-3 px-4 py-2 bg-black/20">
+frontend/components/player/MiniPlayer.tsx:433:                    <div className="relative w-12 h-12 flex-shrink-0 rounded-lg overflow-hidden bg-black/30 shadow-md">
+frontend/components/player/MiniPlayer.tsx:518:                                    ? "bg-white/80 text-black"
+frontend/components/player/MiniPlayer.tsx:519:                                    : "bg-white text-black hover:scale-105"
+frontend/components/player/MiniPlayer.tsx:785:                                    ? "bg-white text-black hover:scale-105"
+frontend/components/player/MiniPlayer.tsx:787:                                    ? "bg-white/80 text-black"
+frontend/components/player/OverlayPlayer.tsx:463:                            className="w-16 h-16 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition-all shadow-xl"
+frontend/components/player/FullPlayer.tsx:384:            <div className="h-24 bg-black border-t border-white/[0.08]">
+frontend/components/player/FullPlayer.tsx:487:                                    ? "bg-white text-black hover:scale-110 shadow-lg shadow-white/20 hover:shadow-white/30"
+frontend/components/player/FullPlayer.tsx:489:                                    ? "bg-white/80 text-black"
+frontend/components/player/VibeOverlay.tsx:227:                "bg-black/90 backdrop-blur-xl border border-white/10 text-white",
+frontend/app/releases/page.tsx:233:                    isUpcoming ? "bg-amber-500/90 text-black" : 
+frontend/app/releases/page.tsx:234:                    hasIt ? "bg-emerald-500/90 text-black" : "bg-white/20 text-white"
+frontend/app/releases/page.tsx:247:                            "bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity",
+frontend/components/ui/LoadingScreen.tsx:9:        <div className="min-h-screen bg-black flex items-center justify-center">
+frontend/components/ui/ConfirmDialog.tsx:37:            confirmButton: "bg-yellow-500 hover:bg-yellow-600 text-black",
+frontend/components/ui/ConfirmDialog.tsx:55:            className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4 animate-fadeIn"
+frontend/components/ui/PagedGridCarousel.tsx:100:                    className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-black/80  flex items-center justify-center opacity-0 group-hover/carousel:opacity-100 transition-opacity hover:bg-black hover:scale-105 border border-white/10 shadow-lg -translate-x-1/2"
+frontend/components/ui/PagedGridCarousel.tsx:145:                    className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-black/80  flex items-center justify-center opacity-0 group-hover/carousel:opacity-100 transition-opacity hover:bg-black hover:scale-105 border border-white/10 shadow-lg translate-x-1/2"
+backend/src/services/programmaticPlaylists.ts:453:                fn: () => this.generateVocalDetox(userId, today + seedSuffix),
+backend/src/services/programmaticPlaylists.ts:455:                name: "Vocal Detox",
+backend/src/services/programmaticPlaylists.ts:3429:     * "Vocal Detox" - Pure instrumental escape
+backend/src/services/programmaticPlaylists.ts:3432:    async generateVocalDetox(
+backend/src/services/programmaticPlaylists.ts:3456:            id: `vocal-detox-${today}`,
+backend/src/services/programmaticPlaylists.ts:3457:            type: "vocal-detox",
+backend/src/services/programmaticPlaylists.ts:3458:            name: "Vocal Detox",
+frontend/components/ui/Modal.tsx:44:        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 ">
+frontend/components/ui/RestartModal.tsx:19:    const command = "docker-compose restart";
+frontend/components/ui/RestartModal.tsx:33:                className="fixed inset-0 bg-black/80 z-50 "
+frontend/components/ui/PageBackground.tsx:19:            <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-black to-transparent" />
+backend/package-lock.json:66:            "resolved": "https://registry.npmjs.org/@apidevtools/json-schema-ref-parser/-/json-schema-ref-parser-9.1.2.tgz",
+backend/package-lock.json:78:            "resolved": "https://registry.npmjs.org/@apidevtools/openapi-schemas/-/openapi-schemas-2.1.0.tgz",
+backend/package-lock.json:87:            "resolved": "https://registry.npmjs.org/@apidevtools/swagger-methods/-/swagger-methods-3.0.2.tgz",
+backend/package-lock.json:93:            "resolved": "https://registry.npmjs.org/@apidevtools/swagger-parser/-/swagger-parser-10.0.3.tgz",
+backend/package-lock.json:110:            "resolved": "https://registry.npmjs.org/@borewit/text-codec/-/text-codec-0.2.0.tgz",
+backend/package-lock.json:120:            "resolved": "https://registry.npmjs.org/@bull-board/api/-/api-6.15.0.tgz",
+backend/package-lock.json:132:            "resolved": "https://registry.npmjs.org/@bull-board/express/-/express-6.15.0.tgz",
+backend/package-lock.json:144:            "resolved": "https://registry.npmjs.org/accepts/-/accepts-2.0.0.tgz",
+backend/package-lock.json:157:            "resolved": "https://registry.npmjs.org/body-parser/-/body-parser-2.2.1.tgz",
+backend/package-lock.json:181:            "resolved": "https://registry.npmjs.org/content-disposition/-/content-disposition-1.0.1.tgz",
+backend/package-lock.json:194:            "resolved": "https://registry.npmjs.org/cookie-signature/-/cookie-signature-1.2.2.tgz",
+backend/package-lock.json:203:            "resolved": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz",
+backend/package-lock.json:220:            "resolved": "https://registry.npmjs.org/express/-/express-5.2.1.tgz",
+backend/package-lock.json:263:            "resolved": "https://registry.npmjs.org/finalhandler/-/finalhandler-2.1.1.tgz",
+backend/package-lock.json:284:            "resolved": "https://registry.npmjs.org/fresh/-/fresh-2.0.0.tgz",
+backend/package-lock.json:293:            "resolved": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.7.1.tgz",
+backend/package-lock.json:309:            "resolved": "https://registry.npmjs.org/merge-descriptors/-/merge-descriptors-2.0.0.tgz",
+backend/package-lock.json:321:            "resolved": "https://registry.npmjs.org/mime-db/-/mime-db-1.54.0.tgz",
+backend/package-lock.json:330:            "resolved": "https://registry.npmjs.org/mime-types/-/mime-types-3.0.2.tgz",
+backend/package-lock.json:346:            "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+backend/package-lock.json:352:            "resolved": "https://registry.npmjs.org/negotiator/-/negotiator-1.0.0.tgz",
+backend/package-lock.json:361:            "resolved": "https://registry.npmjs.org/raw-body/-/raw-body-3.0.2.tgz",
+backend/package-lock.json:376:            "resolved": "https://registry.npmjs.org/send/-/send-1.2.1.tgz",
+backend/package-lock.json:402:            "resolved": "https://registry.npmjs.org/serve-static/-/serve-static-2.2.1.tgz",
+backend/package-lock.json:421:            "resolved": "https://registry.npmjs.org/type-is/-/type-is-2.0.1.tgz",
+backend/package-lock.json:435:            "resolved": "https://registry.npmjs.org/@bull-board/ui/-/ui-6.15.0.tgz",
+backend/package-lock.json:444:            "resolved": "https://registry.npmjs.org/@derhuerst/http-basic/-/http-basic-8.2.4.tgz",
+backend/package-lock.json:459:            "resolved": "https://registry.npmjs.org/@emnapi/runtime/-/runtime-1.7.1.tgz",
+backend/package-lock.json:469:            "resolved": "https://registry.npmjs.org/@esbuild/aix-ppc64/-/aix-ppc64-0.27.2.tgz",
+backend/package-lock.json:486:            "resolved": "https://registry.npmjs.org/@esbuild/android-arm/-/android-arm-0.27.2.tgz",
+backend/package-lock.json:503:            "resolved": "https://registry.npmjs.org/@esbuild/android-arm64/-/android-arm64-0.27.2.tgz",
+backend/package-lock.json:520:            "resolved": "https://registry.npmjs.org/@esbuild/android-x64/-/android-x64-0.27.2.tgz",
+backend/package-lock.json:537:            "resolved": "https://registry.npmjs.org/@esbuild/darwin-arm64/-/darwin-arm64-0.27.2.tgz",
+backend/package-lock.json:554:            "resolved": "https://registry.npmjs.org/@esbuild/darwin-x64/-/darwin-x64-0.27.2.tgz",
+backend/package-lock.json:571:            "resolved": "https://registry.npmjs.org/@esbuild/freebsd-arm64/-/freebsd-arm64-0.27.2.tgz",
+backend/package-lock.json:588:            "resolved": "https://registry.npmjs.org/@esbuild/freebsd-x64/-/freebsd-x64-0.27.2.tgz",
+backend/package-lock.json:605:            "resolved": "https://registry.npmjs.org/@esbuild/linux-arm/-/linux-arm-0.27.2.tgz",
+backend/package-lock.json:622:            "resolved": "https://registry.npmjs.org/@esbuild/linux-arm64/-/linux-arm64-0.27.2.tgz",
+backend/package-lock.json:639:            "resolved": "https://registry.npmjs.org/@esbuild/linux-ia32/-/linux-ia32-0.27.2.tgz",
+backend/package-lock.json:656:            "resolved": "https://registry.npmjs.org/@esbuild/linux-loong64/-/linux-loong64-0.27.2.tgz",
+backend/package-lock.json:673:            "resolved": "https://registry.npmjs.org/@esbuild/linux-mips64el/-/linux-mips64el-0.27.2.tgz",
+backend/package-lock.json:690:            "resolved": "https://registry.npmjs.org/@esbuild/linux-ppc64/-/linux-ppc64-0.27.2.tgz",
+backend/package-lock.json:707:            "resolved": "https://registry.npmjs.org/@esbuild/linux-riscv64/-/linux-riscv64-0.27.2.tgz",
+backend/package-lock.json:724:            "resolved": "https://registry.npmjs.org/@esbuild/linux-s390x/-/linux-s390x-0.27.2.tgz",
+backend/package-lock.json:741:            "resolved": "https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.27.2.tgz",
+backend/package-lock.json:758:            "resolved": "https://registry.npmjs.org/@esbuild/netbsd-arm64/-/netbsd-arm64-0.27.2.tgz",
+backend/package-lock.json:775:            "resolved": "https://registry.npmjs.org/@esbuild/netbsd-x64/-/netbsd-x64-0.27.2.tgz",
+backend/package-lock.json:792:            "resolved": "https://registry.npmjs.org/@esbuild/openbsd-arm64/-/openbsd-arm64-0.27.2.tgz",
+backend/package-lock.json:809:            "resolved": "https://registry.npmjs.org/@esbuild/openbsd-x64/-/openbsd-x64-0.27.2.tgz",
+backend/package-lock.json:826:            "resolved": "https://registry.npmjs.org/@esbuild/openharmony-arm64/-/openharmony-arm64-0.27.2.tgz",
+backend/package-lock.json:843:            "resolved": "https://registry.npmjs.org/@esbuild/sunos-x64/-/sunos-x64-0.27.2.tgz",
+backend/package-lock.json:860:            "resolved": "https://registry.npmjs.org/@esbuild/win32-arm64/-/win32-arm64-0.27.2.tgz",
+backend/package-lock.json:877:            "resolved": "https://registry.npmjs.org/@esbuild/win32-ia32/-/win32-ia32-0.27.2.tgz",
+backend/package-lock.json:894:            "resolved": "https://registry.npmjs.org/@esbuild/win32-x64/-/win32-x64-0.27.2.tgz",
+backend/package-lock.json:911:            "resolved": "https://registry.npmjs.org/@ffmpeg-installer/darwin-arm64/-/darwin-arm64-4.1.5.tgz",
+backend/package-lock.json:925:            "resolved": "https://registry.npmjs.org/@ffmpeg-installer/darwin-x64/-/darwin-x64-4.1.0.tgz",
+backend/package-lock.json:939:            "resolved": "https://registry.npmjs.org/@ffmpeg-installer/ffmpeg/-/ffmpeg-1.1.0.tgz",
+backend/package-lock.json:955:            "resolved": "https://registry.npmjs.org/@ffmpeg-installer/linux-arm/-/linux-arm-4.1.3.tgz",
+backend/package-lock.json:969:            "resolved": "https://registry.npmjs.org/@ffmpeg-installer/linux-arm64/-/linux-arm64-4.1.4.tgz",
+backend/package-lock.json:983:            "resolved": "https://registry.npmjs.org/@ffmpeg-installer/linux-ia32/-/linux-ia32-4.1.0.tgz",
+backend/package-lock.json:997:            "resolved": "https://registry.npmjs.org/@ffmpeg-installer/linux-x64/-/linux-x64-4.1.0.tgz",
+backend/package-lock.json:1011:            "resolved": "https://registry.npmjs.org/@ffmpeg-installer/win32-ia32/-/win32-ia32-4.1.0.tgz",
+backend/package-lock.json:1024:            "resolved": "https://registry.npmjs.org/@ffmpeg-installer/win32-x64/-/win32-x64-4.1.0.tgz",
+backend/package-lock.json:1037:            "resolved": "https://registry.npmjs.org/@img/colour/-/colour-1.0.0.tgz",
+backend/package-lock.json:1046:            "resolved": "https://registry.npmjs.org/@img/sharp-darwin-arm64/-/sharp-darwin-arm64-0.34.5.tgz",
+backend/package-lock.json:1068:            "resolved": "https://registry.npmjs.org/@img/sharp-darwin-x64/-/sharp-darwin-x64-0.34.5.tgz",
+backend/package-lock.json:1090:            "resolved": "https://registry.npmjs.org/@img/sharp-libvips-darwin-arm64/-/sharp-libvips-darwin-arm64-1.2.4.tgz",
+backend/package-lock.json:1106:            "resolved": "https://registry.npmjs.org/@img/sharp-libvips-darwin-x64/-/sharp-libvips-darwin-x64-1.2.4.tgz",
+backend/package-lock.json:1122:            "resolved": "https://registry.npmjs.org/@img/sharp-libvips-linux-arm/-/sharp-libvips-linux-arm-1.2.4.tgz",
+backend/package-lock.json:1138:            "resolved": "https://registry.npmjs.org/@img/sharp-libvips-linux-arm64/-/sharp-libvips-linux-arm64-1.2.4.tgz",
+backend/package-lock.json:1154:            "resolved": "https://registry.npmjs.org/@img/sharp-libvips-linux-ppc64/-/sharp-libvips-linux-ppc64-1.2.4.tgz",
+backend/package-lock.json:1170:            "resolved": "https://registry.npmjs.org/@img/sharp-libvips-linux-riscv64/-/sharp-libvips-linux-riscv64-1.2.4.tgz",
+backend/package-lock.json:1186:            "resolved": "https://registry.npmjs.org/@img/sharp-libvips-linux-s390x/-/sharp-libvips-linux-s390x-1.2.4.tgz",
+backend/package-lock.json:1202:            "resolved": "https://registry.npmjs.org/@img/sharp-libvips-linux-x64/-/sharp-libvips-linux-x64-1.2.4.tgz",
+backend/package-lock.json:1218:            "resolved": "https://registry.npmjs.org/@img/sharp-libvips-linuxmusl-arm64/-/sharp-libvips-linuxmusl-arm64-1.2.4.tgz",
+backend/package-lock.json:1234:            "resolved": "https://registry.npmjs.org/@img/sharp-libvips-linuxmusl-x64/-/sharp-libvips-linuxmusl-x64-1.2.4.tgz",
+backend/package-lock.json:1250:            "resolved": "https://registry.npmjs.org/@img/sharp-linux-arm/-/sharp-linux-arm-0.34.5.tgz",
+backend/package-lock.json:1272:            "resolved": "https://registry.npmjs.org/@img/sharp-linux-arm64/-/sharp-linux-arm64-0.34.5.tgz",
+backend/package-lock.json:1294:            "resolved": "https://registry.npmjs.org/@img/sharp-linux-ppc64/-/sharp-linux-ppc64-0.34.5.tgz",
+backend/package-lock.json:1316:            "resolved": "https://registry.npmjs.org/@img/sharp-linux-riscv64/-/sharp-linux-riscv64-0.34.5.tgz",
+backend/package-lock.json:1338:            "resolved": "https://registry.npmjs.org/@img/sharp-linux-s390x/-/sharp-linux-s390x-0.34.5.tgz",
+backend/package-lock.json:1360:            "resolved": "https://registry.npmjs.org/@img/sharp-linux-x64/-/sharp-linux-x64-0.34.5.tgz",
+backend/package-lock.json:1382:            "resolved": "https://registry.npmjs.org/@img/sharp-linuxmusl-arm64/-/sharp-linuxmusl-arm64-0.34.5.tgz",
+backend/package-lock.json:1404:            "resolved": "https://registry.npmjs.org/@img/sharp-linuxmusl-x64/-/sharp-linuxmusl-x64-0.34.5.tgz",
+backend/package-lock.json:1426:            "resolved": "https://registry.npmjs.org/@img/sharp-wasm32/-/sharp-wasm32-0.34.5.tgz",
+backend/package-lock.json:1445:            "resolved": "https://registry.npmjs.org/@img/sharp-win32-arm64/-/sharp-win32-arm64-0.34.5.tgz",
+backend/package-lock.json:1464:            "resolved": "https://registry.npmjs.org/@img/sharp-win32-ia32/-/sharp-win32-ia32-0.34.5.tgz",
+backend/package-lock.json:1483:            "resolved": "https://registry.npmjs.org/@img/sharp-win32-x64/-/sharp-win32-x64-0.34.5.tgz",
+backend/package-lock.json:1502:            "resolved": "https://registry.npmjs.org/@ioredis/commands/-/commands-1.4.0.tgz",
+backend/package-lock.json:1508:            "resolved": "https://registry.npmjs.org/@jsdevtools/ono/-/ono-7.1.3.tgz",
+backend/package-lock.json:1514:            "resolved": "https://registry.npmjs.org/@mapbox/node-pre-gyp/-/node-pre-gyp-1.0.11.tgz",
+backend/package-lock.json:1520:                "make-dir": "^3.1.0",
+backend/package-lock.json:1523:                "npmlog": "^5.0.1",
+backend/package-lock.json:1534:            "resolved": "https://registry.npmjs.org/@msgpackr-extract/msgpackr-extract-darwin-arm64/-/msgpackr-extract-darwin-arm64-3.0.3.tgz",
+backend/package-lock.json:1547:            "resolved": "https://registry.npmjs.org/@msgpackr-extract/msgpackr-extract-darwin-x64/-/msgpackr-extract-darwin-x64-3.0.3.tgz",
+backend/package-lock.json:1560:            "resolved": "https://registry.npmjs.org/@msgpackr-extract/msgpackr-extract-linux-arm/-/msgpackr-extract-linux-arm-3.0.3.tgz",
+backend/package-lock.json:1573:            "resolved": "https://registry.npmjs.org/@msgpackr-extract/msgpackr-extract-linux-arm64/-/msgpackr-extract-linux-arm64-3.0.3.tgz",
+backend/package-lock.json:1586:            "resolved": "https://registry.npmjs.org/@msgpackr-extract/msgpackr-extract-linux-x64/-/msgpackr-extract-linux-x64-3.0.3.tgz",
+backend/package-lock.json:1599:            "resolved": "https://registry.npmjs.org/@msgpackr-extract/msgpackr-extract-win32-x64/-/msgpackr-extract-win32-x64-3.0.3.tgz",
+backend/package-lock.json:1612:            "resolved": "https://registry.npmjs.org/@prisma/client/-/client-5.22.0.tgz",
+backend/package-lock.json:1630:            "resolved": "https://registry.npmjs.org/@prisma/debug/-/debug-5.22.0.tgz",
+backend/package-lock.json:1637:            "resolved": "https://registry.npmjs.org/@prisma/engines/-/engines-5.22.0.tgz",
+backend/package-lock.json:1651:            "resolved": "https://registry.npmjs.org/@prisma/engines-version/-/engines-version-5.22.0-44.605197351a3c8bdd595af2d2a9bc3025bca48ea2.tgz",
+backend/package-lock.json:1658:            "resolved": "https://registry.npmjs.org/@prisma/fetch-engine/-/fetch-engine-5.22.0.tgz",
+backend/package-lock.json:1670:            "resolved": "https://registry.npmjs.org/@prisma/get-platform/-/get-platform-5.22.0.tgz",
+backend/package-lock.json:1680:            "resolved": "https://registry.npmjs.org/@redis/bloom/-/bloom-1.2.0.tgz",
+backend/package-lock.json:1689:            "resolved": "https://registry.npmjs.org/@redis/client/-/client-1.6.1.tgz",
+backend/package-lock.json:1703:            "resolved": "https://registry.npmjs.org/@redis/graph/-/graph-1.1.1.tgz",
+backend/package-lock.json:1712:            "resolved": "https://registry.npmjs.org/@redis/json/-/json-1.0.7.tgz",
+backend/package-lock.json:1721:            "resolved": "https://registry.npmjs.org/@redis/search/-/search-1.2.0.tgz",
+backend/package-lock.json:1730:            "resolved": "https://registry.npmjs.org/@redis/time-series/-/time-series-1.1.0.tgz",
+backend/package-lock.json:1739:            "resolved": "https://registry.npmjs.org/@scarf/scarf/-/scarf-1.4.0.tgz",
+backend/package-lock.json:1746:            "resolved": "https://registry.npmjs.org/@sindresorhus/is/-/is-4.6.0.tgz",
+backend/package-lock.json:1758:            "resolved": "https://registry.npmjs.org/@socket.io/component-emitter/-/component-emitter-3.1.2.tgz",
+backend/package-lock.json:1764:            "resolved": "https://registry.npmjs.org/@szmarczak/http-timer/-/http-timer-4.0.6.tgz",
+backend/package-lock.json:1776:            "resolved": "https://registry.npmjs.org/@tokenizer/inflate/-/inflate-0.4.1.tgz",
+backend/package-lock.json:1793:            "resolved": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz",
+backend/package-lock.json:1810:            "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+backend/package-lock.json:1816:            "resolved": "https://registry.npmjs.org/@tokenizer/token/-/token-0.3.0.tgz",
+backend/package-lock.json:1822:            "resolved": "https://registry.npmjs.org/@types/bcrypt/-/bcrypt-5.0.2.tgz",
+backend/package-lock.json:1832:            "resolved": "https://registry.npmjs.org/@types/body-parser/-/body-parser-1.19.6.tgz",
+backend/package-lock.json:1842:            "resolved": "https://registry.npmjs.org/@types/bull/-/bull-3.15.9.tgz",
+backend/package-lock.json:1852:            "resolved": "https://registry.npmjs.org/@types/cacheable-request/-/cacheable-request-6.0.3.tgz",
+backend/package-lock.json:1864:            "resolved": "https://registry.npmjs.org/@types/connect/-/connect-3.4.38.tgz",
+backend/package-lock.json:1873:            "resolved": "https://registry.npmjs.org/@types/cors/-/cors-2.8.19.tgz",
+backend/package-lock.json:1882:            "resolved": "https://registry.npmjs.org/@types/express/-/express-4.17.25.tgz",
+backend/package-lock.json:1894:            "resolved": "https://registry.npmjs.org/@types/express-serve-static-core/-/express-serve-static-core-4.19.7.tgz",
+backend/package-lock.json:1906:            "resolved": "https://registry.npmjs.org/@types/express-session/-/express-session-1.18.2.tgz",
+backend/package-lock.json:1916:            "resolved": "https://registry.npmjs.org/@types/fluent-ffmpeg/-/fluent-ffmpeg-2.1.28.tgz",
+backend/package-lock.json:1925:            "resolved": "https://registry.npmjs.org/@types/http-cache-semantics/-/http-cache-semantics-4.0.4.tgz",
+backend/package-lock.json:1931:            "resolved": "https://registry.npmjs.org/@types/http-errors/-/http-errors-2.0.5.tgz",
+backend/package-lock.json:1937:            "resolved": "https://registry.npmjs.org/@types/ioredis/-/ioredis-4.28.10.tgz",
+backend/package-lock.json:1946:            "resolved": "https://registry.npmjs.org/@types/json-schema/-/json-schema-7.0.15.tgz",
+backend/package-lock.json:1952:            "resolved": "https://registry.npmjs.org/@types/jsonwebtoken/-/jsonwebtoken-9.0.10.tgz",
+backend/package-lock.json:1963:            "resolved": "https://registry.npmjs.org/@types/keyv/-/keyv-3.1.4.tgz",
+backend/package-lock.json:1972:            "resolved": "https://registry.npmjs.org/@types/mime/-/mime-1.3.5.tgz",
+backend/package-lock.json:1978:            "resolved": "https://registry.npmjs.org/@types/ms/-/ms-2.1.0.tgz",
+backend/package-lock.json:1985:            "resolved": "https://registry.npmjs.org/@types/node/-/node-20.19.27.tgz",
+backend/package-lock.json:1994:            "resolved": "https://registry.npmjs.org/@types/node-cron/-/node-cron-3.0.11.tgz",
+backend/package-lock.json:2000:            "resolved": "https://registry.npmjs.org/@types/qrcode/-/qrcode-1.5.6.tgz",
+backend/package-lock.json:2009:            "resolved": "https://registry.npmjs.org/@types/qs/-/qs-6.14.0.tgz",
+backend/package-lock.json:2015:            "resolved": "https://registry.npmjs.org/@types/range-parser/-/range-parser-1.2.7.tgz",
+backend/package-lock.json:2021:            "resolved": "https://registry.npmjs.org/@types/redis/-/redis-2.8.32.tgz",
+backend/package-lock.json:2030:            "resolved": "https://registry.npmjs.org/@types/responselike/-/responselike-1.0.3.tgz",
+backend/package-lock.json:2039:            "resolved": "https://registry.npmjs.org/@types/send/-/send-1.2.1.tgz",
+backend/package-lock.json:2048:            "resolved": "https://registry.npmjs.org/@types/serve-static/-/serve-static-1.15.10.tgz",
+backend/package-lock.json:2059:            "resolved": "https://registry.npmjs.org/@types/send/-/send-0.17.6.tgz",
+backend/package-lock.json:2069:            "resolved": "https://registry.npmjs.org/@types/speakeasy/-/speakeasy-2.0.10.tgz",
+backend/package-lock.json:2078:            "resolved": "https://registry.npmjs.org/@types/swagger-jsdoc/-/swagger-jsdoc-6.0.4.tgz",
+backend/package-lock.json:2084:            "resolved": "https://registry.npmjs.org/@types/swagger-ui-express/-/swagger-ui-express-4.1.8.tgz",
+backend/package-lock.json:2094:            "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz",
+backend/package-lock.json:2100:            "resolved": "https://registry.npmjs.org/accepts/-/accepts-1.3.8.tgz",
+backend/package-lock.json:2113:            "resolved": "https://registry.npmjs.org/agent-base/-/agent-base-6.0.2.tgz",
+backend/package-lock.json:2125:            "resolved": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz",
+backend/package-lock.json:2142:            "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+backend/package-lock.json:2148:            "resolved": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-5.0.1.tgz",
+backend/package-lock.json:2157:            "resolved": "https://registry.npmjs.org/ansi-styles/-/ansi-styles-4.3.0.tgz",
+backend/package-lock.json:2172:            "resolved": "https://registry.npmjs.org/aproba/-/aproba-2.1.0.tgz",
+backend/package-lock.json:2178:            "resolved": "https://registry.npmjs.org/are-we-there-yet/-/are-we-there-yet-2.0.0.tgz",
+backend/package-lock.json:2192:            "resolved": "https://registry.npmjs.org/argparse/-/argparse-2.0.1.tgz",
+backend/package-lock.json:2198:            "resolved": "https://registry.npmjs.org/array-flatten/-/array-flatten-1.1.1.tgz",
+backend/package-lock.json:2204:            "resolved": "https://registry.npmjs.org/async/-/async-0.2.10.tgz",
+backend/package-lock.json:2209:            "resolved": "https://registry.npmjs.org/asynckit/-/asynckit-0.4.0.tgz",
+backend/package-lock.json:2215:            "resolved": "https://registry.npmjs.org/axios/-/axios-1.13.2.tgz",
+backend/package-lock.json:2226:            "resolved": "https://registry.npmjs.org/balanced-match/-/balanced-match-1.0.2.tgz",
+backend/package-lock.json:2232:            "resolved": "https://registry.npmjs.org/base32.js/-/base32.js-0.0.1.tgz",
+backend/package-lock.json:2238:            "resolved": "https://registry.npmjs.org/base64id/-/base64id-2.0.0.tgz",
+backend/package-lock.json:2247:            "resolved": "https://registry.npmjs.org/bcrypt/-/bcrypt-5.1.1.tgz",
+backend/package-lock.json:2261:            "resolved": "https://registry.npmjs.org/body-parser/-/body-parser-1.20.4.tgz",
+backend/package-lock.json:2280:                "npm": "1.2.8000 || >= 1.4.16"
+backend/package-lock.json:2285:            "resolved": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-2.0.2.tgz",
+backend/package-lock.json:2294:            "resolved": "https://registry.npmjs.org/buffer-equal-constant-time/-/buffer-equal-constant-time-1.0.1.tgz",
+backend/package-lock.json:2300:            "resolved": "https://registry.npmjs.org/buffer-from/-/buffer-from-1.1.2.tgz",
+backend/package-lock.json:2306:            "resolved": "https://registry.npmjs.org/bull/-/bull-4.16.5.tgz",
+backend/package-lock.json:2324:            "resolved": "https://registry.npmjs.org/bytes/-/bytes-3.1.2.tgz",
+backend/package-lock.json:2333:            "resolved": "https://registry.npmjs.org/cacheable-lookup/-/cacheable-lookup-5.0.4.tgz",
+backend/package-lock.json:2342:            "resolved": "https://registry.npmjs.org/cacheable-request/-/cacheable-request-7.0.4.tgz",
+backend/package-lock.json:2360:            "resolved": "https://registry.npmjs.org/call-bind-apply-helpers/-/call-bind-apply-helpers-1.0.2.tgz",
+backend/package-lock.json:2373:            "resolved": "https://registry.npmjs.org/call-bound/-/call-bound-1.0.4.tgz",
+backend/package-lock.json:2389:            "resolved": "https://registry.npmjs.org/call-me-maybe/-/call-me-maybe-1.0.2.tgz",
+backend/package-lock.json:2395:            "resolved": "https://registry.npmjs.org/camelcase/-/camelcase-5.3.1.tgz",
+backend/package-lock.json:2404:            "resolved": "https://registry.npmjs.org/caseless/-/caseless-0.12.0.tgz",
+backend/package-lock.json:2410:            "resolved": "https://registry.npmjs.org/chownr/-/chownr-2.0.0.tgz",
+backend/package-lock.json:2419:            "resolved": "https://registry.npmjs.org/cliui/-/cliui-6.0.0.tgz",
+backend/package-lock.json:2430:            "resolved": "https://registry.npmjs.org/clone-response/-/clone-response-1.0.3.tgz",
+backend/package-lock.json:2442:            "resolved": "https://registry.npmjs.org/cluster-key-slot/-/cluster-key-slot-1.1.2.tgz",
+backend/package-lock.json:2451:            "resolved": "https://registry.npmjs.org/color-convert/-/color-convert-2.0.1.tgz",
+backend/package-lock.json:2463:            "resolved": "https://registry.npmjs.org/color-name/-/color-name-1.1.4.tgz",
+backend/package-lock.json:2469:            "resolved": "https://registry.npmjs.org/color-support/-/color-support-1.1.3.tgz",
+backend/package-lock.json:2478:            "resolved": "https://registry.npmjs.org/combined-stream/-/combined-stream-1.0.8.tgz",
+backend/package-lock.json:2490:            "resolved": "https://registry.npmjs.org/commander/-/commander-6.2.0.tgz",
+backend/package-lock.json:2499:            "resolved": "https://registry.npmjs.org/concat-map/-/concat-map-0.0.1.tgz",
+backend/package-lock.json:2505:            "resolved": "https://registry.npmjs.org/concat-stream/-/concat-stream-2.0.0.tgz",
+backend/package-lock.json:2520:            "resolved": "https://registry.npmjs.org/connect-redis/-/connect-redis-7.1.1.tgz",
+backend/package-lock.json:2532:            "resolved": "https://registry.npmjs.org/console-control-strings/-/console-control-strings-1.1.0.tgz",
+backend/package-lock.json:2538:            "resolved": "https://registry.npmjs.org/content-disposition/-/content-disposition-0.5.4.tgz",
+backend/package-lock.json:2550:            "resolved": "https://registry.npmjs.org/content-type/-/content-type-1.0.5.tgz",
+backend/package-lock.json:2559:            "resolved": "https://registry.npmjs.org/cookie/-/cookie-0.7.2.tgz",
+backend/package-lock.json:2568:            "resolved": "https://registry.npmjs.org/cookie-signature/-/cookie-signature-1.0.7.tgz",
+backend/package-lock.json:2574:            "resolved": "https://registry.npmjs.org/cors/-/cors-2.8.5.tgz",
+backend/package-lock.json:2587:            "resolved": "https://registry.npmjs.org/cron-parser/-/cron-parser-4.9.0.tgz",
+backend/package-lock.json:2599:            "resolved": "https://registry.npmjs.org/date-fns/-/date-fns-4.1.0.tgz",
+backend/package-lock.json:2609:            "resolved": "https://registry.npmjs.org/debug/-/debug-2.6.9.tgz",
+backend/package-lock.json:2618:            "resolved": "https://registry.npmjs.org/decamelize/-/decamelize-1.2.0.tgz",
+backend/package-lock.json:2627:            "resolved": "https://registry.npmjs.org/decompress-response/-/decompress-response-6.0.0.tgz",
+backend/package-lock.json:2642:            "resolved": "https://registry.npmjs.org/mimic-response/-/mimic-response-3.1.0.tgz",
+backend/package-lock.json:2654:            "resolved": "https://registry.npmjs.org/defer-to-connect/-/defer-to-connect-2.0.1.tgz",
+backend/package-lock.json:2663:            "resolved": "https://registry.npmjs.org/delayed-stream/-/delayed-stream-1.0.0.tgz",
+backend/package-lock.json:2672:            "resolved": "https://registry.npmjs.org/delegates/-/delegates-1.0.0.tgz",
+backend/package-lock.json:2678:            "resolved": "https://registry.npmjs.org/denque/-/denque-2.1.0.tgz",
+backend/package-lock.json:2687:            "resolved": "https://registry.npmjs.org/depd/-/depd-2.0.0.tgz",
+backend/package-lock.json:2696:            "resolved": "https://registry.npmjs.org/destroy/-/destroy-1.2.0.tgz",
+backend/package-lock.json:2701:                "npm": "1.2.8000 || >= 1.4.16"
+backend/package-lock.json:2706:            "resolved": "https://registry.npmjs.org/detect-libc/-/detect-libc-2.1.2.tgz",
+backend/package-lock.json:2715:            "resolved": "https://registry.npmjs.org/dijkstrajs/-/dijkstrajs-1.0.3.tgz",
+backend/package-lock.json:2721:            "resolved": "https://registry.npmjs.org/doctrine/-/doctrine-3.0.0.tgz",
+backend/package-lock.json:2733:            "resolved": "https://registry.npmjs.org/dotenv/-/dotenv-16.6.1.tgz",
+backend/package-lock.json:2745:            "resolved": "https://registry.npmjs.org/dunder-proto/-/dunder-proto-1.0.1.tgz",
+backend/package-lock.json:2759:            "resolved": "https://registry.npmjs.org/ecdsa-sig-formatter/-/ecdsa-sig-formatter-1.0.11.tgz",
+backend/package-lock.json:2768:            "resolved": "https://registry.npmjs.org/ee-first/-/ee-first-1.1.1.tgz",
+backend/package-lock.json:2774:            "resolved": "https://registry.npmjs.org/ejs/-/ejs-3.1.10.tgz",
+backend/package-lock.json:2789:            "resolved": "https://registry.npmjs.org/emoji-regex/-/emoji-regex-8.0.0.tgz",
+backend/package-lock.json:2795:            "resolved": "https://registry.npmjs.org/encodeurl/-/encodeurl-2.0.0.tgz",
+backend/package-lock.json:2804:            "resolved": "https://registry.npmjs.org/end-of-stream/-/end-of-stream-1.4.5.tgz",
+backend/package-lock.json:2813:            "resolved": "https://registry.npmjs.org/engine.io/-/engine.io-6.6.5.tgz",
+backend/package-lock.json:2833:            "resolved": "https://registry.npmjs.org/engine.io-parser/-/engine.io-parser-5.2.3.tgz",
+backend/package-lock.json:2842:            "resolved": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz",
+backend/package-lock.json:2859:            "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+backend/package-lock.json:2865:            "resolved": "https://registry.npmjs.org/entities/-/entities-2.2.0.tgz",
+backend/package-lock.json:2874:            "resolved": "https://registry.npmjs.org/env-paths/-/env-paths-2.2.1.tgz",
+backend/package-lock.json:2883:            "resolved": "https://registry.npmjs.org/es-define-property/-/es-define-property-1.0.1.tgz",
+backend/package-lock.json:2892:            "resolved": "https://registry.npmjs.org/es-errors/-/es-errors-1.3.0.tgz",
+backend/package-lock.json:2901:            "resolved": "https://registry.npmjs.org/es-object-atoms/-/es-object-atoms-1.1.1.tgz",
+backend/package-lock.json:2913:            "resolved": "https://registry.npmjs.org/es-set-tostringtag/-/es-set-tostringtag-2.1.0.tgz",
+backend/package-lock.json:2928:            "resolved": "https://registry.npmjs.org/esbuild/-/esbuild-0.27.2.tgz",
+backend/package-lock.json:2970:            "resolved": "https://registry.npmjs.org/escape-html/-/escape-html-1.0.3.tgz",
+backend/package-lock.json:2976:            "resolved": "https://registry.npmjs.org/esutils/-/esutils-2.0.3.tgz",
+backend/package-lock.json:2985:            "resolved": "https://registry.npmjs.org/etag/-/etag-1.8.1.tgz",
+backend/package-lock.json:2994:            "resolved": "https://registry.npmjs.org/eventemitter3/-/eventemitter3-5.0.1.tgz",
+backend/package-lock.json:3000:            "resolved": "https://registry.npmjs.org/express/-/express-4.22.1.tgz",
+backend/package-lock.json:3046:            "resolved": "https://registry.npmjs.org/express-rate-limit/-/express-rate-limit-8.2.1.tgz",
+backend/package-lock.json:3064:            "resolved": "https://registry.npmjs.org/express-session/-/express-session-1.18.2.tgz",
+backend/package-lock.json:3083:            "resolved": "https://registry.npmjs.org/ffmpeg-static/-/ffmpeg-static-5.3.0.tgz",
+backend/package-lock.json:3099:            "resolved": "https://registry.npmjs.org/file-type/-/file-type-21.1.1.tgz",
+backend/package-lock.json:3117:            "resolved": "https://registry.npmjs.org/filelist/-/filelist-1.0.4.tgz",
+backend/package-lock.json:3126:            "resolved": "https://registry.npmjs.org/finalhandler/-/finalhandler-1.3.2.tgz",
+backend/package-lock.json:3144:            "resolved": "https://registry.npmjs.org/find-up/-/find-up-4.1.0.tgz",
+backend/package-lock.json:3157:            "resolved": "https://registry.npmjs.org/fluent-ffmpeg/-/fluent-ffmpeg-2.1.3.tgz",
+backend/package-lock.json:3159:            "deprecated": "Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.",
+backend/package-lock.json:3171:            "resolved": "https://registry.npmjs.org/follow-redirects/-/follow-redirects-1.15.11.tgz",
+backend/package-lock.json:3191:            "resolved": "https://registry.npmjs.org/form-data/-/form-data-4.0.5.tgz",
+backend/package-lock.json:3207:            "resolved": "https://registry.npmjs.org/forwarded/-/forwarded-0.2.0.tgz",
+backend/package-lock.json:3216:            "resolved": "https://registry.npmjs.org/fresh/-/fresh-0.5.2.tgz",
+backend/package-lock.json:3225:            "resolved": "https://registry.npmjs.org/fs-minipass/-/fs-minipass-2.1.0.tgz",
+backend/package-lock.json:3237:            "resolved": "https://registry.npmjs.org/minipass/-/minipass-3.3.6.tgz",
+backend/package-lock.json:3249:            "resolved": "https://registry.npmjs.org/fs.realpath/-/fs.realpath-1.0.0.tgz",
+backend/package-lock.json:3255:            "resolved": "https://registry.npmjs.org/fsevents/-/fsevents-2.3.3.tgz",
+backend/package-lock.json:3270:            "resolved": "https://registry.npmjs.org/function-bind/-/function-bind-1.1.2.tgz",
+backend/package-lock.json:3279:            "resolved": "https://registry.npmjs.org/fuzzball/-/fuzzball-2.2.3.tgz",
+backend/package-lock.json:3290:            "resolved": "https://registry.npmjs.org/gauge/-/gauge-3.0.2.tgz",
+backend/package-lock.json:3311:            "resolved": "https://registry.npmjs.org/generic-pool/-/generic-pool-3.9.0.tgz",
+backend/package-lock.json:3320:            "resolved": "https://registry.npmjs.org/get-caller-file/-/get-caller-file-2.0.5.tgz",
+backend/package-lock.json:3329:            "resolved": "https://registry.npmjs.org/get-intrinsic/-/get-intrinsic-1.3.0.tgz",
+backend/package-lock.json:3353:            "resolved": "https://registry.npmjs.org/get-port/-/get-port-5.1.1.tgz",
+backend/package-lock.json:3365:            "resolved": "https://registry.npmjs.org/get-proto/-/get-proto-1.0.1.tgz",
+backend/package-lock.json:3378:            "resolved": "https://registry.npmjs.org/get-stream/-/get-stream-5.2.0.tgz",
+backend/package-lock.json:3393:            "resolved": "https://registry.npmjs.org/get-tsconfig/-/get-tsconfig-4.13.0.tgz",
+backend/package-lock.json:3406:            "resolved": "https://registry.npmjs.org/glob/-/glob-7.2.3.tgz",
+backend/package-lock.json:3427:            "resolved": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-1.1.12.tgz",
+backend/package-lock.json:3437:            "resolved": "https://registry.npmjs.org/minimatch/-/minimatch-3.1.2.tgz",
+backend/package-lock.json:3449:            "resolved": "https://registry.npmjs.org/gopd/-/gopd-1.2.0.tgz",
+backend/package-lock.json:3461:            "resolved": "https://registry.npmjs.org/got/-/got-11.8.6.tgz",
+backend/package-lock.json:3486:            "resolved": "https://registry.npmjs.org/has-symbols/-/has-symbols-1.1.0.tgz",
+backend/package-lock.json:3498:            "resolved": "https://registry.npmjs.org/has-tostringtag/-/has-tostringtag-1.0.2.tgz",
+backend/package-lock.json:3513:            "resolved": "https://registry.npmjs.org/has-unicode/-/has-unicode-2.0.1.tgz",
+backend/package-lock.json:3519:            "resolved": "https://registry.npmjs.org/hasown/-/hasown-2.0.2.tgz",
+backend/package-lock.json:3531:            "resolved": "https://registry.npmjs.org/heap/-/heap-0.2.7.tgz",
+backend/package-lock.json:3537:            "resolved": "https://registry.npmjs.org/helmet/-/helmet-7.2.0.tgz",
+backend/package-lock.json:3546:            "resolved": "https://registry.npmjs.org/http-cache-semantics/-/http-cache-semantics-4.2.0.tgz",
+backend/package-lock.json:3552:            "resolved": "https://registry.npmjs.org/http-errors/-/http-errors-2.0.1.tgz",
+backend/package-lock.json:3572:            "resolved": "https://registry.npmjs.org/http-response-object/-/http-response-object-3.0.2.tgz",
+backend/package-lock.json:3581:            "resolved": "https://registry.npmjs.org/@types/node/-/node-10.17.60.tgz",
+backend/package-lock.json:3587:            "resolved": "https://registry.npmjs.org/http2-wrapper/-/http2-wrapper-1.0.3.tgz",
+backend/package-lock.json:3600:            "resolved": "https://registry.npmjs.org/https-proxy-agent/-/https-proxy-agent-5.0.1.tgz",
+backend/package-lock.json:3613:            "resolved": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz",
+backend/package-lock.json:3630:            "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+backend/package-lock.json:3636:            "resolved": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.4.24.tgz",
+backend/package-lock.json:3648:            "resolved": "https://registry.npmjs.org/ieee754/-/ieee754-1.2.1.tgz",
+backend/package-lock.json:3668:            "resolved": "https://registry.npmjs.org/inflight/-/inflight-1.0.6.tgz",
+backend/package-lock.json:3679:            "resolved": "https://registry.npmjs.org/inherits/-/inherits-2.0.4.tgz",
+backend/package-lock.json:3685:            "resolved": "https://registry.npmjs.org/ioredis/-/ioredis-5.8.2.tgz",
+backend/package-lock.json:3709:            "resolved": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz",
+backend/package-lock.json:3726:            "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+backend/package-lock.json:3732:            "resolved": "https://registry.npmjs.org/ip-address/-/ip-address-10.0.1.tgz",
+backend/package-lock.json:3741:            "resolved": "https://registry.npmjs.org/ipaddr.js/-/ipaddr.js-1.9.1.tgz",
+backend/package-lock.json:3750:            "resolved": "https://registry.npmjs.org/is-fullwidth-code-point/-/is-fullwidth-code-point-3.0.0.tgz",
+backend/package-lock.json:3759:            "resolved": "https://registry.npmjs.org/is-promise/-/is-promise-4.0.0.tgz",
+backend/package-lock.json:3765:            "resolved": "https://registry.npmjs.org/isexe/-/isexe-2.0.0.tgz",
+backend/package-lock.json:3771:            "resolved": "https://registry.npmjs.org/jake/-/jake-10.9.4.tgz",
+backend/package-lock.json:3788:            "resolved": "https://registry.npmjs.org/async/-/async-3.2.6.tgz",
+backend/package-lock.json:3794:            "resolved": "https://registry.npmjs.org/js-yaml/-/js-yaml-4.1.1.tgz",
+backend/package-lock.json:3806:            "resolved": "https://registry.npmjs.org/json-buffer/-/json-buffer-3.0.1.tgz",
+backend/package-lock.json:3812:            "resolved": "https://registry.npmjs.org/jsonwebtoken/-/jsonwebtoken-9.0.3.tgz",
+backend/package-lock.json:3829:                "npm": ">=6"
+backend/package-lock.json:3834:            "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+backend/package-lock.json:3840:            "resolved": "https://registry.npmjs.org/jwa/-/jwa-2.0.1.tgz",
+backend/package-lock.json:3851:            "resolved": "https://registry.npmjs.org/jws/-/jws-4.0.1.tgz",
+backend/package-lock.json:3861:            "resolved": "https://registry.npmjs.org/keyv/-/keyv-4.5.4.tgz",
+backend/package-lock.json:3870:            "resolved": "https://registry.npmjs.org/locate-path/-/locate-path-5.0.0.tgz",
+backend/package-lock.json:3882:            "resolved": "https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz",
+backend/package-lock.json:3888:            "resolved": "https://registry.npmjs.org/lodash.defaults/-/lodash.defaults-4.2.0.tgz",
+backend/package-lock.json:3894:            "resolved": "https://registry.npmjs.org/lodash.get/-/lodash.get-4.4.2.tgz",
+backend/package-lock.json:3901:            "resolved": "https://registry.npmjs.org/lodash.includes/-/lodash.includes-4.3.0.tgz",
+backend/package-lock.json:3907:            "resolved": "https://registry.npmjs.org/lodash.isarguments/-/lodash.isarguments-3.1.0.tgz",
+backend/package-lock.json:3913:            "resolved": "https://registry.npmjs.org/lodash.isboolean/-/lodash.isboolean-3.0.3.tgz",
+backend/package-lock.json:3919:            "resolved": "https://registry.npmjs.org/lodash.isequal/-/lodash.isequal-4.5.0.tgz",
+backend/package-lock.json:3926:            "resolved": "https://registry.npmjs.org/lodash.isinteger/-/lodash.isinteger-4.0.4.tgz",
+backend/package-lock.json:3932:            "resolved": "https://registry.npmjs.org/lodash.isnumber/-/lodash.isnumber-3.0.3.tgz",
+backend/package-lock.json:3938:            "resolved": "https://registry.npmjs.org/lodash.isplainobject/-/lodash.isplainobject-4.0.6.tgz",
+backend/package-lock.json:3944:            "resolved": "https://registry.npmjs.org/lodash.isstring/-/lodash.isstring-4.0.1.tgz",
+backend/package-lock.json:3950:            "resolved": "https://registry.npmjs.org/lodash.mergewith/-/lodash.mergewith-4.6.2.tgz",
+backend/package-lock.json:3956:            "resolved": "https://registry.npmjs.org/lodash.once/-/lodash.once-4.1.1.tgz",
+backend/package-lock.json:3962:            "resolved": "https://registry.npmjs.org/lowercase-keys/-/lowercase-keys-2.0.0.tgz",
+backend/package-lock.json:3971:            "resolved": "https://registry.npmjs.org/luxon/-/luxon-3.7.2.tgz",
+backend/package-lock.json:3978:        "node_modules/make-dir": {
+backend/package-lock.json:3980:            "resolved": "https://registry.npmjs.org/make-dir/-/make-dir-3.1.0.tgz",
+backend/package-lock.json:3993:        "node_modules/make-dir/node_modules/semver": {
+backend/package-lock.json:3995:            "resolved": "https://registry.npmjs.org/semver/-/semver-6.3.1.tgz",
+backend/package-lock.json:4004:            "resolved": "https://registry.npmjs.org/math-intrinsics/-/math-intrinsics-1.1.0.tgz",
+backend/package-lock.json:4013:            "resolved": "https://registry.npmjs.org/media-typer/-/media-typer-1.1.0.tgz",
+backend/package-lock.json:4022:            "resolved": "https://registry.npmjs.org/merge-descriptors/-/merge-descriptors-1.0.3.tgz",
+backend/package-lock.json:4031:            "resolved": "https://registry.npmjs.org/methods/-/methods-1.1.2.tgz",
+backend/package-lock.json:4040:            "resolved": "https://registry.npmjs.org/mime/-/mime-1.6.0.tgz",
+backend/package-lock.json:4052:            "resolved": "https://registry.npmjs.org/mime-db/-/mime-db-1.52.0.tgz",
+backend/package-lock.json:4061:            "resolved": "https://registry.npmjs.org/mime-types/-/mime-types-2.1.35.tgz",
+backend/package-lock.json:4073:            "resolved": "https://registry.npmjs.org/mimic-response/-/mimic-response-1.0.1.tgz",
+backend/package-lock.json:4082:            "resolved": "https://registry.npmjs.org/minimatch/-/minimatch-5.1.6.tgz",
+backend/package-lock.json:4094:            "resolved": "https://registry.npmjs.org/minipass/-/minipass-5.0.0.tgz",
+backend/package-lock.json:4103:            "resolved": "https://registry.npmjs.org/minizlib/-/minizlib-2.1.2.tgz",
+backend/package-lock.json:4116:            "resolved": "https://registry.npmjs.org/minipass/-/minipass-3.3.6.tgz",
+backend/package-lock.json:4128:            "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-1.0.4.tgz",
+backend/package-lock.json:4140:            "resolved": "https://registry.npmjs.org/ms/-/ms-2.0.0.tgz",
+backend/package-lock.json:4146:            "resolved": "https://registry.npmjs.org/msgpackr/-/msgpackr-1.11.8.tgz",
+backend/package-lock.json:4155:            "resolved": "https://registry.npmjs.org/msgpackr-extract/-/msgpackr-extract-3.0.3.tgz",
+backend/package-lock.json:4177:            "resolved": "https://registry.npmjs.org/music-metadata/-/music-metadata-11.10.3.tgz",
+backend/package-lock.json:4207:            "resolved": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz",
+backend/package-lock.json:4224:            "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+backend/package-lock.json:4230:            "resolved": "https://registry.npmjs.org/negotiator/-/negotiator-0.6.3.tgz",
+backend/package-lock.json:4239:            "resolved": "https://registry.npmjs.org/node-addon-api/-/node-addon-api-5.1.0.tgz",
+backend/package-lock.json:4245:            "resolved": "https://registry.npmjs.org/node-cron/-/node-cron-4.2.1.tgz",
+backend/package-lock.json:4254:            "resolved": "https://registry.npmjs.org/node-fetch/-/node-fetch-2.7.0.tgz",
+backend/package-lock.json:4274:            "resolved": "https://registry.npmjs.org/node-gyp-build-optional-packages/-/node-gyp-build-optional-packages-5.2.2.tgz",
+backend/package-lock.json:4289:            "resolved": "https://registry.npmjs.org/nopt/-/nopt-5.0.0.tgz",
+backend/package-lock.json:4304:            "resolved": "https://registry.npmjs.org/normalize-url/-/normalize-url-6.1.0.tgz",
+backend/package-lock.json:4314:        "node_modules/npmlog": {
+backend/package-lock.json:4316:            "resolved": "https://registry.npmjs.org/npmlog/-/npmlog-5.0.1.tgz",
+backend/package-lock.json:4329:            "resolved": "https://registry.npmjs.org/object-assign/-/object-assign-4.1.1.tgz",
+backend/package-lock.json:4338:            "resolved": "https://registry.npmjs.org/object-inspect/-/object-inspect-1.13.4.tgz",
+backend/package-lock.json:4350:            "resolved": "https://registry.npmjs.org/on-finished/-/on-finished-2.4.1.tgz",
+backend/package-lock.json:4362:            "resolved": "https://registry.npmjs.org/on-headers/-/on-headers-1.1.0.tgz",
+backend/package-lock.json:4371:            "resolved": "https://registry.npmjs.org/once/-/once-1.4.0.tgz",
+backend/package-lock.json:4380:            "resolved": "https://registry.npmjs.org/openapi-types/-/openapi-types-12.1.3.tgz",
+backend/package-lock.json:4387:            "resolved": "https://registry.npmjs.org/p-cancelable/-/p-cancelable-2.1.1.tgz",
+backend/package-lock.json:4396:            "resolved": "https://registry.npmjs.org/p-limit/-/p-limit-2.3.0.tgz",
+backend/package-lock.json:4411:            "resolved": "https://registry.npmjs.org/p-locate/-/p-locate-4.1.0.tgz",
+backend/package-lock.json:4423:            "resolved": "https://registry.npmjs.org/p-queue/-/p-queue-9.0.1.tgz",
+backend/package-lock.json:4439:            "resolved": "https://registry.npmjs.org/p-timeout/-/p-timeout-7.0.1.tgz",
+backend/package-lock.json:4451:            "resolved": "https://registry.npmjs.org/p-try/-/p-try-2.2.0.tgz",
+backend/package-lock.json:4460:            "resolved": "https://registry.npmjs.org/parse-cache-control/-/parse-cache-control-1.0.1.tgz",
+backend/package-lock.json:4465:            "resolved": "https://registry.npmjs.org/parseurl/-/parseurl-1.3.3.tgz",
+backend/package-lock.json:4474:            "resolved": "https://registry.npmjs.org/path-exists/-/path-exists-4.0.0.tgz",
+backend/package-lock.json:4483:            "resolved": "https://registry.npmjs.org/path-is-absolute/-/path-is-absolute-1.0.1.tgz",
+backend/package-lock.json:4492:            "resolved": "https://registry.npmjs.org/path-to-regexp/-/path-to-regexp-0.1.12.tgz",
+backend/package-lock.json:4498:            "resolved": "https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz",
+backend/package-lock.json:4504:            "resolved": "https://registry.npmjs.org/pngjs/-/pngjs-5.0.0.tgz",
+backend/package-lock.json:4513:            "resolved": "https://registry.npmjs.org/podcast-index-api/-/podcast-index-api-1.1.10.tgz",
+backend/package-lock.json:4522:            "resolved": "https://registry.npmjs.org/prisma/-/prisma-5.22.0.tgz",
+backend/package-lock.json:4542:            "resolved": "https://registry.npmjs.org/progress/-/progress-2.0.3.tgz",
+backend/package-lock.json:4551:            "resolved": "https://registry.npmjs.org/proxy-addr/-/proxy-addr-2.0.7.tgz",
+backend/package-lock.json:4564:            "resolved": "https://registry.npmjs.org/proxy-from-env/-/proxy-from-env-1.1.0.tgz",
+backend/package-lock.json:4570:            "resolved": "https://registry.npmjs.org/pump/-/pump-3.0.3.tgz",
+backend/package-lock.json:4580:            "resolved": "https://registry.npmjs.org/qrcode/-/qrcode-1.5.4.tgz",
+backend/package-lock.json:4597:            "resolved": "https://registry.npmjs.org/qs/-/qs-6.14.0.tgz",
+backend/package-lock.json:4612:            "resolved": "https://registry.npmjs.org/quick-lru/-/quick-lru-5.1.1.tgz",
+backend/package-lock.json:4624:            "resolved": "https://registry.npmjs.org/random-bytes/-/random-bytes-1.0.0.tgz",
+backend/package-lock.json:4633:            "resolved": "https://registry.npmjs.org/range-parser/-/range-parser-1.2.1.tgz",
+backend/package-lock.json:4642:            "resolved": "https://registry.npmjs.org/raw-body/-/raw-body-2.5.3.tgz",
+backend/package-lock.json:4657:            "resolved": "https://registry.npmjs.org/readable-stream/-/readable-stream-3.6.2.tgz",
+backend/package-lock.json:4671:            "resolved": "https://registry.npmjs.org/redis/-/redis-4.7.1.tgz",
+backend/package-lock.json:4688:            "resolved": "https://registry.npmjs.org/redis-errors/-/redis-errors-1.2.0.tgz",
+backend/package-lock.json:4697:            "resolved": "https://registry.npmjs.org/redis-info/-/redis-info-3.1.0.tgz",
+backend/package-lock.json:4706:            "resolved": "https://registry.npmjs.org/redis-parser/-/redis-parser-3.0.0.tgz",
+backend/package-lock.json:4718:            "resolved": "https://registry.npmjs.org/require-directory/-/require-directory-2.1.1.tgz",
+backend/package-lock.json:4727:            "resolved": "https://registry.npmjs.org/require-main-filename/-/require-main-filename-2.0.0.tgz",
+backend/package-lock.json:4733:            "resolved": "https://registry.npmjs.org/resolve-alpn/-/resolve-alpn-1.2.1.tgz",
+backend/package-lock.json:4739:            "resolved": "https://registry.npmjs.org/resolve-pkg-maps/-/resolve-pkg-maps-1.0.0.tgz",
+backend/package-lock.json:4749:            "resolved": "https://registry.npmjs.org/responselike/-/responselike-2.0.1.tgz",
+backend/package-lock.json:4761:            "resolved": "https://registry.npmjs.org/rimraf/-/rimraf-3.0.2.tgz",
+backend/package-lock.json:4777:            "resolved": "https://registry.npmjs.org/router/-/router-2.2.0.tgz",
+backend/package-lock.json:4793:            "resolved": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz",
+backend/package-lock.json:4810:            "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+backend/package-lock.json:4816:            "resolved": "https://registry.npmjs.org/path-to-regexp/-/path-to-regexp-8.3.0.tgz",
+backend/package-lock.json:4826:            "resolved": "https://registry.npmjs.org/rss-parser/-/rss-parser-3.13.0.tgz",
+backend/package-lock.json:4836:            "resolved": "https://registry.npmjs.org/safe-buffer/-/safe-buffer-5.2.1.tgz",
+backend/package-lock.json:4856:            "resolved": "https://registry.npmjs.org/safer-buffer/-/safer-buffer-2.1.2.tgz",
+backend/package-lock.json:4862:            "resolved": "https://registry.npmjs.org/sax/-/sax-1.4.3.tgz",
+backend/package-lock.json:4868:            "resolved": "https://registry.npmjs.org/semver/-/semver-7.7.3.tgz",
+backend/package-lock.json:4880:            "resolved": "https://registry.npmjs.org/send/-/send-0.19.2.tgz",
+backend/package-lock.json:4904:            "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+backend/package-lock.json:4910:            "resolved": "https://registry.npmjs.org/serve-static/-/serve-static-1.16.3.tgz",
+backend/package-lock.json:4925:            "resolved": "https://registry.npmjs.org/set-blocking/-/set-blocking-2.0.0.tgz",
+backend/package-lock.json:4931:            "resolved": "https://registry.npmjs.org/setimmediate/-/setimmediate-1.0.5.tgz",
+backend/package-lock.json:4937:            "resolved": "https://registry.npmjs.org/setprototypeof/-/setprototypeof-1.2.0.tgz",
+backend/package-lock.json:4943:            "resolved": "https://registry.npmjs.org/sharp/-/sharp-0.34.5.tgz",
+backend/package-lock.json:4987:            "resolved": "https://registry.npmjs.org/side-channel/-/side-channel-1.1.0.tgz",
+backend/package-lock.json:5006:            "resolved": "https://registry.npmjs.org/side-channel-list/-/side-channel-list-1.0.0.tgz",
+backend/package-lock.json:5022:            "resolved": "https://registry.npmjs.org/side-channel-map/-/side-channel-map-1.0.1.tgz",
+backend/package-lock.json:5040:            "resolved": "https://registry.npmjs.org/side-channel-weakmap/-/side-channel-weakmap-1.0.2.tgz",
+backend/package-lock.json:5059:            "resolved": "https://registry.npmjs.org/signal-exit/-/signal-exit-3.0.7.tgz",
+backend/package-lock.json:5065:            "resolved": "https://registry.npmjs.org/slsk-client/-/slsk-client-1.1.0.tgz",
+backend/package-lock.json:5074:            "resolved": "https://registry.npmjs.org/debug/-/debug-3.2.7.tgz",
+backend/package-lock.json:5083:            "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+backend/package-lock.json:5089:            "resolved": "https://registry.npmjs.org/socket.io/-/socket.io-4.8.3.tgz",
+backend/package-lock.json:5107:            "resolved": "https://registry.npmjs.org/socket.io-adapter/-/socket.io-adapter-2.5.6.tgz",
+backend/package-lock.json:5117:            "resolved": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz",
+backend/package-lock.json:5134:            "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+backend/package-lock.json:5140:            "resolved": "https://registry.npmjs.org/socket.io-parser/-/socket.io-parser-4.2.5.tgz",
+backend/package-lock.json:5153:            "resolved": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz",
+backend/package-lock.json:5170:            "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+backend/package-lock.json:5176:            "resolved": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz",
+backend/package-lock.json:5193:            "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+backend/package-lock.json:5199:            "resolved": "https://registry.npmjs.org/speakeasy/-/speakeasy-2.0.0.tgz",
+backend/package-lock.json:5211:            "resolved": "https://registry.npmjs.org/standard-as-callback/-/standard-as-callback-2.1.0.tgz",
+backend/package-lock.json:5217:            "resolved": "https://registry.npmjs.org/statuses/-/statuses-2.0.2.tgz",
+backend/package-lock.json:5226:            "resolved": "https://registry.npmjs.org/string_decoder/-/string_decoder-1.3.0.tgz",
+backend/package-lock.json:5235:            "resolved": "https://registry.npmjs.org/string-width/-/string-width-4.2.3.tgz",
+backend/package-lock.json:5249:            "resolved": "https://registry.npmjs.org/strip-ansi/-/strip-ansi-6.0.1.tgz",
+backend/package-lock.json:5261:            "resolved": "https://registry.npmjs.org/strtok3/-/strtok3-10.3.4.tgz",
+backend/package-lock.json:5277:            "resolved": "https://registry.npmjs.org/swagger-jsdoc/-/swagger-jsdoc-6.2.8.tgz",
+backend/package-lock.json:5297:            "resolved": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-1.1.12.tgz",
+backend/package-lock.json:5307:            "resolved": "https://registry.npmjs.org/glob/-/glob-7.1.6.tgz",
+backend/package-lock.json:5328:            "resolved": "https://registry.npmjs.org/minimatch/-/minimatch-3.1.2.tgz",
+backend/package-lock.json:5340:            "resolved": "https://registry.npmjs.org/swagger-parser/-/swagger-parser-10.0.3.tgz",
+backend/package-lock.json:5352:            "resolved": "https://registry.npmjs.org/swagger-ui-dist/-/swagger-ui-dist-5.31.0.tgz",
+backend/package-lock.json:5361:            "resolved": "https://registry.npmjs.org/swagger-ui-express/-/swagger-ui-express-5.0.1.tgz",
+backend/package-lock.json:5376:            "resolved": "https://registry.npmjs.org/tar/-/tar-6.2.1.tgz",
+backend/package-lock.json:5393:            "resolved": "https://registry.npmjs.org/toidentifier/-/toidentifier-1.0.1.tgz",
+backend/package-lock.json:5402:            "resolved": "https://registry.npmjs.org/token-types/-/token-types-6.1.1.tgz",
+backend/package-lock.json:5420:            "resolved": "https://registry.npmjs.org/@borewit/text-codec/-/text-codec-0.1.1.tgz",
+backend/package-lock.json:5430:            "resolved": "https://registry.npmjs.org/tr46/-/tr46-0.0.3.tgz",
+backend/package-lock.json:5436:            "resolved": "https://registry.npmjs.org/tslib/-/tslib-2.8.1.tgz",
+backend/package-lock.json:5437:            "integrity": "sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==",
+backend/package-lock.json:5443:            "resolved": "https://registry.npmjs.org/tsx/-/tsx-4.21.0.tgz",
+backend/package-lock.json:5463:            "resolved": "https://registry.npmjs.org/type-is/-/type-is-1.6.18.tgz",
+backend/package-lock.json:5476:            "resolved": "https://registry.npmjs.org/media-typer/-/media-typer-0.3.0.tgz",
+backend/package-lock.json:5485:            "resolved": "https://registry.npmjs.org/typedarray/-/typedarray-0.0.6.tgz",
+backend/package-lock.json:5491:            "resolved": "https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz",
+backend/package-lock.json:5505:            "resolved": "https://registry.npmjs.org/uid-safe/-/uid-safe-2.1.5.tgz",
+backend/package-lock.json:5517:            "resolved": "https://registry.npmjs.org/uint8array-extras/-/uint8array-extras-1.5.0.tgz",
+backend/package-lock.json:5529:            "resolved": "https://registry.npmjs.org/undici-types/-/undici-types-6.21.0.tgz",
+backend/package-lock.json:5535:            "resolved": "https://registry.npmjs.org/unpipe/-/unpipe-1.0.0.tgz",
+backend/package-lock.json:5544:            "resolved": "https://registry.npmjs.org/util-deprecate/-/util-deprecate-1.0.2.tgz",
+backend/package-lock.json:5550:            "resolved": "https://registry.npmjs.org/utils-merge/-/utils-merge-1.0.1.tgz",
+backend/package-lock.json:5559:            "resolved": "https://registry.npmjs.org/uuid/-/uuid-8.3.2.tgz",
+backend/package-lock.json:5568:            "resolved": "https://registry.npmjs.org/validator/-/validator-13.15.26.tgz",
+backend/package-lock.json:5577:            "resolved": "https://registry.npmjs.org/vary/-/vary-1.1.2.tgz",
+backend/package-lock.json:5586:            "resolved": "https://registry.npmjs.org/webidl-conversions/-/webidl-conversions-3.0.1.tgz",
+backend/package-lock.json:5592:            "resolved": "https://registry.npmjs.org/whatwg-url/-/whatwg-url-5.0.0.tgz",
+backend/package-lock.json:5602:            "resolved": "https://registry.npmjs.org/which/-/which-1.3.1.tgz",
+backend/package-lock.json:5614:            "resolved": "https://registry.npmjs.org/which-module/-/which-module-2.0.1.tgz",
+backend/package-lock.json:5620:            "resolved": "https://registry.npmjs.org/wide-align/-/wide-align-1.1.5.tgz",
+backend/package-lock.json:5629:            "resolved": "https://registry.npmjs.org/wrap-ansi/-/wrap-ansi-6.2.0.tgz",
+backend/package-lock.json:5643:            "resolved": "https://registry.npmjs.org/wrappy/-/wrappy-1.0.2.tgz",
+backend/package-lock.json:5649:            "resolved": "https://registry.npmjs.org/ws/-/ws-8.18.3.tgz",
+backend/package-lock.json:5670:            "resolved": "https://registry.npmjs.org/xml2js/-/xml2js-0.5.0.tgz",
+backend/package-lock.json:5683:            "resolved": "https://registry.npmjs.org/xmlbuilder/-/xmlbuilder-11.0.1.tgz",
+backend/package-lock.json:5692:            "resolved": "https://registry.npmjs.org/y18n/-/y18n-4.0.3.tgz",
+backend/package-lock.json:5698:            "resolved": "https://registry.npmjs.org/yallist/-/yallist-4.0.0.tgz",
+backend/package-lock.json:5704:            "resolved": "https://registry.npmjs.org/yaml/-/yaml-2.0.0-1.tgz",
+backend/package-lock.json:5713:            "resolved": "https://registry.npmjs.org/yargs/-/yargs-15.4.1.tgz",
+backend/package-lock.json:5735:            "resolved": "https://registry.npmjs.org/yargs-parser/-/yargs-parser-18.1.3.tgz",
+backend/package-lock.json:5748:            "resolved": "https://registry.npmjs.org/z-schema/-/z-schema-5.0.5.tgz",
+backend/package-lock.json:5768:            "resolved": "https://registry.npmjs.org/commander/-/commander-9.5.0.tgz",
+backend/package-lock.json:5778:            "resolved": "https://registry.npmjs.org/zod/-/zod-3.25.76.tgz",
+frontend/components/ui/PlaylistSelector.tsx:89:            className="fixed inset-0 bg-black/80  flex items-center justify-center z-50 p-4"
+frontend/components/ui/PlaylistSelector.tsx:109:                    <div className="px-6 py-3 flex items-center gap-3 bg-black/30 border-b border-white/10 text-sm text-gray-300">
+frontend/components/ui/PlaylistSelector.tsx:179:                            className="px-5 py-3 bg-[#ecb200] hover:bg-[#d4a000] disabled:bg-gray-700 disabled:cursor-not-allowed text-black font-bold rounded-lg transition-all flex items-center gap-2 disabled:text-gray-500"
+frontend/components/ui/MusicBrainzLookup.tsx:283:                            className="px-3 py-2 bg-[#ecb200] hover:bg-[#d4a000] disabled:bg-gray-600 disabled:cursor-not-allowed text-black rounded font-medium text-sm transition-colors flex items-center gap-1"
+frontend/components/ui/Button.tsx:28:                "bg-brand hover:bg-brand-hover text-black px-4 py-2 shadow-lg shadow-brand/10",
+frontend/components/ui/PlayableCard.tsx:46:    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+frontend/components/ui/PlayableCard.tsx:112:                            "shadow-xl shadow-black/50 transition-all duration-200",
+frontend/components/ui/PlayableCard.tsx:120:                            <Pause className="w-4 h-4 fill-current text-black" />
+frontend/components/ui/PlayableCard.tsx:122:                            <Play className="w-4 h-4 fill-current ml-0.5 text-black" />
+frontend/components/ui/AudiobookCard.tsx:61:                        <div className="absolute left-0 top-0 bottom-0 w-2 bg-gradient-to-r from-black/40 to-transparent pointer-events-none" />
+frontend/components/ui/AudiobookCard.tsx:64:                        <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-black/20 pointer-events-none" />
+frontend/components/ui/AudiobookCard.tsx:68:                            <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/60">
+frontend/components/ui/InlineStatus.tsx:203:                    "bg-amber-500 hover:bg-amber-400 text-black",
+frontend/app/onboarding/page.tsx:235:                                                    ? "bg-[#fca200] text-black shadow-lg shadow-[#fca200]/20 scale-110"
+frontend/app/onboarding/page.tsx:358:                                                className="w-full py-3.5 bg-[#fca200] text-black font-bold rounded-lg hover:bg-[#e69200] transition-all disabled:opacity-50 disabled:cursor-not-allowed relative group overflow-hidden mt-8"
+frontend/app/onboarding/page.tsx:566:                                                className="flex-1 py-3.5 bg-[#fca200] text-black font-bold rounded-lg hover:bg-[#e69200] transition-all disabled:opacity-50"
+frontend/app/onboarding/page.tsx:758:                                                className="flex-1 py-3.5 bg-amber-500 text-black font-bold rounded-lg hover:bg-amber-400 transition-all duration-200 disabled:opacity-50 disabled:hover:scale-100 relative group overflow-hidden"
+frontend/components/ui/HorizontalCarousel.tsx:79:                        "w-10 h-10 rounded-full bg-black/80 ",
+frontend/components/ui/HorizontalCarousel.tsx:82:                        "hover:bg-black hover:scale-105 transition-all",
+frontend/components/ui/HorizontalCarousel.tsx:112:                        "w-10 h-10 rounded-full bg-black/80 ",
+frontend/components/ui/HorizontalCarousel.tsx:115:                        "hover:bg-black hover:scale-105 transition-all",
+frontend/components/ui/HorizontalCarousel.tsx:127:                <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-black/50 to-transparent pointer-events-none" />
+frontend/components/ui/HorizontalCarousel.tsx:130:                <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-black/50 to-transparent pointer-events-none" />
+frontend/components/ui/GalaxyBackground.tsx:83:                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-black/10 to-transparent" />
+frontend/components/ui/GalaxyBackground.tsx:88:                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-black/10 to-transparent" />
+frontend/app/setup/page.tsx:22:        <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6">
+frontend/docker-entrypoint.sh:15:  echo "║    - user: root in docker-compose.yml                        ║"
+frontend/.dockerignore:3:npm-debug.log
+frontend/.dockerignore:4:yarn-error.log
+frontend/components/DownloadNotifications.tsx:224:                        <div className="px-3 py-2 border-t border-white/10 bg-black/40">
+frontend/components/DownloadNotifications.tsx:259:                        "flex items-center justify-between px-4 py-3 border-b border-white/10 bg-black/40",
+frontend/components/DownloadNotifications.tsx:314:                    <div className="px-4 py-2 border-t border-white/10 bg-black/40">
+frontend/app/device/page.tsx:182:                    <h1 className="text-3xl md:text-4xl font-black text-white mb-2">
+frontend/app/device/page.tsx:212:                                    className="px-6 py-3 bg-[#ecb200] hover:bg-[#d4a000] text-black font-medium rounded-full transition-all hover:scale-105"
+frontend/app/device/page.tsx:258:                                            className="px-4 py-2 bg-[#ecb200] hover:bg-[#d4a000] text-black font-medium rounded-full transition-all"
+frontend/Dockerfile:10:RUN npm ci && \
+frontend/Dockerfile:11:    npm cache clean --force
+frontend/Dockerfile:30:RUN npm run build
+frontend/Dockerfile:54:# NOTE: We keep /bin/sh because npm requires it to spawn processes
+frontend/Dockerfile:75:CMD ["npm", "start"]
+frontend/components/MoodMixer.tsx:213:            className={`fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 transition-opacity duration-200 ${
+frontend/components/MoodMixer.tsx:228:                            <AudioWaveform className="w-5 h-5 text-black" />
+frontend/components/MoodMixer.tsx:299:                                        <span className="absolute top-2 right-2 text-[10px] font-medium text-white/70 bg-black/30 px-1.5 py-0.5 rounded-full">
+frontend/components/MoodMixer.tsx:304:                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+frontend/.gitignore:7:.yarn/*
+frontend/.gitignore:8:!.yarn/patches
+frontend/.gitignore:9:!.yarn/plugins
+frontend/.gitignore:10:!.yarn/releases
+frontend/.gitignore:11:!.yarn/versions
+frontend/.gitignore:15:playwright-report/
+frontend/.gitignore:30:npm-debug.log*
+frontend/.gitignore:31:yarn-debug.log*
+frontend/.gitignore:32:yarn-error.log*
+frontend/.gitignore:33:.pnpm-debug.log*
+frontend/.gitignore:49:# Note: android/gradle.properties is NOT ignored - it contains AndroidX settings needed for builds
+backend/src/services/dataCache.ts:109:     * Only returns what's already in the payload, doesn't make API calls
+backend/src/services/dataCache.ts:128:     * Only returns what's already in the payload, doesn't make API calls
+frontend/app/audiobooks/page.tsx:283:                            <div className="text-4xl font-black text-purple-400/20 mb-4">
+frontend/app/audiobooks/page.tsx:296:                            <div className="text-4xl font-black text-purple-400/20 mb-4">
+frontend/app/audiobooks/page.tsx:309:                            <div className="text-4xl font-black text-purple-400/20 mb-4">
+frontend/app/audiobooks/page.tsx:397:                                    ? "bg-white text-black"
+frontend/app/audiobooks/page.tsx:407:                                    ? "bg-white text-black"
+frontend/app/audiobooks/page.tsx:417:                            className="flex items-center gap-2 px-4 py-2 bg-[#ecb200] hover:bg-[#d4a000] text-black font-medium rounded-full transition-all hover:scale-105"
+frontend/app/audiobooks/page.tsx:449:                                    ? "bg-white text-black"
+frontend/tests/e2e/smoke.spec.ts:1:import { test, expect } from "@playwright/test";
+backend/src/utils/envWriter.ts:11:    // Write to project root .env (parent of backend dir) for docker-compose
+frontend/app/playlist/[id]/page.tsx:470:                                <Pause className="w-5 h-5 fill-current text-black" />
+frontend/app/playlist/[id]/page.tsx:472:                                <Play className="w-5 h-5 fill-current text-black ml-0.5" />
+frontend/app/audiobooks/series/[name]/page.tsx:117:        <div className="min-h-screen bg-black">
+frontend/lib/auth-context.tsx:111:        // eslint-disable-next-line react-hooks/exhaustive-deps
+frontend/scripts/generate-pwa-icons.js:4: * Uses the icon-only.png (smooth black circle with yellow soundwave)
+frontend/scripts/generate-pwa-icons.js:12:// Source: The correct logo (smooth black circle, yellow soundwave, no white borders)
+frontend/lib/audio-state-context.tsx:26:    // eslint-disable-next-line no-console
+frontend/app/library/page.tsx:228:                            className="flex items-center justify-center w-8 h-8 rounded-full bg-[#ecb200] hover:bg-[#d4a000] text-black transition-all hover:scale-105"
+frontend/app/library/page.tsx:270:                                            ? "bg-[#ecb200] text-black"
+frontend/app/import/spotify/page.tsx:428:                            className="w-full py-3 rounded-full font-medium bg-[#ecb200] text-black hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+frontend/app/import/spotify/page.tsx:647:                                        <div className="flex items-center justify-between px-4 py-2 bg-black/20">
+frontend/app/import/spotify/page.tsx:818:                                className="flex-1 py-3 rounded-full font-medium bg-[#1DB954] text-black hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+frontend/app/import/spotify/page.tsx:927:                                <Check className="w-7 h-7 text-black" />
+frontend/app/import/spotify/page.tsx:1038:                                    className="px-5 py-2.5 rounded-full text-sm font-medium bg-[#1DB954] text-black hover:brightness-110 transition-all"
+frontend/hooks/useRemotePlaybackIntegration.ts:164:                            // If source was playing, make sure we're playing
+frontend/app/podcasts/page.tsx:221:            <div className="flex items-center justify-center min-h-screen bg-black">
+frontend/package.json:15:    "lint": "eslint",
+frontend/package.json:16:    "test:e2e": "playwright test"
+frontend/package.json:38:    "@playwright/test": "^1.57.0",
+frontend/package.json:43:    "eslint": "^9",
+frontend/package.json:44:    "eslint-config-next": "16.0.1",
+frontend/hooks/useImageColor.ts:359:    // Create a gradient from dark vibrant to transparent black
+frontend/hooks/useImageColor.ts:431: * Get the best icon color (black or white) for a given background color
+frontend/hooks/useImageColor.ts:432: * Returns 'black' or 'white' based on contrast ratio
+frontend/hooks/useImageColor.ts:434:export function getIconColor(backgroundColor: string): "black" | "white" {
+frontend/hooks/useImageColor.ts:436:    const blackContrast = getContrastRatio(backgroundColor, "#000000");
+frontend/hooks/useImageColor.ts:440:    return whiteContrast > blackContrast - 1.5 ? "white" : "black";
+frontend/hooks/useImageColor.ts:449:    iconColor: "black" | "white";
+frontend/hooks/useImageColor.ts:454:            iconColor: "black",
+frontend/app/playlists/page.tsx:178:                                "bg-black/60  transition-all duration-200",
+frontend/app/playlists/page.tsx:209:                            "shadow-lg shadow-black/40 transition-all duration-200",
+frontend/app/playlists/page.tsx:215:                        <Play className="w-4 h-4 fill-current ml-0.5 text-black" />
+frontend/app/playlists/page.tsx:369:                            className="px-4 py-2 rounded-full text-sm font-medium bg-[#ecb200] text-black hover:brightness-110 transition-all"
+frontend/app/playlists/page.tsx:442:                                className="mt-6 px-5 py-2.5 rounded-full text-sm font-medium bg-[#ecb200] text-black hover:brightness-110 transition-all"
+frontend/lib/audio-controls-context.tsx:37:    // eslint-disable-next-line no-console
+frontend/app/page.tsx:94:                                            className="flex items-center gap-2 px-3 py-1.5 text-sm text-black font-semibold bg-[#ecb200] hover:bg-[#d4a000] rounded-full transition-colors"
+frontend/playwright.config.ts:1:import { defineConfig } from "@playwright/test";
+frontend/playwright.config.ts:19:              command: "npm run dev",
+frontend/lib/query-client.tsx:16:function makeQueryClient() {
+frontend/lib/query-client.tsx:53:        // Server: always make a new query client
+frontend/lib/query-client.tsx:54:        return makeQueryClient();
+frontend/lib/query-client.tsx:56:        // Browser: make a new query client if we don't already have one
+frontend/lib/query-client.tsx:57:        if (!browserQueryClient) browserQueryClient = makeQueryClient();
+frontend/app/browse/playlists/[id]/page.tsx:238:                            className="px-6 py-2.5 rounded-full bg-white text-black text-sm font-medium hover:scale-105 transition-transform"
+frontend/app/browse/playlists/[id]/page.tsx:310:                            <Loader2 className="w-5 h-5 text-black animate-spin" />
+frontend/app/browse/playlists/[id]/page.tsx:312:                            <Download className="w-5 h-5 text-black" />
+frontend/app/browse/playlists/[id]/page.tsx:314:                        <span className="text-black font-medium">
+frontend/app/browse/playlists/[id]/page.tsx:483:                <div className="fixed bottom-24 left-1/2 -translate-x-1/2 px-4 py-2 bg-[#AD47FF] rounded-full text-black text-sm font-medium shadow-lg flex items-center gap-2 z-50">
+frontend/app/browse/playlists/[id]/page.tsx:484:                    <div className="w-2 h-2 rounded-full bg-black animate-pulse" />
+frontend/eslint.config.mjs:1:import { defineConfig, globalIgnores } from "eslint/config";
+frontend/eslint.config.mjs:2:import nextVitals from "eslint-config-next/core-web-vitals";
+frontend/eslint.config.mjs:3:import nextTs from "eslint-config-next/typescript";
+frontend/eslint.config.mjs:5:const eslintConfig = defineConfig([
+frontend/eslint.config.mjs:8:  // Override default ignores of eslint-config-next.
+frontend/eslint.config.mjs:10:    // Default ignores of eslint-config-next:
+frontend/eslint.config.mjs:18:export default eslintConfig;
+frontend/app/enhanced-vibe-test/page.tsx:67:        <div className="min-h-screen bg-black flex flex-col items-center justify-center p-4">
+frontend/app/enhanced-vibe-test/page.tsx:83:                                    ? "bg-brand text-black" 
+frontend/app/podcasts/genre/[genreId]/page.tsx:116:        <div className="min-h-screen bg-gradient-to-b from-black to-[#121212] text-white p-6 md:p-8">
+frontend/app/radio/page.tsx:191:            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+frontend/app/radio/page.tsx:196:                        <Play className="w-5 h-5 text-black ml-0.5" fill="currentColor" />
+frontend/app/radio/page.tsx:341:                            <Radio className="w-6 h-6 text-black" />
+frontend/app/browse/playlists/page.tsx:217:                            className="w-5 h-5 text-black ml-0.5"
+frontend/app/browse/playlists/page.tsx:250:            <div className="absolute inset-0 bg-black/40 group-hover:bg-black/30 transition-colors" />
+frontend/app/browse/playlists/page.tsx:339:                                    ? "bg-white text-black"
+frontend/app/browse/playlists/page.tsx:349:                                    ? "bg-[#ecb200] text-black"
+frontend/app/browse/playlists/page.tsx:400:                            className="px-6 py-2.5 rounded-full bg-white text-black text-sm font-medium hover:scale-105 transition-transform"
+frontend/app/browse/playlists/page.tsx:424:                                    className="px-6 py-2 rounded-full bg-white text-black text-sm font-medium hover:scale-105 transition-transform"
+frontend/app/browse/playlists/page.tsx:507:                    className="fixed inset-0 bg-black/80  flex items-center justify-center z-50 p-4 animate-in fade-in duration-200"
+frontend/app/browse/playlists/page.tsx:573:                                    className="w-full bg-black/40 border border-white/[0.06] rounded-xl px-4 py-4 text-white placeholder:text-white/30 focus:outline-none focus:border-[#ecb200]/40 focus:ring-1 focus:ring-[#ecb200]/20 transition-all text-sm"
+frontend/app/browse/playlists/page.tsx:606:                                className="flex-1 py-3.5 rounded-full bg-[#ecb200] text-black font-semibold hover:bg-[#d4a000] disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#ecb200]/20"
+frontend/app/artists/page.tsx:41:        <div className="min-h-screen bg-black relative">
+frontend/app/artists/page.tsx:57:                    <h1 className="text-5xl md:text-6xl font-black text-white mb-2 drop-shadow-2xl">
+frontend/package-lock.json:31:        "@playwright/test": "^1.57.0",
+frontend/package-lock.json:36:        "eslint": "^9",
+frontend/package-lock.json:37:        "eslint-config-next": "16.0.1",
+frontend/package-lock.json:44:      "resolved": "https://registry.npmjs.org/@alloc/quick-lru/-/quick-lru-5.2.0.tgz",
+frontend/package-lock.json:57:      "resolved": "https://registry.npmjs.org/@babel/code-frame/-/code-frame-7.27.1.tgz",
+frontend/package-lock.json:72:      "resolved": "https://registry.npmjs.org/@babel/compat-data/-/compat-data-7.28.5.tgz",
+frontend/package-lock.json:82:      "resolved": "https://registry.npmjs.org/@babel/core/-/core-7.28.5.tgz",
+frontend/package-lock.json:113:      "resolved": "https://registry.npmjs.org/@babel/generator/-/generator-7.28.5.tgz",
+frontend/package-lock.json:130:      "resolved": "https://registry.npmjs.org/@babel/helper-compilation-targets/-/helper-compilation-targets-7.27.2.tgz",
+frontend/package-lock.json:147:      "resolved": "https://registry.npmjs.org/@babel/helper-globals/-/helper-globals-7.28.0.tgz",
+frontend/package-lock.json:157:      "resolved": "https://registry.npmjs.org/@babel/helper-module-imports/-/helper-module-imports-7.27.1.tgz",
+frontend/package-lock.json:171:      "resolved": "https://registry.npmjs.org/@babel/helper-module-transforms/-/helper-module-transforms-7.28.3.tgz",
+frontend/package-lock.json:189:      "resolved": "https://registry.npmjs.org/@babel/helper-string-parser/-/helper-string-parser-7.27.1.tgz",
+frontend/package-lock.json:199:      "resolved": "https://registry.npmjs.org/@babel/helper-validator-identifier/-/helper-validator-identifier-7.28.5.tgz",
+frontend/package-lock.json:209:      "resolved": "https://registry.npmjs.org/@babel/helper-validator-option/-/helper-validator-option-7.27.1.tgz",
+frontend/package-lock.json:219:      "resolved": "https://registry.npmjs.org/@babel/helpers/-/helpers-7.28.4.tgz",
+frontend/package-lock.json:233:      "resolved": "https://registry.npmjs.org/@babel/parser/-/parser-7.28.5.tgz",
+frontend/package-lock.json:249:      "resolved": "https://registry.npmjs.org/@babel/template/-/template-7.27.2.tgz",
+frontend/package-lock.json:264:      "resolved": "https://registry.npmjs.org/@babel/traverse/-/traverse-7.28.5.tgz",
+frontend/package-lock.json:283:      "resolved": "https://registry.npmjs.org/@babel/types/-/types-7.28.5.tgz",
+frontend/package-lock.json:297:      "resolved": "https://registry.npmjs.org/@emnapi/core/-/core-1.7.1.tgz",
+frontend/package-lock.json:309:      "resolved": "https://registry.npmjs.org/@emnapi/runtime/-/runtime-1.7.1.tgz",
+frontend/package-lock.json:319:      "resolved": "https://registry.npmjs.org/@emnapi/wasi-threads/-/wasi-threads-1.1.0.tgz",
+frontend/package-lock.json:328:    "node_modules/@eslint-community/eslint-utils": {
+frontend/package-lock.json:330:      "resolved": "https://registry.npmjs.org/@eslint-community/eslint-utils/-/eslint-utils-4.9.0.tgz",
+frontend/package-lock.json:335:        "eslint-visitor-keys": "^3.4.3"
+frontend/package-lock.json:341:        "url": "https://opencollective.com/eslint"
+frontend/package-lock.json:344:        "eslint": "^6.0.0 || ^7.0.0 || >=8.0.0"
+frontend/package-lock.json:347:    "node_modules/@eslint-community/eslint-utils/node_modules/eslint-visitor-keys": {
+frontend/package-lock.json:349:      "resolved": "https://registry.npmjs.org/eslint-visitor-keys/-/eslint-visitor-keys-3.4.3.tgz",
+frontend/package-lock.json:357:        "url": "https://opencollective.com/eslint"
+frontend/package-lock.json:360:    "node_modules/@eslint-community/regexpp": {
+frontend/package-lock.json:362:      "resolved": "https://registry.npmjs.org/@eslint-community/regexpp/-/regexpp-4.12.2.tgz",
+frontend/package-lock.json:370:    "node_modules/@eslint/config-array": {
+frontend/package-lock.json:372:      "resolved": "https://registry.npmjs.org/@eslint/config-array/-/config-array-0.21.1.tgz",
+frontend/package-lock.json:377:        "@eslint/object-schema": "^2.1.7",
+frontend/package-lock.json:385:    "node_modules/@eslint/config-helpers": {
+frontend/package-lock.json:387:      "resolved": "https://registry.npmjs.org/@eslint/config-helpers/-/config-helpers-0.4.2.tgz",
+frontend/package-lock.json:392:        "@eslint/core": "^0.17.0"
+frontend/package-lock.json:398:    "node_modules/@eslint/core": {
+frontend/package-lock.json:400:      "resolved": "https://registry.npmjs.org/@eslint/core/-/core-0.17.0.tgz",
+frontend/package-lock.json:411:    "node_modules/@eslint/eslintrc": {
+frontend/package-lock.json:413:      "resolved": "https://registry.npmjs.org/@eslint/eslintrc/-/eslintrc-3.3.3.tgz",
+frontend/package-lock.json:432:        "url": "https://opencollective.com/eslint"
+frontend/package-lock.json:435:    "node_modules/@eslint/js": {
+frontend/package-lock.json:437:      "resolved": "https://registry.npmjs.org/@eslint/js/-/js-9.39.2.tgz",
+frontend/package-lock.json:445:        "url": "https://eslint.org/donate"
+frontend/package-lock.json:448:    "node_modules/@eslint/object-schema": {
+frontend/package-lock.json:450:      "resolved": "https://registry.npmjs.org/@eslint/object-schema/-/object-schema-2.1.7.tgz",
+frontend/package-lock.json:458:    "node_modules/@eslint/plugin-kit": {
+frontend/package-lock.json:460:      "resolved": "https://registry.npmjs.org/@eslint/plugin-kit/-/plugin-kit-0.4.1.tgz",
+frontend/package-lock.json:465:        "@eslint/core": "^0.17.0",
+frontend/package-lock.json:474:      "resolved": "https://registry.npmjs.org/@humanfs/core/-/core-0.19.1.tgz",
+frontend/package-lock.json:484:      "resolved": "https://registry.npmjs.org/@humanfs/node/-/node-0.16.7.tgz",
+frontend/package-lock.json:498:      "resolved": "https://registry.npmjs.org/@humanwhocodes/module-importer/-/module-importer-1.0.1.tgz",
+frontend/package-lock.json:512:      "resolved": "https://registry.npmjs.org/@humanwhocodes/retry/-/retry-0.4.3.tgz",
+frontend/package-lock.json:526:      "resolved": "https://registry.npmjs.org/@img/colour/-/colour-1.0.0.tgz",
+frontend/package-lock.json:536:      "resolved": "https://registry.npmjs.org/@img/sharp-darwin-arm64/-/sharp-darwin-arm64-0.34.5.tgz",
+frontend/package-lock.json:558:      "resolved": "https://registry.npmjs.org/@img/sharp-darwin-x64/-/sharp-darwin-x64-0.34.5.tgz",
+frontend/package-lock.json:580:      "resolved": "https://registry.npmjs.org/@img/sharp-libvips-darwin-arm64/-/sharp-libvips-darwin-arm64-1.2.4.tgz",
+frontend/package-lock.json:596:      "resolved": "https://registry.npmjs.org/@img/sharp-libvips-darwin-x64/-/sharp-libvips-darwin-x64-1.2.4.tgz",
+frontend/package-lock.json:612:      "resolved": "https://registry.npmjs.org/@img/sharp-libvips-linux-arm/-/sharp-libvips-linux-arm-1.2.4.tgz",
+frontend/package-lock.json:628:      "resolved": "https://registry.npmjs.org/@img/sharp-libvips-linux-arm64/-/sharp-libvips-linux-arm64-1.2.4.tgz",
+frontend/package-lock.json:644:      "resolved": "https://registry.npmjs.org/@img/sharp-libvips-linux-ppc64/-/sharp-libvips-linux-ppc64-1.2.4.tgz",
+frontend/package-lock.json:660:      "resolved": "https://registry.npmjs.org/@img/sharp-libvips-linux-riscv64/-/sharp-libvips-linux-riscv64-1.2.4.tgz",
+frontend/package-lock.json:676:      "resolved": "https://registry.npmjs.org/@img/sharp-libvips-linux-s390x/-/sharp-libvips-linux-s390x-1.2.4.tgz",
+frontend/package-lock.json:692:      "resolved": "https://registry.npmjs.org/@img/sharp-libvips-linux-x64/-/sharp-libvips-linux-x64-1.2.4.tgz",
+frontend/package-lock.json:708:      "resolved": "https://registry.npmjs.org/@img/sharp-libvips-linuxmusl-arm64/-/sharp-libvips-linuxmusl-arm64-1.2.4.tgz",
+frontend/package-lock.json:724:      "resolved": "https://registry.npmjs.org/@img/sharp-libvips-linuxmusl-x64/-/sharp-libvips-linuxmusl-x64-1.2.4.tgz",
+frontend/package-lock.json:740:      "resolved": "https://registry.npmjs.org/@img/sharp-linux-arm/-/sharp-linux-arm-0.34.5.tgz",
+frontend/package-lock.json:762:      "resolved": "https://registry.npmjs.org/@img/sharp-linux-arm64/-/sharp-linux-arm64-0.34.5.tgz",
+frontend/package-lock.json:784:      "resolved": "https://registry.npmjs.org/@img/sharp-linux-ppc64/-/sharp-linux-ppc64-0.34.5.tgz",
+frontend/package-lock.json:806:      "resolved": "https://registry.npmjs.org/@img/sharp-linux-riscv64/-/sharp-linux-riscv64-0.34.5.tgz",
+frontend/package-lock.json:828:      "resolved": "https://registry.npmjs.org/@img/sharp-linux-s390x/-/sharp-linux-s390x-0.34.5.tgz",
+frontend/package-lock.json:850:      "resolved": "https://registry.npmjs.org/@img/sharp-linux-x64/-/sharp-linux-x64-0.34.5.tgz",
+frontend/package-lock.json:872:      "resolved": "https://registry.npmjs.org/@img/sharp-linuxmusl-arm64/-/sharp-linuxmusl-arm64-0.34.5.tgz",
+frontend/package-lock.json:894:      "resolved": "https://registry.npmjs.org/@img/sharp-linuxmusl-x64/-/sharp-linuxmusl-x64-0.34.5.tgz",
+frontend/package-lock.json:916:      "resolved": "https://registry.npmjs.org/@img/sharp-wasm32/-/sharp-wasm32-0.34.5.tgz",
+frontend/package-lock.json:935:      "resolved": "https://registry.npmjs.org/@img/sharp-win32-arm64/-/sharp-win32-arm64-0.34.5.tgz",
+frontend/package-lock.json:954:      "resolved": "https://registry.npmjs.org/@img/sharp-win32-ia32/-/sharp-win32-ia32-0.34.5.tgz",
+frontend/package-lock.json:973:      "resolved": "https://registry.npmjs.org/@img/sharp-win32-x64/-/sharp-win32-x64-0.34.5.tgz",
+frontend/package-lock.json:992:      "resolved": "https://registry.npmjs.org/@jridgewell/gen-mapping/-/gen-mapping-0.3.13.tgz",
+frontend/package-lock.json:1003:      "resolved": "https://registry.npmjs.org/@jridgewell/remapping/-/remapping-2.3.5.tgz",
+frontend/package-lock.json:1014:      "resolved": "https://registry.npmjs.org/@jridgewell/resolve-uri/-/resolve-uri-3.1.2.tgz",
+frontend/package-lock.json:1024:      "resolved": "https://registry.npmjs.org/@jridgewell/sourcemap-codec/-/sourcemap-codec-1.5.5.tgz",
+frontend/package-lock.json:1031:      "resolved": "https://registry.npmjs.org/@jridgewell/trace-mapping/-/trace-mapping-0.3.31.tgz",
+frontend/package-lock.json:1042:      "resolved": "https://registry.npmjs.org/@napi-rs/wasm-runtime/-/wasm-runtime-0.2.12.tgz",
+frontend/package-lock.json:1055:      "resolved": "https://registry.npmjs.org/@next/env/-/env-16.1.0.tgz",
+frontend/package-lock.json:1059:    "node_modules/@next/eslint-plugin-next": {
+frontend/package-lock.json:1061:      "resolved": "https://registry.npmjs.org/@next/eslint-plugin-next/-/eslint-plugin-next-16.0.1.tgz",
+frontend/package-lock.json:1071:      "resolved": "https://registry.npmjs.org/@next/swc-darwin-arm64/-/swc-darwin-arm64-16.1.0.tgz",
+frontend/package-lock.json:1087:      "resolved": "https://registry.npmjs.org/@next/swc-darwin-x64/-/swc-darwin-x64-16.1.0.tgz",
+frontend/package-lock.json:1103:      "resolved": "https://registry.npmjs.org/@next/swc-linux-arm64-gnu/-/swc-linux-arm64-gnu-16.1.0.tgz",
+frontend/package-lock.json:1119:      "resolved": "https://registry.npmjs.org/@next/swc-linux-arm64-musl/-/swc-linux-arm64-musl-16.1.0.tgz",
+frontend/package-lock.json:1135:      "resolved": "https://registry.npmjs.org/@next/swc-linux-x64-gnu/-/swc-linux-x64-gnu-16.1.0.tgz",
+frontend/package-lock.json:1151:      "resolved": "https://registry.npmjs.org/@next/swc-linux-x64-musl/-/swc-linux-x64-musl-16.1.0.tgz",
+frontend/package-lock.json:1167:      "resolved": "https://registry.npmjs.org/@next/swc-win32-arm64-msvc/-/swc-win32-arm64-msvc-16.1.0.tgz",
+frontend/package-lock.json:1183:      "resolved": "https://registry.npmjs.org/@next/swc-win32-x64-msvc/-/swc-win32-x64-msvc-16.1.0.tgz",
+frontend/package-lock.json:1199:      "resolved": "https://registry.npmjs.org/@nodelib/fs.scandir/-/fs.scandir-2.1.5.tgz",
+frontend/package-lock.json:1213:      "resolved": "https://registry.npmjs.org/@nodelib/fs.stat/-/fs.stat-2.0.5.tgz",
+frontend/package-lock.json:1223:      "resolved": "https://registry.npmjs.org/@nodelib/fs.walk/-/fs.walk-1.2.8.tgz",
+frontend/package-lock.json:1237:      "resolved": "https://registry.npmjs.org/@nolyfill/is-core-module/-/is-core-module-1.0.39.tgz",
+frontend/package-lock.json:1245:    "node_modules/@playwright/test": {
+frontend/package-lock.json:1247:      "resolved": "https://registry.npmjs.org/@playwright/test/-/test-1.57.0.tgz",
+frontend/package-lock.json:1252:        "playwright": "1.57.0"
+frontend/package-lock.json:1255:        "playwright": "cli.js"
+frontend/package-lock.json:1263:      "resolved": "https://registry.npmjs.org/@reduxjs/toolkit/-/toolkit-2.11.2.tgz",
+frontend/package-lock.json:1289:      "resolved": "https://registry.npmjs.org/immer/-/immer-11.0.1.tgz",
+frontend/package-lock.json:1299:      "resolved": "https://registry.npmjs.org/@rtsao/scc/-/scc-1.1.0.tgz",
+frontend/package-lock.json:1306:      "resolved": "https://registry.npmjs.org/@socket.io/component-emitter/-/component-emitter-3.1.2.tgz",
+frontend/package-lock.json:1312:      "resolved": "https://registry.npmjs.org/@standard-schema/spec/-/spec-1.1.0.tgz",
+frontend/package-lock.json:1318:      "resolved": "https://registry.npmjs.org/@standard-schema/utils/-/utils-0.3.0.tgz",
+frontend/package-lock.json:1324:      "resolved": "https://registry.npmjs.org/@swc/helpers/-/helpers-0.5.15.tgz",
+frontend/package-lock.json:1333:      "resolved": "https://registry.npmjs.org/@tailwindcss/node/-/node-4.1.18.tgz",
+frontend/package-lock.json:1349:      "resolved": "https://registry.npmjs.org/@tailwindcss/oxide/-/oxide-4.1.18.tgz",
+frontend/package-lock.json:1373:      "resolved": "https://registry.npmjs.org/@tailwindcss/oxide-android-arm64/-/oxide-android-arm64-4.1.18.tgz",
+frontend/package-lock.json:1390:      "resolved": "https://registry.npmjs.org/@tailwindcss/oxide-darwin-arm64/-/oxide-darwin-arm64-4.1.18.tgz",
+frontend/package-lock.json:1407:      "resolved": "https://registry.npmjs.org/@tailwindcss/oxide-darwin-x64/-/oxide-darwin-x64-4.1.18.tgz",
+frontend/package-lock.json:1424:      "resolved": "https://registry.npmjs.org/@tailwindcss/oxide-freebsd-x64/-/oxide-freebsd-x64-4.1.18.tgz",
+frontend/package-lock.json:1441:      "resolved": "https://registry.npmjs.org/@tailwindcss/oxide-linux-arm-gnueabihf/-/oxide-linux-arm-gnueabihf-4.1.18.tgz",
+frontend/package-lock.json:1458:      "resolved": "https://registry.npmjs.org/@tailwindcss/oxide-linux-arm64-gnu/-/oxide-linux-arm64-gnu-4.1.18.tgz",
+frontend/package-lock.json:1475:      "resolved": "https://registry.npmjs.org/@tailwindcss/oxide-linux-arm64-musl/-/oxide-linux-arm64-musl-4.1.18.tgz",
+frontend/package-lock.json:1492:      "resolved": "https://registry.npmjs.org/@tailwindcss/oxide-linux-x64-gnu/-/oxide-linux-x64-gnu-4.1.18.tgz",
+frontend/package-lock.json:1509:      "resolved": "https://registry.npmjs.org/@tailwindcss/oxide-linux-x64-musl/-/oxide-linux-x64-musl-4.1.18.tgz",
+frontend/package-lock.json:1526:      "resolved": "https://registry.npmjs.org/@tailwindcss/oxide-wasm32-wasi/-/oxide-wasm32-wasi-4.1.18.tgz",
+frontend/package-lock.json:1616:      "resolved": "https://registry.npmjs.org/@tailwindcss/oxide-win32-arm64-msvc/-/oxide-win32-arm64-msvc-4.1.18.tgz",
+frontend/package-lock.json:1633:      "resolved": "https://registry.npmjs.org/@tailwindcss/oxide-win32-x64-msvc/-/oxide-win32-x64-msvc-4.1.18.tgz",
+frontend/package-lock.json:1650:      "resolved": "https://registry.npmjs.org/@tailwindcss/postcss/-/postcss-4.1.18.tgz",
+frontend/package-lock.json:1664:      "resolved": "https://registry.npmjs.org/@tanstack/query-core/-/query-core-5.90.12.tgz",
+frontend/package-lock.json:1674:      "resolved": "https://registry.npmjs.org/@tanstack/query-devtools/-/query-devtools-5.91.1.tgz",
+frontend/package-lock.json:1684:      "resolved": "https://registry.npmjs.org/@tanstack/react-query/-/react-query-5.90.12.tgz",
+frontend/package-lock.json:1700:      "resolved": "https://registry.npmjs.org/@tanstack/react-query-devtools/-/react-query-devtools-5.91.1.tgz",
+frontend/package-lock.json:1717:      "resolved": "https://registry.npmjs.org/@tybys/wasm-util/-/wasm-util-0.10.1.tgz",
+frontend/package-lock.json:1728:      "resolved": "https://registry.npmjs.org/@types/d3-array/-/d3-array-3.2.2.tgz",
+frontend/package-lock.json:1734:      "resolved": "https://registry.npmjs.org/@types/d3-color/-/d3-color-3.1.3.tgz",
+frontend/package-lock.json:1740:      "resolved": "https://registry.npmjs.org/@types/d3-ease/-/d3-ease-3.0.2.tgz",
+frontend/package-lock.json:1746:      "resolved": "https://registry.npmjs.org/@types/d3-interpolate/-/d3-interpolate-3.0.4.tgz",
+frontend/package-lock.json:1755:      "resolved": "https://registry.npmjs.org/@types/d3-path/-/d3-path-3.1.1.tgz",
+frontend/package-lock.json:1761:      "resolved": "https://registry.npmjs.org/@types/d3-scale/-/d3-scale-4.0.9.tgz",
+frontend/package-lock.json:1770:      "resolved": "https://registry.npmjs.org/@types/d3-shape/-/d3-shape-3.1.7.tgz",
+frontend/package-lock.json:1779:      "resolved": "https://registry.npmjs.org/@types/d3-time/-/d3-time-3.0.4.tgz",
+frontend/package-lock.json:1785:      "resolved": "https://registry.npmjs.org/@types/d3-timer/-/d3-timer-3.0.2.tgz",
+frontend/package-lock.json:1791:      "resolved": "https://registry.npmjs.org/@types/estree/-/estree-1.0.8.tgz",
+frontend/package-lock.json:1798:      "resolved": "https://registry.npmjs.org/@types/howler/-/howler-2.2.12.tgz",
+frontend/package-lock.json:1804:      "resolved": "https://registry.npmjs.org/@types/http-proxy/-/http-proxy-1.17.17.tgz",
+frontend/package-lock.json:1812:      "resolved": "https://registry.npmjs.org/@types/json-schema/-/json-schema-7.0.15.tgz",
+frontend/package-lock.json:1819:      "resolved": "https://registry.npmjs.org/@types/json5/-/json5-0.0.29.tgz",
+frontend/package-lock.json:1826:      "resolved": "https://registry.npmjs.org/@types/node/-/node-20.19.27.tgz",
+frontend/package-lock.json:1835:      "resolved": "https://registry.npmjs.org/@types/react/-/react-19.2.7.tgz",
+frontend/package-lock.json:1845:      "resolved": "https://registry.npmjs.org/@types/react-dom/-/react-dom-19.2.3.tgz",
+frontend/package-lock.json:1855:      "resolved": "https://registry.npmjs.org/@types/use-sync-external-store/-/use-sync-external-store-0.0.6.tgz",
+frontend/package-lock.json:1859:    "node_modules/@typescript-eslint/eslint-plugin": {
+frontend/package-lock.json:1861:      "resolved": "https://registry.npmjs.org/@typescript-eslint/eslint-plugin/-/eslint-plugin-8.50.0.tgz",
+frontend/package-lock.json:1866:        "@eslint-community/regexpp": "^4.10.0",
+frontend/package-lock.json:1867:        "@typescript-eslint/scope-manager": "8.50.0",
+frontend/package-lock.json:1868:        "@typescript-eslint/type-utils": "8.50.0",
+frontend/package-lock.json:1869:        "@typescript-eslint/utils": "8.50.0",
+frontend/package-lock.json:1870:        "@typescript-eslint/visitor-keys": "8.50.0",
+frontend/package-lock.json:1880:        "url": "https://opencollective.com/typescript-eslint"
+frontend/package-lock.json:1883:        "@typescript-eslint/parser": "^8.50.0",
+frontend/package-lock.json:1884:        "eslint": "^8.57.0 || ^9.0.0",
+frontend/package-lock.json:1888:    "node_modules/@typescript-eslint/eslint-plugin/node_modules/ignore": {
+frontend/package-lock.json:1890:      "resolved": "https://registry.npmjs.org/ignore/-/ignore-7.0.5.tgz",
+frontend/package-lock.json:1898:    "node_modules/@typescript-eslint/parser": {
+frontend/package-lock.json:1900:      "resolved": "https://registry.npmjs.org/@typescript-eslint/parser/-/parser-8.50.0.tgz",
+frontend/package-lock.json:1905:        "@typescript-eslint/scope-manager": "8.50.0",
+frontend/package-lock.json:1906:        "@typescript-eslint/types": "8.50.0",
+frontend/package-lock.json:1907:        "@typescript-eslint/typescript-estree": "8.50.0",
+frontend/package-lock.json:1908:        "@typescript-eslint/visitor-keys": "8.50.0",
+frontend/package-lock.json:1916:        "url": "https://opencollective.com/typescript-eslint"
+frontend/package-lock.json:1919:        "eslint": "^8.57.0 || ^9.0.0",
+frontend/package-lock.json:1923:    "node_modules/@typescript-eslint/project-service": {
+frontend/package-lock.json:1925:      "resolved": "https://registry.npmjs.org/@typescript-eslint/project-service/-/project-service-8.50.0.tgz",
+frontend/package-lock.json:1930:        "@typescript-eslint/tsconfig-utils": "^8.50.0",
+frontend/package-lock.json:1931:        "@typescript-eslint/types": "^8.50.0",
+frontend/package-lock.json:1939:        "url": "https://opencollective.com/typescript-eslint"
+frontend/package-lock.json:1945:    "node_modules/@typescript-eslint/scope-manager": {
+frontend/package-lock.json:1947:      "resolved": "https://registry.npmjs.org/@typescript-eslint/scope-manager/-/scope-manager-8.50.0.tgz",
+frontend/package-lock.json:1952:        "@typescript-eslint/types": "8.50.0",
+frontend/package-lock.json:1953:        "@typescript-eslint/visitor-keys": "8.50.0"
+frontend/package-lock.json:1960:        "url": "https://opencollective.com/typescript-eslint"
+frontend/package-lock.json:1963:    "node_modules/@typescript-eslint/tsconfig-utils": {
+frontend/package-lock.json:1965:      "resolved": "https://registry.npmjs.org/@typescript-eslint/tsconfig-utils/-/tsconfig-utils-8.50.0.tgz",
+frontend/package-lock.json:1974:        "url": "https://opencollective.com/typescript-eslint"
+frontend/package-lock.json:1980:    "node_modules/@typescript-eslint/type-utils": {
+frontend/package-lock.json:1982:      "resolved": "https://registry.npmjs.org/@typescript-eslint/type-utils/-/type-utils-8.50.0.tgz",
+frontend/package-lock.json:1987:        "@typescript-eslint/types": "8.50.0",
+frontend/package-lock.json:1988:        "@typescript-eslint/typescript-estree": "8.50.0",
+frontend/package-lock.json:1989:        "@typescript-eslint/utils": "8.50.0",
+frontend/package-lock.json:1998:        "url": "https://opencollective.com/typescript-eslint"
+frontend/package-lock.json:2001:        "eslint": "^8.57.0 || ^9.0.0",
+frontend/package-lock.json:2005:    "node_modules/@typescript-eslint/types": {
+frontend/package-lock.json:2007:      "resolved": "https://registry.npmjs.org/@typescript-eslint/types/-/types-8.50.0.tgz",
+frontend/package-lock.json:2016:        "url": "https://opencollective.com/typescript-eslint"
+frontend/package-lock.json:2019:    "node_modules/@typescript-eslint/typescript-estree": {
+frontend/package-lock.json:2021:      "resolved": "https://registry.npmjs.org/@typescript-eslint/typescript-estree/-/typescript-estree-8.50.0.tgz",
+frontend/package-lock.json:2026:        "@typescript-eslint/project-service": "8.50.0",
+frontend/package-lock.json:2027:        "@typescript-eslint/tsconfig-utils": "8.50.0",
+frontend/package-lock.json:2028:        "@typescript-eslint/types": "8.50.0",
+frontend/package-lock.json:2029:        "@typescript-eslint/visitor-keys": "8.50.0",
+frontend/package-lock.json:2041:        "url": "https://opencollective.com/typescript-eslint"
+frontend/package-lock.json:2047:    "node_modules/@typescript-eslint/typescript-estree/node_modules/brace-expansion": {
+frontend/package-lock.json:2049:      "resolved": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-2.0.2.tgz",
+frontend/package-lock.json:2057:    "node_modules/@typescript-eslint/typescript-estree/node_modules/minimatch": {
+frontend/package-lock.json:2059:      "resolved": "https://registry.npmjs.org/minimatch/-/minimatch-9.0.5.tgz",
+frontend/package-lock.json:2073:    "node_modules/@typescript-eslint/typescript-estree/node_modules/semver": {
+frontend/package-lock.json:2075:      "resolved": "https://registry.npmjs.org/semver/-/semver-7.7.3.tgz",
+frontend/package-lock.json:2086:    "node_modules/@typescript-eslint/utils": {
+frontend/package-lock.json:2088:      "resolved": "https://registry.npmjs.org/@typescript-eslint/utils/-/utils-8.50.0.tgz",
+frontend/package-lock.json:2093:        "@eslint-community/eslint-utils": "^4.7.0",
+frontend/package-lock.json:2094:        "@typescript-eslint/scope-manager": "8.50.0",
+frontend/package-lock.json:2095:        "@typescript-eslint/types": "8.50.0",
+frontend/package-lock.json:2096:        "@typescript-eslint/typescript-estree": "8.50.0"
+frontend/package-lock.json:2103:        "url": "https://opencollective.com/typescript-eslint"
+frontend/package-lock.json:2106:        "eslint": "^8.57.0 || ^9.0.0",
+frontend/package-lock.json:2110:    "node_modules/@typescript-eslint/visitor-keys": {
+frontend/package-lock.json:2112:      "resolved": "https://registry.npmjs.org/@typescript-eslint/visitor-keys/-/visitor-keys-8.50.0.tgz",
+frontend/package-lock.json:2117:        "@typescript-eslint/types": "8.50.0",
+frontend/package-lock.json:2118:        "eslint-visitor-keys": "^4.2.1"
+frontend/package-lock.json:2125:        "url": "https://opencollective.com/typescript-eslint"
+frontend/package-lock.json:2130:      "resolved": "https://registry.npmjs.org/@unrs/resolver-binding-android-arm-eabi/-/resolver-binding-android-arm-eabi-1.11.1.tgz",
+frontend/package-lock.json:2144:      "resolved": "https://registry.npmjs.org/@unrs/resolver-binding-android-arm64/-/resolver-binding-android-arm64-1.11.1.tgz",
+frontend/package-lock.json:2158:      "resolved": "https://registry.npmjs.org/@unrs/resolver-binding-darwin-arm64/-/resolver-binding-darwin-arm64-1.11.1.tgz",
+frontend/package-lock.json:2172:      "resolved": "https://registry.npmjs.org/@unrs/resolver-binding-darwin-x64/-/resolver-binding-darwin-x64-1.11.1.tgz",
+frontend/package-lock.json:2186:      "resolved": "https://registry.npmjs.org/@unrs/resolver-binding-freebsd-x64/-/resolver-binding-freebsd-x64-1.11.1.tgz",
+frontend/package-lock.json:2200:      "resolved": "https://registry.npmjs.org/@unrs/resolver-binding-linux-arm-gnueabihf/-/resolver-binding-linux-arm-gnueabihf-1.11.1.tgz",
+frontend/package-lock.json:2214:      "resolved": "https://registry.npmjs.org/@unrs/resolver-binding-linux-arm-musleabihf/-/resolver-binding-linux-arm-musleabihf-1.11.1.tgz",
+frontend/package-lock.json:2228:      "resolved": "https://registry.npmjs.org/@unrs/resolver-binding-linux-arm64-gnu/-/resolver-binding-linux-arm64-gnu-1.11.1.tgz",
+frontend/package-lock.json:2242:      "resolved": "https://registry.npmjs.org/@unrs/resolver-binding-linux-arm64-musl/-/resolver-binding-linux-arm64-musl-1.11.1.tgz",
+frontend/package-lock.json:2256:      "resolved": "https://registry.npmjs.org/@unrs/resolver-binding-linux-ppc64-gnu/-/resolver-binding-linux-ppc64-gnu-1.11.1.tgz",
+frontend/package-lock.json:2270:      "resolved": "https://registry.npmjs.org/@unrs/resolver-binding-linux-riscv64-gnu/-/resolver-binding-linux-riscv64-gnu-1.11.1.tgz",
+frontend/package-lock.json:2284:      "resolved": "https://registry.npmjs.org/@unrs/resolver-binding-linux-riscv64-musl/-/resolver-binding-linux-riscv64-musl-1.11.1.tgz",
+frontend/package-lock.json:2298:      "resolved": "https://registry.npmjs.org/@unrs/resolver-binding-linux-s390x-gnu/-/resolver-binding-linux-s390x-gnu-1.11.1.tgz",
+frontend/package-lock.json:2312:      "resolved": "https://registry.npmjs.org/@unrs/resolver-binding-linux-x64-gnu/-/resolver-binding-linux-x64-gnu-1.11.1.tgz",
+frontend/package-lock.json:2326:      "resolved": "https://registry.npmjs.org/@unrs/resolver-binding-linux-x64-musl/-/resolver-binding-linux-x64-musl-1.11.1.tgz",
+frontend/package-lock.json:2340:      "resolved": "https://registry.npmjs.org/@unrs/resolver-binding-wasm32-wasi/-/resolver-binding-wasm32-wasi-1.11.1.tgz",
+frontend/package-lock.json:2357:      "resolved": "https://registry.npmjs.org/@unrs/resolver-binding-win32-arm64-msvc/-/resolver-binding-win32-arm64-msvc-1.11.1.tgz",
+frontend/package-lock.json:2371:      "resolved": "https://registry.npmjs.org/@unrs/resolver-binding-win32-ia32-msvc/-/resolver-binding-win32-ia32-msvc-1.11.1.tgz",
+frontend/package-lock.json:2385:      "resolved": "https://registry.npmjs.org/@unrs/resolver-binding-win32-x64-msvc/-/resolver-binding-win32-x64-msvc-1.11.1.tgz",
+frontend/package-lock.json:2399:      "resolved": "https://registry.npmjs.org/acorn/-/acorn-8.15.0.tgz",
+frontend/package-lock.json:2412:      "resolved": "https://registry.npmjs.org/acorn-jsx/-/acorn-jsx-5.3.2.tgz",
+frontend/package-lock.json:2422:      "resolved": "https://registry.npmjs.org/ajv/-/ajv-6.12.6.tgz",
+frontend/package-lock.json:2439:      "resolved": "https://registry.npmjs.org/ansi-styles/-/ansi-styles-4.3.0.tgz",
+frontend/package-lock.json:2455:      "resolved": "https://registry.npmjs.org/argparse/-/argparse-2.0.1.tgz",
+frontend/package-lock.json:2462:      "resolved": "https://registry.npmjs.org/aria-query/-/aria-query-5.3.2.tgz",
+frontend/package-lock.json:2472:      "resolved": "https://registry.npmjs.org/array-buffer-byte-length/-/array-buffer-byte-length-1.0.2.tgz",
+frontend/package-lock.json:2489:      "resolved": "https://registry.npmjs.org/array-includes/-/array-includes-3.1.9.tgz",
+frontend/package-lock.json:2512:      "resolved": "https://registry.npmjs.org/array.prototype.findlast/-/array.prototype.findlast-1.2.5.tgz",
+frontend/package-lock.json:2533:      "resolved": "https://registry.npmjs.org/array.prototype.findlastindex/-/array.prototype.findlastindex-1.2.6.tgz",
+frontend/package-lock.json:2555:      "resolved": "https://registry.npmjs.org/array.prototype.flat/-/array.prototype.flat-1.3.3.tgz",
+frontend/package-lock.json:2574:      "resolved": "https://registry.npmjs.org/array.prototype.flatmap/-/array.prototype.flatmap-1.3.3.tgz",
+frontend/package-lock.json:2593:      "resolved": "https://registry.npmjs.org/array.prototype.tosorted/-/array.prototype.tosorted-1.1.4.tgz",
+frontend/package-lock.json:2610:      "resolved": "https://registry.npmjs.org/arraybuffer.prototype.slice/-/arraybuffer.prototype.slice-1.0.4.tgz",
+frontend/package-lock.json:2632:      "resolved": "https://registry.npmjs.org/ast-types-flow/-/ast-types-flow-0.0.8.tgz",
+frontend/package-lock.json:2639:      "resolved": "https://registry.npmjs.org/async-function/-/async-function-1.0.0.tgz",
+frontend/package-lock.json:2649:      "resolved": "https://registry.npmjs.org/available-typed-arrays/-/available-typed-arrays-1.0.7.tgz",
+frontend/package-lock.json:2665:      "resolved": "https://registry.npmjs.org/axe-core/-/axe-core-4.11.0.tgz",
+frontend/package-lock.json:2675:      "resolved": "https://registry.npmjs.org/axobject-query/-/axobject-query-4.1.0.tgz",
+frontend/package-lock.json:2685:      "resolved": "https://registry.npmjs.org/balanced-match/-/balanced-match-1.0.2.tgz",
+frontend/package-lock.json:2692:      "resolved": "https://registry.npmjs.org/baseline-browser-mapping/-/baseline-browser-mapping-2.9.11.tgz",
+frontend/package-lock.json:2701:      "resolved": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-1.1.12.tgz",
+frontend/package-lock.json:2712:      "resolved": "https://registry.npmjs.org/braces/-/braces-3.0.3.tgz",
+frontend/package-lock.json:2724:      "resolved": "https://registry.npmjs.org/browserslist/-/browserslist-4.28.1.tgz",
+frontend/package-lock.json:2734:          "url": "https://tidelift.com/funding/github/npm/browserslist"
+frontend/package-lock.json:2758:      "resolved": "https://registry.npmjs.org/call-bind/-/call-bind-1.0.8.tgz",
+frontend/package-lock.json:2777:      "resolved": "https://registry.npmjs.org/call-bind-apply-helpers/-/call-bind-apply-helpers-1.0.2.tgz",
+frontend/package-lock.json:2791:      "resolved": "https://registry.npmjs.org/call-bound/-/call-bound-1.0.4.tgz",
+frontend/package-lock.json:2808:      "resolved": "https://registry.npmjs.org/callsites/-/callsites-3.1.0.tgz",
+frontend/package-lock.json:2818:      "resolved": "https://registry.npmjs.org/caniuse-lite/-/caniuse-lite-1.0.30001761.tgz",
+frontend/package-lock.json:2827:          "url": "https://tidelift.com/funding/github/npm/caniuse-lite"
+frontend/package-lock.json:2838:      "resolved": "https://registry.npmjs.org/chalk/-/chalk-4.1.2.tgz",
+frontend/package-lock.json:2855:      "resolved": "https://registry.npmjs.org/client-only/-/client-only-0.0.1.tgz",
+frontend/package-lock.json:2861:      "resolved": "https://registry.npmjs.org/clsx/-/clsx-2.1.1.tgz",
+frontend/package-lock.json:2870:      "resolved": "https://registry.npmjs.org/color-convert/-/color-convert-2.0.1.tgz",
+frontend/package-lock.json:2883:      "resolved": "https://registry.npmjs.org/color-name/-/color-name-1.1.4.tgz",
+frontend/package-lock.json:2890:      "resolved": "https://registry.npmjs.org/concat-map/-/concat-map-0.0.1.tgz",
+frontend/package-lock.json:2897:      "resolved": "https://registry.npmjs.org/convert-source-map/-/convert-source-map-2.0.0.tgz",
+frontend/package-lock.json:2904:      "resolved": "https://registry.npmjs.org/cross-spawn/-/cross-spawn-7.0.6.tgz",
+frontend/package-lock.json:2919:      "resolved": "https://registry.npmjs.org/csstype/-/csstype-3.2.3.tgz",
+frontend/package-lock.json:2926:      "resolved": "https://registry.npmjs.org/d3-array/-/d3-array-3.2.4.tgz",
+frontend/package-lock.json:2938:      "resolved": "https://registry.npmjs.org/d3-color/-/d3-color-3.1.0.tgz",
+frontend/package-lock.json:2947:      "resolved": "https://registry.npmjs.org/d3-ease/-/d3-ease-3.0.1.tgz",
+frontend/package-lock.json:2956:      "resolved": "https://registry.npmjs.org/d3-format/-/d3-format-3.1.0.tgz",
+frontend/package-lock.json:2965:      "resolved": "https://registry.npmjs.org/d3-interpolate/-/d3-interpolate-3.0.1.tgz",
+frontend/package-lock.json:2977:      "resolved": "https://registry.npmjs.org/d3-path/-/d3-path-3.1.0.tgz",
+frontend/package-lock.json:2986:      "resolved": "https://registry.npmjs.org/d3-scale/-/d3-scale-4.0.2.tgz",
+frontend/package-lock.json:3002:      "resolved": "https://registry.npmjs.org/d3-shape/-/d3-shape-3.2.0.tgz",
+frontend/package-lock.json:3014:      "resolved": "https://registry.npmjs.org/d3-time/-/d3-time-3.1.0.tgz",
+frontend/package-lock.json:3026:      "resolved": "https://registry.npmjs.org/d3-time-format/-/d3-time-format-4.1.0.tgz",
+frontend/package-lock.json:3038:      "resolved": "https://registry.npmjs.org/d3-timer/-/d3-timer-3.0.1.tgz",
+frontend/package-lock.json:3047:      "resolved": "https://registry.npmjs.org/damerau-levenshtein/-/damerau-levenshtein-1.0.8.tgz",
+frontend/package-lock.json:3054:      "resolved": "https://registry.npmjs.org/data-view-buffer/-/data-view-buffer-1.0.2.tgz",
+frontend/package-lock.json:3072:      "resolved": "https://registry.npmjs.org/data-view-byte-length/-/data-view-byte-length-1.0.2.tgz",
+frontend/package-lock.json:3090:      "resolved": "https://registry.npmjs.org/data-view-byte-offset/-/data-view-byte-offset-1.0.1.tgz",
+frontend/package-lock.json:3108:      "resolved": "https://registry.npmjs.org/date-fns/-/date-fns-4.1.0.tgz",
+frontend/package-lock.json:3118:      "resolved": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz",
+frontend/package-lock.json:3135:      "resolved": "https://registry.npmjs.org/decimal.js-light/-/decimal.js-light-2.5.1.tgz",
+frontend/package-lock.json:3141:      "resolved": "https://registry.npmjs.org/deep-is/-/deep-is-0.1.4.tgz",
+frontend/package-lock.json:3148:      "resolved": "https://registry.npmjs.org/define-data-property/-/define-data-property-1.1.4.tgz",
+frontend/package-lock.json:3166:      "resolved": "https://registry.npmjs.org/define-properties/-/define-properties-1.2.1.tgz",
+frontend/package-lock.json:3184:      "resolved": "https://registry.npmjs.org/detect-libc/-/detect-libc-2.1.2.tgz",
+frontend/package-lock.json:3194:      "resolved": "https://registry.npmjs.org/doctrine/-/doctrine-2.1.0.tgz",
+frontend/package-lock.json:3207:      "resolved": "https://registry.npmjs.org/dunder-proto/-/dunder-proto-1.0.1.tgz",
+frontend/package-lock.json:3222:      "resolved": "https://registry.npmjs.org/electron-to-chromium/-/electron-to-chromium-1.5.267.tgz",
+frontend/package-lock.json:3229:      "resolved": "https://registry.npmjs.org/emoji-regex/-/emoji-regex-9.2.2.tgz",
+frontend/package-lock.json:3236:      "resolved": "https://registry.npmjs.org/engine.io-client/-/engine.io-client-6.6.4.tgz",
+frontend/package-lock.json:3249:      "resolved": "https://registry.npmjs.org/engine.io-parser/-/engine.io-parser-5.2.3.tgz",
+frontend/package-lock.json:3258:      "resolved": "https://registry.npmjs.org/enhanced-resolve/-/enhanced-resolve-5.18.4.tgz",
+frontend/package-lock.json:3272:      "resolved": "https://registry.npmjs.org/es-abstract/-/es-abstract-1.24.1.tgz",
+frontend/package-lock.json:3341:      "resolved": "https://registry.npmjs.org/es-define-property/-/es-define-property-1.0.1.tgz",
+frontend/package-lock.json:3351:      "resolved": "https://registry.npmjs.org/es-errors/-/es-errors-1.3.0.tgz",
+frontend/package-lock.json:3361:      "resolved": "https://registry.npmjs.org/es-iterator-helpers/-/es-iterator-helpers-1.2.2.tgz",
+frontend/package-lock.json:3389:      "resolved": "https://registry.npmjs.org/es-object-atoms/-/es-object-atoms-1.1.1.tgz",
+frontend/package-lock.json:3402:      "resolved": "https://registry.npmjs.org/es-set-tostringtag/-/es-set-tostringtag-2.1.0.tgz",
+frontend/package-lock.json:3418:      "resolved": "https://registry.npmjs.org/es-shim-unscopables/-/es-shim-unscopables-1.1.0.tgz",
+frontend/package-lock.json:3431:      "resolved": "https://registry.npmjs.org/es-to-primitive/-/es-to-primitive-1.3.0.tgz",
+frontend/package-lock.json:3449:      "resolved": "https://registry.npmjs.org/es-toolkit/-/es-toolkit-1.43.0.tgz",
+frontend/package-lock.json:3459:      "resolved": "https://registry.npmjs.org/escalade/-/escalade-3.2.0.tgz",
+frontend/package-lock.json:3469:      "resolved": "https://registry.npmjs.org/escape-string-regexp/-/escape-string-regexp-4.0.0.tgz",
+frontend/package-lock.json:3480:    "node_modules/eslint": {
+frontend/package-lock.json:3482:      "resolved": "https://registry.npmjs.org/eslint/-/eslint-9.39.2.tgz",
+frontend/package-lock.json:3487:        "@eslint-community/eslint-utils": "^4.8.0",
+frontend/package-lock.json:3488:        "@eslint-community/regexpp": "^4.12.1",
+frontend/package-lock.json:3489:        "@eslint/config-array": "^0.21.1",
+frontend/package-lock.json:3490:        "@eslint/config-helpers": "^0.4.2",
+frontend/package-lock.json:3491:        "@eslint/core": "^0.17.0",
+frontend/package-lock.json:3492:        "@eslint/eslintrc": "^3.3.1",
+frontend/package-lock.json:3493:        "@eslint/js": "9.39.2",
+frontend/package-lock.json:3494:        "@eslint/plugin-kit": "^0.4.1",
+frontend/package-lock.json:3504:        "eslint-scope": "^8.4.0",
+frontend/package-lock.json:3505:        "eslint-visitor-keys": "^4.2.1",
+frontend/package-lock.json:3523:        "eslint": "bin/eslint.js"
+frontend/package-lock.json:3529:        "url": "https://eslint.org/donate"
+frontend/package-lock.json:3540:    "node_modules/eslint-config-next": {
+frontend/package-lock.json:3542:      "resolved": "https://registry.npmjs.org/eslint-config-next/-/eslint-config-next-16.0.1.tgz",
+frontend/package-lock.json:3547:        "@next/eslint-plugin-next": "16.0.1",
+frontend/package-lock.json:3548:        "eslint-import-resolver-node": "^0.3.6",
+frontend/package-lock.json:3549:        "eslint-import-resolver-typescript": "^3.5.2",
+frontend/package-lock.json:3550:        "eslint-plugin-import": "^2.32.0",
+frontend/package-lock.json:3551:        "eslint-plugin-jsx-a11y": "^6.10.0",
+frontend/package-lock.json:3552:        "eslint-plugin-react": "^7.37.0",
+frontend/package-lock.json:3553:        "eslint-plugin-react-hooks": "^7.0.0",
+frontend/package-lock.json:3555:        "typescript-eslint": "^8.46.0"
+frontend/package-lock.json:3558:        "eslint": ">=9.0.0",
+frontend/package-lock.json:3567:    "node_modules/eslint-config-next/node_modules/globals": {
+frontend/package-lock.json:3569:      "resolved": "https://registry.npmjs.org/globals/-/globals-16.4.0.tgz",
+frontend/package-lock.json:3580:    "node_modules/eslint-import-resolver-node": {
+frontend/package-lock.json:3582:      "resolved": "https://registry.npmjs.org/eslint-import-resolver-node/-/eslint-import-resolver-node-0.3.9.tgz",
+frontend/package-lock.json:3592:    "node_modules/eslint-import-resolver-node/node_modules/debug": {
+frontend/package-lock.json:3594:      "resolved": "https://registry.npmjs.org/debug/-/debug-3.2.7.tgz",
+frontend/package-lock.json:3602:    "node_modules/eslint-import-resolver-typescript": {
+frontend/package-lock.json:3604:      "resolved": "https://registry.npmjs.org/eslint-import-resolver-typescript/-/eslint-import-resolver-typescript-3.10.1.tgz",
+frontend/package-lock.json:3621:        "url": "https://opencollective.com/eslint-import-resolver-typescript"
+frontend/package-lock.json:3624:        "eslint": "*",
+frontend/package-lock.json:3625:        "eslint-plugin-import": "*",
+frontend/package-lock.json:3626:        "eslint-plugin-import-x": "*"
+frontend/package-lock.json:3629:        "eslint-plugin-import": {
+frontend/package-lock.json:3632:        "eslint-plugin-import-x": {
+frontend/package-lock.json:3637:    "node_modules/eslint-module-utils": {
+frontend/package-lock.json:3639:      "resolved": "https://registry.npmjs.org/eslint-module-utils/-/eslint-module-utils-2.12.1.tgz",
+frontend/package-lock.json:3650:        "eslint": {
+frontend/package-lock.json:3655:    "node_modules/eslint-module-utils/node_modules/debug": {
+frontend/package-lock.json:3657:      "resolved": "https://registry.npmjs.org/debug/-/debug-3.2.7.tgz",
+frontend/package-lock.json:3665:    "node_modules/eslint-plugin-import": {
+frontend/package-lock.json:3667:      "resolved": "https://registry.npmjs.org/eslint-plugin-import/-/eslint-plugin-import-2.32.0.tgz",
+frontend/package-lock.json:3679:        "eslint-import-resolver-node": "^0.3.9",
+frontend/package-lock.json:3680:        "eslint-module-utils": "^2.12.1",
+frontend/package-lock.json:3696:        "eslint": "^2 || ^3 || ^4 || ^5 || ^6 || ^7.2.0 || ^8 || ^9"
+frontend/package-lock.json:3699:    "node_modules/eslint-plugin-import/node_modules/debug": {
+frontend/package-lock.json:3701:      "resolved": "https://registry.npmjs.org/debug/-/debug-3.2.7.tgz",
+frontend/package-lock.json:3709:    "node_modules/eslint-plugin-jsx-a11y": {
+frontend/package-lock.json:3711:      "resolved": "https://registry.npmjs.org/eslint-plugin-jsx-a11y/-/eslint-plugin-jsx-a11y-6.10.2.tgz",
+frontend/package-lock.json:3736:        "eslint": "^3 || ^4 || ^5 || ^6 || ^7 || ^8 || ^9"
+frontend/package-lock.json:3739:    "node_modules/eslint-plugin-react": {
+frontend/package-lock.json:3741:      "resolved": "https://registry.npmjs.org/eslint-plugin-react/-/eslint-plugin-react-7.37.5.tgz",
+frontend/package-lock.json:3769:        "eslint": "^3 || ^4 || ^5 || ^6 || ^7 || ^8 || ^9.7"
+frontend/package-lock.json:3772:    "node_modules/eslint-plugin-react-hooks": {
+frontend/package-lock.json:3774:      "resolved": "https://registry.npmjs.org/eslint-plugin-react-hooks/-/eslint-plugin-react-hooks-7.0.1.tgz",
+frontend/package-lock.json:3789:        "eslint": "^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0-0 || ^9.0.0"
+frontend/package-lock.json:3792:    "node_modules/eslint-plugin-react/node_modules/resolve": {
+frontend/package-lock.json:3794:      "resolved": "https://registry.npmjs.org/resolve/-/resolve-2.0.0-next.5.tgz",
+frontend/package-lock.json:3810:    "node_modules/eslint-scope": {
+frontend/package-lock.json:3812:      "resolved": "https://registry.npmjs.org/eslint-scope/-/eslint-scope-8.4.0.tgz",
+frontend/package-lock.json:3824:        "url": "https://opencollective.com/eslint"
+frontend/package-lock.json:3827:    "node_modules/eslint-visitor-keys": {
+frontend/package-lock.json:3829:      "resolved": "https://registry.npmjs.org/eslint-visitor-keys/-/eslint-visitor-keys-4.2.1.tgz",
+frontend/package-lock.json:3837:        "url": "https://opencollective.com/eslint"
+frontend/package-lock.json:3842:      "resolved": "https://registry.npmjs.org/espree/-/espree-10.4.0.tgz",
+frontend/package-lock.json:3849:        "eslint-visitor-keys": "^4.2.1"
+frontend/package-lock.json:3855:        "url": "https://opencollective.com/eslint"
+frontend/package-lock.json:3860:      "resolved": "https://registry.npmjs.org/esquery/-/esquery-1.6.0.tgz",
+frontend/package-lock.json:3873:      "resolved": "https://registry.npmjs.org/esrecurse/-/esrecurse-4.3.0.tgz",
+frontend/package-lock.json:3886:      "resolved": "https://registry.npmjs.org/estraverse/-/estraverse-5.3.0.tgz",
+frontend/package-lock.json:3896:      "resolved": "https://registry.npmjs.org/esutils/-/esutils-2.0.3.tgz",
+frontend/package-lock.json:3906:      "resolved": "https://registry.npmjs.org/eventemitter3/-/eventemitter3-5.0.1.tgz",
+frontend/package-lock.json:3912:      "resolved": "https://registry.npmjs.org/fast-deep-equal/-/fast-deep-equal-3.1.3.tgz",
+frontend/package-lock.json:3919:      "resolved": "https://registry.npmjs.org/fast-glob/-/fast-glob-3.3.1.tgz",
+frontend/package-lock.json:3936:      "resolved": "https://registry.npmjs.org/glob-parent/-/glob-parent-5.1.2.tgz",
+frontend/package-lock.json:3949:      "resolved": "https://registry.npmjs.org/fast-json-stable-stringify/-/fast-json-stable-stringify-2.1.0.tgz",
+frontend/package-lock.json:3956:      "resolved": "https://registry.npmjs.org/fast-levenshtein/-/fast-levenshtein-2.0.6.tgz",
+frontend/package-lock.json:3963:      "resolved": "https://registry.npmjs.org/fastq/-/fastq-1.19.1.tgz",
+frontend/package-lock.json:3973:      "resolved": "https://registry.npmjs.org/file-entry-cache/-/file-entry-cache-8.0.0.tgz",
+frontend/package-lock.json:3986:      "resolved": "https://registry.npmjs.org/fill-range/-/fill-range-7.1.1.tgz",
+frontend/package-lock.json:3998:      "resolved": "https://registry.npmjs.org/find-up/-/find-up-5.0.0.tgz",
+frontend/package-lock.json:4015:      "resolved": "https://registry.npmjs.org/flat-cache/-/flat-cache-4.0.1.tgz",
+frontend/package-lock.json:4029:      "resolved": "https://registry.npmjs.org/flatted/-/flatted-3.3.3.tgz",
+frontend/package-lock.json:4036:      "resolved": "https://registry.npmjs.org/follow-redirects/-/follow-redirects-1.15.11.tgz",
+frontend/package-lock.json:4055:      "resolved": "https://registry.npmjs.org/for-each/-/for-each-0.3.5.tgz",
+frontend/package-lock.json:4071:      "resolved": "https://registry.npmjs.org/framer-motion/-/framer-motion-12.23.26.tgz",
+frontend/package-lock.json:4098:      "resolved": "https://registry.npmjs.org/fsevents/-/fsevents-2.3.2.tgz",
+frontend/package-lock.json:4113:      "resolved": "https://registry.npmjs.org/function-bind/-/function-bind-1.1.2.tgz",
+frontend/package-lock.json:4123:      "resolved": "https://registry.npmjs.org/function.prototype.name/-/function.prototype.name-1.1.8.tgz",
+frontend/package-lock.json:4144:      "resolved": "https://registry.npmjs.org/functions-have-names/-/functions-have-names-1.2.3.tgz",
+frontend/package-lock.json:4154:      "resolved": "https://registry.npmjs.org/generator-function/-/generator-function-2.0.1.tgz",
+frontend/package-lock.json:4164:      "resolved": "https://registry.npmjs.org/gensync/-/gensync-1.0.0-beta.2.tgz",
+frontend/package-lock.json:4174:      "resolved": "https://registry.npmjs.org/get-intrinsic/-/get-intrinsic-1.3.0.tgz",
+frontend/package-lock.json:4199:      "resolved": "https://registry.npmjs.org/get-proto/-/get-proto-1.0.1.tgz",
+frontend/package-lock.json:4213:      "resolved": "https://registry.npmjs.org/get-symbol-description/-/get-symbol-description-1.1.0.tgz",
+frontend/package-lock.json:4231:      "resolved": "https://registry.npmjs.org/get-tsconfig/-/get-tsconfig-4.13.0.tgz",
+frontend/package-lock.json:4244:      "resolved": "https://registry.npmjs.org/glob-parent/-/glob-parent-6.0.2.tgz",
+frontend/package-lock.json:4257:      "resolved": "https://registry.npmjs.org/globals/-/globals-14.0.0.tgz",
+frontend/package-lock.json:4270:      "resolved": "https://registry.npmjs.org/globalthis/-/globalthis-1.0.4.tgz",
+frontend/package-lock.json:4287:      "resolved": "https://registry.npmjs.org/gopd/-/gopd-1.2.0.tgz",
+frontend/package-lock.json:4300:      "resolved": "https://registry.npmjs.org/graceful-fs/-/graceful-fs-4.2.11.tgz",
+frontend/package-lock.json:4307:      "resolved": "https://registry.npmjs.org/has-bigints/-/has-bigints-1.1.0.tgz",
+frontend/package-lock.json:4320:      "resolved": "https://registry.npmjs.org/has-flag/-/has-flag-4.0.0.tgz",
+frontend/package-lock.json:4330:      "resolved": "https://registry.npmjs.org/has-property-descriptors/-/has-property-descriptors-1.0.2.tgz",
+frontend/package-lock.json:4343:      "resolved": "https://registry.npmjs.org/has-proto/-/has-proto-1.2.0.tgz",
+frontend/package-lock.json:4359:      "resolved": "https://registry.npmjs.org/has-symbols/-/has-symbols-1.1.0.tgz",
+frontend/package-lock.json:4372:      "resolved": "https://registry.npmjs.org/has-tostringtag/-/has-tostringtag-1.0.2.tgz",
+frontend/package-lock.json:4388:      "resolved": "https://registry.npmjs.org/hasown/-/hasown-2.0.2.tgz",
+frontend/package-lock.json:4401:      "resolved": "https://registry.npmjs.org/hermes-estree/-/hermes-estree-0.25.1.tgz",
+frontend/package-lock.json:4408:      "resolved": "https://registry.npmjs.org/hermes-parser/-/hermes-parser-0.25.1.tgz",
+frontend/package-lock.json:4418:      "resolved": "https://registry.npmjs.org/howler/-/howler-2.2.4.tgz",
+frontend/package-lock.json:4424:      "resolved": "https://registry.npmjs.org/http-proxy/-/http-proxy-1.18.1.tgz",
+frontend/package-lock.json:4437:      "resolved": "https://registry.npmjs.org/http-proxy-middleware/-/http-proxy-middleware-3.0.5.tgz",
+frontend/package-lock.json:4453:      "resolved": "https://registry.npmjs.org/eventemitter3/-/eventemitter3-4.0.7.tgz",
+frontend/package-lock.json:4458:      "resolved": "https://registry.npmjs.org/ignore/-/ignore-5.3.2.tgz",
+frontend/package-lock.json:4468:      "resolved": "https://registry.npmjs.org/immer/-/immer-10.2.0.tgz",
+frontend/package-lock.json:4478:      "resolved": "https://registry.npmjs.org/import-fresh/-/import-fresh-3.3.1.tgz",
+frontend/package-lock.json:4495:      "resolved": "https://registry.npmjs.org/imurmurhash/-/imurmurhash-0.1.4.tgz",
+frontend/package-lock.json:4505:      "resolved": "https://registry.npmjs.org/internal-slot/-/internal-slot-1.1.0.tgz",
+frontend/package-lock.json:4520:      "resolved": "https://registry.npmjs.org/internmap/-/internmap-2.0.3.tgz",
+frontend/package-lock.json:4529:      "resolved": "https://registry.npmjs.org/is-array-buffer/-/is-array-buffer-3.0.5.tgz",
+frontend/package-lock.json:4547:      "resolved": "https://registry.npmjs.org/is-async-function/-/is-async-function-2.1.1.tgz",
+frontend/package-lock.json:4567:      "resolved": "https://registry.npmjs.org/is-bigint/-/is-bigint-1.1.0.tgz",
+frontend/package-lock.json:4583:      "resolved": "https://registry.npmjs.org/is-boolean-object/-/is-boolean-object-1.2.2.tgz",
+frontend/package-lock.json:4600:      "resolved": "https://registry.npmjs.org/is-bun-module/-/is-bun-module-2.0.0.tgz",
+frontend/package-lock.json:4610:      "resolved": "https://registry.npmjs.org/semver/-/semver-7.7.3.tgz",
+frontend/package-lock.json:4623:      "resolved": "https://registry.npmjs.org/is-callable/-/is-callable-1.2.7.tgz",
+frontend/package-lock.json:4636:      "resolved": "https://registry.npmjs.org/is-core-module/-/is-core-module-2.16.1.tgz",
+frontend/package-lock.json:4652:      "resolved": "https://registry.npmjs.org/is-data-view/-/is-data-view-1.0.2.tgz",
+frontend/package-lock.json:4670:      "resolved": "https://registry.npmjs.org/is-date-object/-/is-date-object-1.1.0.tgz",
+frontend/package-lock.json:4687:      "resolved": "https://registry.npmjs.org/is-extglob/-/is-extglob-2.1.1.tgz",
+frontend/package-lock.json:4696:      "resolved": "https://registry.npmjs.org/is-finalizationregistry/-/is-finalizationregistry-1.1.1.tgz",
+frontend/package-lock.json:4712:      "resolved": "https://registry.npmjs.org/is-generator-function/-/is-generator-function-1.1.2.tgz",
+frontend/package-lock.json:4732:      "resolved": "https://registry.npmjs.org/is-glob/-/is-glob-4.0.3.tgz",
+frontend/package-lock.json:4744:      "resolved": "https://registry.npmjs.org/is-map/-/is-map-2.0.3.tgz",
+frontend/package-lock.json:4757:      "resolved": "https://registry.npmjs.org/is-negative-zero/-/is-negative-zero-2.0.3.tgz",
+frontend/package-lock.json:4770:      "resolved": "https://registry.npmjs.org/is-number/-/is-number-7.0.0.tgz",
+frontend/package-lock.json:4779:      "resolved": "https://registry.npmjs.org/is-number-object/-/is-number-object-1.1.1.tgz",
+frontend/package-lock.json:4796:      "resolved": "https://registry.npmjs.org/is-plain-object/-/is-plain-object-5.0.0.tgz",
+frontend/package-lock.json:4804:      "resolved": "https://registry.npmjs.org/is-regex/-/is-regex-1.2.1.tgz",
+frontend/package-lock.json:4823:      "resolved": "https://registry.npmjs.org/is-set/-/is-set-2.0.3.tgz",
+frontend/package-lock.json:4836:      "resolved": "https://registry.npmjs.org/is-shared-array-buffer/-/is-shared-array-buffer-1.0.4.tgz",
+frontend/package-lock.json:4852:      "resolved": "https://registry.npmjs.org/is-string/-/is-string-1.1.1.tgz",
+frontend/package-lock.json:4869:      "resolved": "https://registry.npmjs.org/is-symbol/-/is-symbol-1.1.1.tgz",
+frontend/package-lock.json:4887:      "resolved": "https://registry.npmjs.org/is-typed-array/-/is-typed-array-1.1.15.tgz",
+frontend/package-lock.json:4903:      "resolved": "https://registry.npmjs.org/is-weakmap/-/is-weakmap-2.0.2.tgz",
+frontend/package-lock.json:4916:      "resolved": "https://registry.npmjs.org/is-weakref/-/is-weakref-1.1.1.tgz",
+frontend/package-lock.json:4932:      "resolved": "https://registry.npmjs.org/is-weakset/-/is-weakset-2.0.4.tgz",
+frontend/package-lock.json:4949:      "resolved": "https://registry.npmjs.org/isarray/-/isarray-2.0.5.tgz",
+frontend/package-lock.json:4956:      "resolved": "https://registry.npmjs.org/isexe/-/isexe-2.0.0.tgz",
+frontend/package-lock.json:4963:      "resolved": "https://registry.npmjs.org/iterator.prototype/-/iterator.prototype-1.1.5.tgz",
+frontend/package-lock.json:4981:      "resolved": "https://registry.npmjs.org/jiti/-/jiti-2.6.1.tgz",
+frontend/package-lock.json:4991:      "resolved": "https://registry.npmjs.org/js-tokens/-/js-tokens-4.0.0.tgz",
+frontend/package-lock.json:4998:      "resolved": "https://registry.npmjs.org/js-yaml/-/js-yaml-4.1.1.tgz",
+frontend/package-lock.json:5011:      "resolved": "https://registry.npmjs.org/jsesc/-/jsesc-3.1.0.tgz",
+frontend/package-lock.json:5024:      "resolved": "https://registry.npmjs.org/json-buffer/-/json-buffer-3.0.1.tgz",
+frontend/package-lock.json:5031:      "resolved": "https://registry.npmjs.org/json-schema-traverse/-/json-schema-traverse-0.4.1.tgz",
+frontend/package-lock.json:5038:      "resolved": "https://registry.npmjs.org/json-stable-stringify-without-jsonify/-/json-stable-stringify-without-jsonify-1.0.1.tgz",
+frontend/package-lock.json:5045:      "resolved": "https://registry.npmjs.org/json5/-/json5-2.2.3.tgz",
+frontend/package-lock.json:5058:      "resolved": "https://registry.npmjs.org/jsx-ast-utils/-/jsx-ast-utils-3.3.5.tgz",
+frontend/package-lock.json:5074:      "resolved": "https://registry.npmjs.org/keyv/-/keyv-4.5.4.tgz",
+frontend/package-lock.json:5084:      "resolved": "https://registry.npmjs.org/language-subtag-registry/-/language-subtag-registry-0.3.23.tgz",
+frontend/package-lock.json:5091:      "resolved": "https://registry.npmjs.org/language-tags/-/language-tags-1.0.9.tgz",
+frontend/package-lock.json:5104:      "resolved": "https://registry.npmjs.org/levn/-/levn-0.4.1.tgz",
+frontend/package-lock.json:5118:      "resolved": "https://registry.npmjs.org/lightningcss/-/lightningcss-1.30.2.tgz",
+frontend/package-lock.json:5148:      "resolved": "https://registry.npmjs.org/lightningcss-android-arm64/-/lightningcss-android-arm64-1.30.2.tgz",
+frontend/package-lock.json:5169:      "resolved": "https://registry.npmjs.org/lightningcss-darwin-arm64/-/lightningcss-darwin-arm64-1.30.2.tgz",
+frontend/package-lock.json:5190:      "resolved": "https://registry.npmjs.org/lightningcss-darwin-x64/-/lightningcss-darwin-x64-1.30.2.tgz",
+frontend/package-lock.json:5211:      "resolved": "https://registry.npmjs.org/lightningcss-freebsd-x64/-/lightningcss-freebsd-x64-1.30.2.tgz",
+frontend/package-lock.json:5232:      "resolved": "https://registry.npmjs.org/lightningcss-linux-arm-gnueabihf/-/lightningcss-linux-arm-gnueabihf-1.30.2.tgz",
+frontend/package-lock.json:5253:      "resolved": "https://registry.npmjs.org/lightningcss-linux-arm64-gnu/-/lightningcss-linux-arm64-gnu-1.30.2.tgz",
+frontend/package-lock.json:5274:      "resolved": "https://registry.npmjs.org/lightningcss-linux-arm64-musl/-/lightningcss-linux-arm64-musl-1.30.2.tgz",
+frontend/package-lock.json:5295:      "resolved": "https://registry.npmjs.org/lightningcss-linux-x64-gnu/-/lightningcss-linux-x64-gnu-1.30.2.tgz",
+frontend/package-lock.json:5316:      "resolved": "https://registry.npmjs.org/lightningcss-linux-x64-musl/-/lightningcss-linux-x64-musl-1.30.2.tgz",
+frontend/package-lock.json:5337:      "resolved": "https://registry.npmjs.org/lightningcss-win32-arm64-msvc/-/lightningcss-win32-arm64-msvc-1.30.2.tgz",
+frontend/package-lock.json:5358:      "resolved": "https://registry.npmjs.org/lightningcss-win32-x64-msvc/-/lightningcss-win32-x64-msvc-1.30.2.tgz",
+frontend/package-lock.json:5379:      "resolved": "https://registry.npmjs.org/locate-path/-/locate-path-6.0.0.tgz",
+frontend/package-lock.json:5395:      "resolved": "https://registry.npmjs.org/lodash.merge/-/lodash.merge-4.6.2.tgz",
+frontend/package-lock.json:5402:      "resolved": "https://registry.npmjs.org/loose-envify/-/loose-envify-1.4.0.tgz",
+frontend/package-lock.json:5415:      "resolved": "https://registry.npmjs.org/lru-cache/-/lru-cache-5.1.1.tgz",
+frontend/package-lock.json:5425:      "resolved": "https://registry.npmjs.org/lucide-react/-/lucide-react-0.552.0.tgz",
+frontend/package-lock.json:5434:      "resolved": "https://registry.npmjs.org/magic-string/-/magic-string-0.30.21.tgz",
+frontend/package-lock.json:5444:      "resolved": "https://registry.npmjs.org/math-intrinsics/-/math-intrinsics-1.1.0.tgz",
+frontend/package-lock.json:5454:      "resolved": "https://registry.npmjs.org/merge2/-/merge2-1.4.1.tgz",
+frontend/package-lock.json:5464:      "resolved": "https://registry.npmjs.org/micromatch/-/micromatch-4.0.8.tgz",
+frontend/package-lock.json:5477:      "resolved": "https://registry.npmjs.org/minimatch/-/minimatch-3.1.2.tgz",
+frontend/package-lock.json:5490:      "resolved": "https://registry.npmjs.org/minimist/-/minimist-1.2.8.tgz",
+frontend/package-lock.json:5500:      "resolved": "https://registry.npmjs.org/motion-dom/-/motion-dom-12.23.23.tgz",
+frontend/package-lock.json:5509:      "resolved": "https://registry.npmjs.org/motion-utils/-/motion-utils-12.23.6.tgz",
+frontend/package-lock.json:5515:      "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+frontend/package-lock.json:5521:      "resolved": "https://registry.npmjs.org/nanoid/-/nanoid-3.3.11.tgz",
+frontend/package-lock.json:5539:      "resolved": "https://registry.npmjs.org/napi-postinstall/-/napi-postinstall-0.3.4.tgz",
+frontend/package-lock.json:5555:      "resolved": "https://registry.npmjs.org/natural-compare/-/natural-compare-1.4.0.tgz",
+frontend/package-lock.json:5562:      "resolved": "https://registry.npmjs.org/next/-/next-16.1.0.tgz",
+frontend/package-lock.json:5592:        "@playwright/test": "^1.51.1",
+frontend/package-lock.json:5602:        "@playwright/test": {
+frontend/package-lock.json:5615:      "resolved": "https://registry.npmjs.org/postcss/-/postcss-8.4.31.tgz",
+frontend/package-lock.json:5624:          "url": "https://tidelift.com/funding/github/npm/postcss"
+frontend/package-lock.json:5643:      "resolved": "https://registry.npmjs.org/node-releases/-/node-releases-2.0.27.tgz",
+frontend/package-lock.json:5650:      "resolved": "https://registry.npmjs.org/object-assign/-/object-assign-4.1.1.tgz",
+frontend/package-lock.json:5660:      "resolved": "https://registry.npmjs.org/object-inspect/-/object-inspect-1.13.4.tgz",
+frontend/package-lock.json:5673:      "resolved": "https://registry.npmjs.org/object-keys/-/object-keys-1.1.1.tgz",
+frontend/package-lock.json:5683:      "resolved": "https://registry.npmjs.org/object.assign/-/object.assign-4.1.7.tgz",
+frontend/package-lock.json:5704:      "resolved": "https://registry.npmjs.org/object.entries/-/object.entries-1.1.9.tgz",
+frontend/package-lock.json:5720:      "resolved": "https://registry.npmjs.org/object.fromentries/-/object.fromentries-2.0.8.tgz",
+frontend/package-lock.json:5739:      "resolved": "https://registry.npmjs.org/object.groupby/-/object.groupby-1.0.3.tgz",
+frontend/package-lock.json:5754:      "resolved": "https://registry.npmjs.org/object.values/-/object.values-1.2.1.tgz",
+frontend/package-lock.json:5773:      "resolved": "https://registry.npmjs.org/optionator/-/optionator-0.9.4.tgz",
+frontend/package-lock.json:5791:      "resolved": "https://registry.npmjs.org/own-keys/-/own-keys-1.0.1.tgz",
+frontend/package-lock.json:5809:      "resolved": "https://registry.npmjs.org/p-limit/-/p-limit-3.1.0.tgz",
+frontend/package-lock.json:5825:      "resolved": "https://registry.npmjs.org/p-locate/-/p-locate-5.0.0.tgz",
+frontend/package-lock.json:5841:      "resolved": "https://registry.npmjs.org/parent-module/-/parent-module-1.0.1.tgz",
+frontend/package-lock.json:5854:      "resolved": "https://registry.npmjs.org/path-exists/-/path-exists-4.0.0.tgz",
+frontend/package-lock.json:5864:      "resolved": "https://registry.npmjs.org/path-key/-/path-key-3.1.1.tgz",
+frontend/package-lock.json:5874:      "resolved": "https://registry.npmjs.org/path-parse/-/path-parse-1.0.7.tgz",
+frontend/package-lock.json:5881:      "resolved": "https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz",
+frontend/package-lock.json:5887:      "resolved": "https://registry.npmjs.org/picomatch/-/picomatch-2.3.1.tgz",
+frontend/package-lock.json:5897:    "node_modules/playwright": {
+frontend/package-lock.json:5899:      "resolved": "https://registry.npmjs.org/playwright/-/playwright-1.57.0.tgz",
+frontend/package-lock.json:5904:        "playwright-core": "1.57.0"
+frontend/package-lock.json:5907:        "playwright": "cli.js"
+frontend/package-lock.json:5916:    "node_modules/playwright-core": {
+frontend/package-lock.json:5918:      "resolved": "https://registry.npmjs.org/playwright-core/-/playwright-core-1.57.0.tgz",
+frontend/package-lock.json:5923:        "playwright-core": "cli.js"
+frontend/package-lock.json:5931:      "resolved": "https://registry.npmjs.org/possible-typed-array-names/-/possible-typed-array-names-1.1.0.tgz",
+frontend/package-lock.json:5941:      "resolved": "https://registry.npmjs.org/postcss/-/postcss-8.5.6.tgz",
+frontend/package-lock.json:5951:          "url": "https://tidelift.com/funding/github/npm/postcss"
+frontend/package-lock.json:5970:      "resolved": "https://registry.npmjs.org/prelude-ls/-/prelude-ls-1.2.1.tgz",
+frontend/package-lock.json:5980:      "resolved": "https://registry.npmjs.org/prop-types/-/prop-types-15.8.1.tgz",
+frontend/package-lock.json:5992:      "resolved": "https://registry.npmjs.org/punycode/-/punycode-2.3.1.tgz",
+frontend/package-lock.json:6002:      "resolved": "https://registry.npmjs.org/qrcode.react/-/qrcode.react-4.2.0.tgz",
+frontend/package-lock.json:6011:      "resolved": "https://registry.npmjs.org/queue-microtask/-/queue-microtask-1.2.3.tgz",
+frontend/package-lock.json:6032:      "resolved": "https://registry.npmjs.org/react/-/react-19.2.0.tgz",
+frontend/package-lock.json:6041:      "resolved": "https://registry.npmjs.org/react-dom/-/react-dom-19.2.0.tgz",
+frontend/package-lock.json:6053:      "resolved": "https://registry.npmjs.org/react-is/-/react-is-16.13.1.tgz",
+frontend/package-lock.json:6059:      "resolved": "https://registry.npmjs.org/react-redux/-/react-redux-9.2.0.tgz",
+frontend/package-lock.json:6082:      "resolved": "https://registry.npmjs.org/recharts/-/recharts-3.6.0.tgz",
+frontend/package-lock.json:6112:      "resolved": "https://registry.npmjs.org/redux/-/redux-5.0.1.tgz",
+frontend/package-lock.json:6118:      "resolved": "https://registry.npmjs.org/redux-thunk/-/redux-thunk-3.1.0.tgz",
+frontend/package-lock.json:6127:      "resolved": "https://registry.npmjs.org/reflect.getprototypeof/-/reflect.getprototypeof-1.0.10.tgz",
+frontend/package-lock.json:6150:      "resolved": "https://registry.npmjs.org/regexp.prototype.flags/-/regexp.prototype.flags-1.5.4.tgz",
+frontend/package-lock.json:6171:      "resolved": "https://registry.npmjs.org/requires-port/-/requires-port-1.0.0.tgz",
+frontend/package-lock.json:6176:      "resolved": "https://registry.npmjs.org/reselect/-/reselect-5.1.1.tgz",
+frontend/package-lock.json:6182:      "resolved": "https://registry.npmjs.org/resolve/-/resolve-1.22.11.tgz",
+frontend/package-lock.json:6203:      "resolved": "https://registry.npmjs.org/resolve-from/-/resolve-from-4.0.0.tgz",
+frontend/package-lock.json:6213:      "resolved": "https://registry.npmjs.org/resolve-pkg-maps/-/resolve-pkg-maps-1.0.0.tgz",
+frontend/package-lock.json:6223:      "resolved": "https://registry.npmjs.org/reusify/-/reusify-1.1.0.tgz",
+frontend/package-lock.json:6234:      "resolved": "https://registry.npmjs.org/run-parallel/-/run-parallel-1.2.0.tgz",
+frontend/package-lock.json:6258:      "resolved": "https://registry.npmjs.org/safe-array-concat/-/safe-array-concat-1.1.3.tgz",
+frontend/package-lock.json:6278:      "resolved": "https://registry.npmjs.org/safe-push-apply/-/safe-push-apply-1.0.0.tgz",
+frontend/package-lock.json:6295:      "resolved": "https://registry.npmjs.org/safe-regex-test/-/safe-regex-test-1.1.0.tgz",
+frontend/package-lock.json:6313:      "resolved": "https://registry.npmjs.org/scheduler/-/scheduler-0.27.0.tgz",
+frontend/package-lock.json:6319:      "resolved": "https://registry.npmjs.org/semver/-/semver-6.3.1.tgz",
+frontend/package-lock.json:6329:      "resolved": "https://registry.npmjs.org/set-function-length/-/set-function-length-1.2.2.tgz",
+frontend/package-lock.json:6347:      "resolved": "https://registry.npmjs.org/set-function-name/-/set-function-name-2.0.2.tgz",
+frontend/package-lock.json:6363:      "resolved": "https://registry.npmjs.org/set-proto/-/set-proto-1.0.0.tgz",
+frontend/package-lock.json:6378:      "resolved": "https://registry.npmjs.org/sharp/-/sharp-0.34.5.tgz",
+frontend/package-lock.json:6423:      "resolved": "https://registry.npmjs.org/semver/-/semver-7.7.3.tgz",
+frontend/package-lock.json:6436:      "resolved": "https://registry.npmjs.org/shebang-command/-/shebang-command-2.0.0.tgz",
+frontend/package-lock.json:6449:      "resolved": "https://registry.npmjs.org/shebang-regex/-/shebang-regex-3.0.0.tgz",
+frontend/package-lock.json:6459:      "resolved": "https://registry.npmjs.org/side-channel/-/side-channel-1.1.0.tgz",
+frontend/package-lock.json:6479:      "resolved": "https://registry.npmjs.org/side-channel-list/-/side-channel-list-1.0.0.tgz",
+frontend/package-lock.json:6496:      "resolved": "https://registry.npmjs.org/side-channel-map/-/side-channel-map-1.0.1.tgz",
+frontend/package-lock.json:6515:      "resolved": "https://registry.npmjs.org/side-channel-weakmap/-/side-channel-weakmap-1.0.2.tgz",
+frontend/package-lock.json:6535:      "resolved": "https://registry.npmjs.org/socket.io-client/-/socket.io-client-4.8.3.tgz",
+frontend/package-lock.json:6550:      "resolved": "https://registry.npmjs.org/socket.io-parser/-/socket.io-parser-4.2.5.tgz",
+frontend/package-lock.json:6563:      "resolved": "https://registry.npmjs.org/sonner/-/sonner-2.0.7.tgz",
+frontend/package-lock.json:6573:      "resolved": "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz",
+frontend/package-lock.json:6582:      "resolved": "https://registry.npmjs.org/stable-hash/-/stable-hash-0.0.5.tgz",
+frontend/package-lock.json:6589:      "resolved": "https://registry.npmjs.org/stop-iteration-iterator/-/stop-iteration-iterator-1.1.0.tgz",
+frontend/package-lock.json:6603:      "resolved": "https://registry.npmjs.org/string.prototype.includes/-/string.prototype.includes-2.0.1.tgz",
+frontend/package-lock.json:6618:      "resolved": "https://registry.npmjs.org/string.prototype.matchall/-/string.prototype.matchall-4.0.12.tgz",
+frontend/package-lock.json:6646:      "resolved": "https://registry.npmjs.org/string.prototype.repeat/-/string.prototype.repeat-1.0.0.tgz",
+frontend/package-lock.json:6657:      "resolved": "https://registry.npmjs.org/string.prototype.trim/-/string.prototype.trim-1.2.10.tgz",
+frontend/package-lock.json:6679:      "resolved": "https://registry.npmjs.org/string.prototype.trimend/-/string.prototype.trimend-1.0.9.tgz",
+frontend/package-lock.json:6698:      "resolved": "https://registry.npmjs.org/string.prototype.trimstart/-/string.prototype.trimstart-1.0.8.tgz",
+frontend/package-lock.json:6716:      "resolved": "https://registry.npmjs.org/strip-bom/-/strip-bom-3.0.0.tgz",
+frontend/package-lock.json:6726:      "resolved": "https://registry.npmjs.org/strip-json-comments/-/strip-json-comments-3.1.1.tgz",
+frontend/package-lock.json:6739:      "resolved": "https://registry.npmjs.org/styled-jsx/-/styled-jsx-5.1.6.tgz",
+frontend/package-lock.json:6762:      "resolved": "https://registry.npmjs.org/supports-color/-/supports-color-7.2.0.tgz",
+frontend/package-lock.json:6775:      "resolved": "https://registry.npmjs.org/supports-preserve-symlinks-flag/-/supports-preserve-symlinks-flag-1.0.0.tgz",
+frontend/package-lock.json:6788:      "resolved": "https://registry.npmjs.org/tailwind-merge/-/tailwind-merge-3.4.0.tgz",
+frontend/package-lock.json:6798:      "resolved": "https://registry.npmjs.org/tailwindcss/-/tailwindcss-4.1.18.tgz",
+frontend/package-lock.json:6805:      "resolved": "https://registry.npmjs.org/tapable/-/tapable-2.3.0.tgz",
+frontend/package-lock.json:6819:      "resolved": "https://registry.npmjs.org/tiny-invariant/-/tiny-invariant-1.3.3.tgz",
+frontend/package-lock.json:6825:      "resolved": "https://registry.npmjs.org/tinyglobby/-/tinyglobby-0.2.15.tgz",
+frontend/package-lock.json:6842:      "resolved": "https://registry.npmjs.org/fdir/-/fdir-6.5.0.tgz",
+frontend/package-lock.json:6860:      "resolved": "https://registry.npmjs.org/picomatch/-/picomatch-4.0.3.tgz",
+frontend/package-lock.json:6873:      "resolved": "https://registry.npmjs.org/to-regex-range/-/to-regex-range-5.0.1.tgz",
+frontend/package-lock.json:6885:      "resolved": "https://registry.npmjs.org/ts-api-utils/-/ts-api-utils-2.1.0.tgz",
+frontend/package-lock.json:6898:      "resolved": "https://registry.npmjs.org/tsconfig-paths/-/tsconfig-paths-3.15.0.tgz",
+frontend/package-lock.json:6911:      "resolved": "https://registry.npmjs.org/json5/-/json5-1.0.2.tgz",
+frontend/package-lock.json:6924:      "resolved": "https://registry.npmjs.org/tslib/-/tslib-2.8.1.tgz",
+frontend/package-lock.json:6925:      "integrity": "sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==",
+frontend/package-lock.json:6930:      "resolved": "https://registry.npmjs.org/type-check/-/type-check-0.4.0.tgz",
+frontend/package-lock.json:6943:      "resolved": "https://registry.npmjs.org/typed-array-buffer/-/typed-array-buffer-1.0.3.tgz",
+frontend/package-lock.json:6958:      "resolved": "https://registry.npmjs.org/typed-array-byte-length/-/typed-array-byte-length-1.0.3.tgz",
+frontend/package-lock.json:6978:      "resolved": "https://registry.npmjs.org/typed-array-byte-offset/-/typed-array-byte-offset-1.0.4.tgz",
+frontend/package-lock.json:7000:      "resolved": "https://registry.npmjs.org/typed-array-length/-/typed-array-length-1.0.7.tgz",
+frontend/package-lock.json:7021:      "resolved": "https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz",
+frontend/package-lock.json:7033:    "node_modules/typescript-eslint": {
+frontend/package-lock.json:7035:      "resolved": "https://registry.npmjs.org/typescript-eslint/-/typescript-eslint-8.50.0.tgz",
+frontend/package-lock.json:7040:        "@typescript-eslint/eslint-plugin": "8.50.0",
+frontend/package-lock.json:7041:        "@typescript-eslint/parser": "8.50.0",
+frontend/package-lock.json:7042:        "@typescript-eslint/typescript-estree": "8.50.0",
+frontend/package-lock.json:7043:        "@typescript-eslint/utils": "8.50.0"
+frontend/package-lock.json:7050:        "url": "https://opencollective.com/typescript-eslint"
+frontend/package-lock.json:7053:        "eslint": "^8.57.0 || ^9.0.0",
+frontend/package-lock.json:7059:      "resolved": "https://registry.npmjs.org/unbox-primitive/-/unbox-primitive-1.1.0.tgz",
+frontend/package-lock.json:7078:      "resolved": "https://registry.npmjs.org/undici-types/-/undici-types-6.21.0.tgz",
+frontend/package-lock.json:7084:      "resolved": "https://registry.npmjs.org/unrs-resolver/-/unrs-resolver-1.11.1.tgz",
+frontend/package-lock.json:7119:      "resolved": "https://registry.npmjs.org/update-browserslist-db/-/update-browserslist-db-1.2.3.tgz",
+frontend/package-lock.json:7129:          "url": "https://tidelift.com/funding/github/npm/browserslist"
+frontend/package-lock.json:7150:      "resolved": "https://registry.npmjs.org/uri-js/-/uri-js-4.4.1.tgz",
+frontend/package-lock.json:7160:      "resolved": "https://registry.npmjs.org/use-sync-external-store/-/use-sync-external-store-1.6.0.tgz",
+frontend/package-lock.json:7169:      "resolved": "https://registry.npmjs.org/victory-vendor/-/victory-vendor-37.3.6.tgz",
+frontend/package-lock.json:7191:      "resolved": "https://registry.npmjs.org/which/-/which-2.0.2.tgz",
+frontend/package-lock.json:7207:      "resolved": "https://registry.npmjs.org/which-boxed-primitive/-/which-boxed-primitive-1.1.1.tgz",
+frontend/package-lock.json:7227:      "resolved": "https://registry.npmjs.org/which-builtin-type/-/which-builtin-type-1.2.1.tgz",
+frontend/package-lock.json:7255:      "resolved": "https://registry.npmjs.org/which-collection/-/which-collection-1.0.2.tgz",
+frontend/package-lock.json:7274:      "resolved": "https://registry.npmjs.org/which-typed-array/-/which-typed-array-1.1.19.tgz",
+frontend/package-lock.json:7296:      "resolved": "https://registry.npmjs.org/word-wrap/-/word-wrap-1.2.5.tgz",
+frontend/package-lock.json:7306:      "resolved": "https://registry.npmjs.org/ws/-/ws-8.18.3.tgz",
+frontend/package-lock.json:7327:      "resolved": "https://registry.npmjs.org/xmlhttprequest-ssl/-/xmlhttprequest-ssl-2.1.2.tgz",
+frontend/package-lock.json:7335:      "resolved": "https://registry.npmjs.org/yallist/-/yallist-3.1.1.tgz",
+frontend/package-lock.json:7342:      "resolved": "https://registry.npmjs.org/yocto-queue/-/yocto-queue-0.1.0.tgz",
+frontend/package-lock.json:7355:      "resolved": "https://registry.npmjs.org/zod/-/zod-4.2.1.tgz",
+frontend/package-lock.json:7365:      "resolved": "https://registry.npmjs.org/zod-validation-error/-/zod-validation-error-4.0.2.tgz",
+frontend/app/albums/page.tsx:26:        <div className="min-h-screen bg-black relative">
+frontend/app/albums/page.tsx:42:                    <h1 className="text-3xl md:text-4xl font-black text-white">
+frontend/app/settings/page.tsx:227:                            className="w-full bg-white text-black font-semibold py-3 px-4 rounded-full
+backend/src/routes/discover.ts:429:            // Create OwnedAlbum record if doesn't exist (makes it appear in "Owned" filter)
+backend/src/routes/discover.ts:1032:        // ALSO clean up "extra" downloaded albums that didn't make the final playlist
+backend/src/routes/discover.ts:1058:            // Find completed jobs that didn't make the playlist AND aren't from liked artists
+frontend/app/login/page.tsx:166:                        <div className="absolute inset-0 backdrop-blur-[100px] bg-black/60" />
+frontend/app/login/page.tsx:169:                        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent" />
+frontend/app/login/page.tsx:170:                        <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-black/80" />
+frontend/app/login/page.tsx:371:                                className="w-full py-3 bg-[#fca200] text-black font-bold rounded-lg hover:bg-[#e69200] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+frontend/features/audiobook/components/AudiobookActionBar.tsx:40:            <Pause className="w-6 h-6 text-black" />
+frontend/features/audiobook/components/AudiobookActionBar.tsx:42:            <Play className="w-6 h-6 text-black ml-1" fill="black" />
+frontend/app/ai-weekly/page.tsx:95:    // eslint-disable-next-line react-hooks/exhaustive-deps
+frontend/app/layout.tsx:43:        statusBarStyle: "black-translucent",
+frontend/features/album/components/AlbumActionBar.tsx:65:                                <Pause className="w-5 h-5 fill-current text-black" />
+frontend/features/album/components/AlbumActionBar.tsx:67:                                <Play className="w-5 h-5 fill-current text-black ml-0.5" />
+frontend/features/album/components/AlbumActionBar.tsx:102:                                    : "bg-[#ecb200] hover:bg-[#d4a000] text-black hover:scale-105"
+frontend/features/album/components/AlbumActionBar.tsx:120:                                    : "bg-[#ecb200] hover:bg-[#d4a000] text-black hover:scale-105"
+frontend/app/mix/[id]/page.tsx:257:                                <Pause className="w-5 h-5 fill-current text-black" />
+frontend/app/mix/[id]/page.tsx:259:                                <Play className="w-5 h-5 fill-current text-black ml-0.5" />
+frontend/features/podcast/components/ContinueListening.tsx:85:                            <Pause className="w-5 h-5 text-black" />
+frontend/features/podcast/components/ContinueListening.tsx:87:                            <Play className="w-5 h-5 text-black ml-0.5" fill="black" />
+frontend/features/settings/components/ui/ConnectionCard.tsx:65:                        : 'bg-white text-black hover:scale-105'
+frontend/features/podcast/components/PodcastActionBar.tsx:32:                    className="h-12 px-6 rounded-full bg-[#ecb200] hover:bg-[#ffc61a] hover:scale-105 transition-all flex items-center gap-2 font-semibold text-black disabled:opacity-50"
+frontend/features/podcast/components/PreviewEpisodes.tsx:65:                                className="flex items-center gap-2 pointer-events-auto h-12 px-6 rounded-full bg-[#ecb200] hover:bg-[#ffc61a] hover:scale-105 transition-all font-semibold text-black disabled:opacity-50 shadow-xl"
+frontend/features/podcast/components/PreviewEpisodes.tsx:89:                            className="flex items-center gap-2 mx-auto h-12 px-6 rounded-full bg-[#ecb200] hover:bg-[#ffc61a] hover:scale-105 transition-all font-semibold text-black disabled:opacity-50"
+frontend/features/settings/components/sections/UserManagementSection.tsx:134:                                className="px-4 py-1.5 text-sm bg-white text-black font-medium rounded-full
+frontend/features/settings/components/sections/AccountSection.tsx:169:                                className="px-4 py-2 bg-white text-black text-sm font-medium rounded-full
+frontend/features/settings/components/sections/AccountSection.tsx:242:                                className="px-4 py-2 bg-white text-black text-sm font-medium rounded-full
+frontend/features/settings/components/sections/AccountSection.tsx:329:                            className="px-4 py-2 bg-white text-black text-sm font-medium rounded-full hover:scale-105 transition-transform"
+frontend/features/settings/components/sections/CacheSection.tsx:241:                            className="px-3 py-1.5 text-xs bg-white text-black font-medium rounded-full
+frontend/features/artist/components/SimilarArtists.tsx:79:                                        <Library className="w-3 h-3 text-black" />
+frontend/features/artist/components/ArtistActionBar.tsx:63:                    <Pause className="w-5 h-5 fill-current text-black" />
+frontend/features/artist/components/ArtistActionBar.tsx:65:                    <Play className="w-5 h-5 fill-current text-black ml-0.5" />
+frontend/features/artist/components/ArtistBio.tsx:8:  // Process bio HTML to make all links open in new tabs
+frontend/features/artist/components/AISimilarArtists.tsx:187:                        className="absolute inset-0 bg-black/60 transition-opacity"
+frontend/features/artist/components/AISimilarArtists.tsx:291:                                                ? "bg-brand text-black"
+frontend/features/artist/components/AISimilarArtists.tsx:355:                                            <Send className="w-4 h-4 text-black" />
+frontend/features/artist/components/AISimilarArtists.tsx:410:                        <Library className="w-2 h-2 text-black" />
+frontend/features/search/components/SoulseekSongsList.tsx:124:                                            : "bg-[#ecb200] text-black hover:bg-[#d4a000] hover:scale-105"
+frontend/features/search/components/SearchFilters.tsx:31:                    filterTab === "all" ? "bg-white text-black" : "bg-[#232323] text-white hover:bg-[#2a2a2a]"
+frontend/features/search/components/SearchFilters.tsx:43:                    filterTab === "library" ? "bg-white text-black" : "bg-[#232323] text-white hover:bg-[#2a2a2a]"
+frontend/features/search/components/SearchFilters.tsx:55:                    filterTab === "discover" ? "bg-white text-black" : "bg-[#232323] text-white hover:bg-[#2a2a2a]"
+frontend/features/search/components/SearchFilters.tsx:68:                        filterTab === "soulseek" ? "bg-[#ecb200] text-black" : "bg-[#232323] text-white hover:bg-[#2a2a2a]"
+frontend/features/home/components/ContinueListening.tsx:115:                            <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/50">
+frontend/features/home/components/LibraryRadioStations.tsx:334:                <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+frontend/features/home/components/LibraryRadioStations.tsx:340:            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+frontend/features/home/components/LibraryRadioStations.tsx:343:                        className="w-4 h-4 text-black ml-0.5"
+frontend/features/home/components/LibraryRadioStations.tsx:385:                <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+frontend/features/home/components/LibraryRadioStations.tsx:399:                        className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-black/80  flex items-center justify-center opacity-0 group-hover/carousel:opacity-100 transition-opacity hover:bg-black hover:scale-105 border border-white/10 shadow-lg -translate-x-1/2"
+frontend/features/home/components/LibraryRadioStations.tsx:424:                        className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-black/80  flex items-center justify-center opacity-0 group-hover/carousel:opacity-100 transition-opacity hover:bg-black hover:scale-105 border border-white/10 shadow-lg translate-x-1/2"
+frontend/features/library/components/AlbumsGrid.tsx:66:                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60  flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-red-600 transition-all z-10"
+frontend/features/library/components/ArtistsGrid.tsx:67:                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60  flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-red-600 transition-all z-10"
+frontend/features/library/components/LibraryTabs.tsx:20:            ? "bg-white text-black"
+frontend/features/library/components/LibraryTabs.tsx:34:            ? "bg-white text-black"
+frontend/features/library/components/LibraryTabs.tsx:48:            ? "bg-white text-black"
+frontend/features/home/components/FeaturedPlaylistsGrid.tsx:61:                            <svg viewBox="0 0 24 24" className="w-4 h-4 text-black ml-0.5" fill="currentColor">
+frontend/features/discover/components/DiscoverActionBar.tsx:70:                            <Pause className="w-5 h-5 fill-current text-black" />
+frontend/features/discover/components/DiscoverActionBar.tsx:72:                            <Play className="w-5 h-5 fill-current text-black ml-0.5" />

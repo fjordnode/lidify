@@ -5,7 +5,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { MetadataEditor } from "@/components/MetadataEditor";
 import { Album, AlbumSource } from "../types";
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
 interface AlbumHeroProps {
     album: Album;
@@ -24,6 +25,30 @@ export function AlbumHero({
     onReload,
     children,
 }: AlbumHeroProps) {
+    const [bioExpanded, setBioExpanded] = useState(false);
+
+    const albumGenres =
+        Array.isArray(album.genres) && album.genres.length > 0
+            ? album.genres
+            : album.genre
+            ? [album.genre]
+            : [];
+
+    // Strip HTML tags and "Read more" links from Last.fm bio
+    const cleanBio = (html?: string) => {
+        if (!html) return null;
+        return html
+            .replace(/<a[^>]*>Read more[^<]*<\/a>/gi, "")
+            .replace(/<[^>]+>/g, "")
+            .trim();
+    };
+
+    const bio = cleanBio(album.bio);
+    const bioTruncateLength = 200;
+    const shouldTruncate = bio && bio.length > bioTruncateLength;
+    const displayBio = bio && shouldTruncate && !bioExpanded
+        ? bio.slice(0, bioTruncateLength).trimEnd() + "..."
+        : bio;
     const formatDuration = (seconds?: number) => {
         if (!seconds) return "";
         const hours = Math.floor(seconds / 3600);
@@ -112,7 +137,7 @@ export function AlbumHero({
                                     currentData={{
                                         title: album.title,
                                         year: album.year,
-                                        genres: album.genre ? [album.genre] : [],
+                                        genres: albumGenres,
                                         rgMbid: album.rgMbid,
                                         coverUrl: album.coverUrl,
                                     }}
@@ -148,13 +173,34 @@ export function AlbumHero({
                                 <span>, {totalDuration}</span>
                             )}
                         </div>
-                        {album.genre && (
+                        {albumGenres.length > 0 && (
                             <span className="inline-block px-2 py-0.5 bg-white/10 rounded-full text-xs text-white/70">
-                                {album.genre}
+                                {albumGenres.join(", ")}
                             </span>
                         )}
                     </div>
                 </div>
+
+                {/* Album Bio from Last.fm */}
+                {bio && (
+                    <div className="mt-4 max-w-3xl">
+                        <p className="text-sm text-white/70 leading-relaxed">
+                            {displayBio}
+                        </p>
+                        {shouldTruncate && (
+                            <button
+                                onClick={() => setBioExpanded(!bioExpanded)}
+                                className="mt-1 text-xs text-white/50 hover:text-white/80 flex items-center gap-1 transition-colors"
+                            >
+                                {bioExpanded ? (
+                                    <>Show less <ChevronUp className="w-3 h-3" /></>
+                                ) : (
+                                    <>Read more <ChevronDown className="w-3 h-3" /></>
+                                )}
+                            </button>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Action Bar - Full Width */}
