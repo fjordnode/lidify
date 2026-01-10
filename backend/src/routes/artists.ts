@@ -13,6 +13,19 @@ const router = Router();
 
 // Cache TTL for discovery content (shorter since it's not owned)
 const DISCOVERY_CACHE_TTL = 24 * 60 * 60; // 24 hours
+const EXCLUDED_SECONDARY_TYPES = [
+    "Live",
+    "Compilation",
+    "Soundtrack",
+    "Remix",
+    "DJ-mix",
+    "Mixtape/Street",
+    "Demo",
+    "Interview",
+    "Audio drama",
+    "Audiobook",
+    "Spokenword",
+];
 
 /**
  * Safely decode a URI component, returning the original string if decoding fails.
@@ -678,14 +691,7 @@ router.get("/discover/:nameOrMbid", async (req, res) => {
                         const secondaryTypes = rg["secondary-types"] || [];
                         const hasExcludedType = secondaryTypes.some(
                             (type: string) =>
-                                [
-                                    "Live",
-                                    "Compilation",
-                                    "Soundtrack",
-                                    "Remix",
-                                    "DJ-mix",
-                                    "Mixtape/Street",
-                                ].includes(type)
+                                EXCLUDED_SECONDARY_TYPES.includes(type)
                         );
 
                         return !hasExcludedType;
@@ -697,11 +703,38 @@ router.get("/discover/:nameOrMbid", async (req, res) => {
                 // return URLs that the frontend will lazy-load via /api/library/album-cover
                 albums = await Promise.all(
                     filteredReleaseGroups.map(async (rg: any) => {
-                        const params = new URLSearchParams({
-                            artist: artistName,
-                            album: rg.title,
-                        });
-                        const coverUrl = `/api/library/album-cover/${rg.id}?${params}`;
+                        let coverUrl: string | null = null;
+                        const cacheKey = `caa:${rg.id}`;
+
+                        try {
+                            const cached = await redisClient.get(cacheKey);
+                            if (cached === "NOT_FOUND") {
+                                // Previously missing; still return lazy-load URL to retry
+                                const params = new URLSearchParams({
+                                    artist: artistName,
+                                    album: rg.title,
+                                });
+                                coverUrl = `/api/library/album-cover/${rg.id}?${params}`;
+                            } else if (cached) {
+                                // Use cached URL directly
+                                coverUrl = cached;
+                            } else {
+                                // Cache miss - return lazy-load endpoint URL
+                                // Frontend will fetch this, endpoint handles Deezer -> CAA -> Fanart.tv fallback
+                                const params = new URLSearchParams({
+                                    artist: artistName,
+                                    album: rg.title,
+                                });
+                                coverUrl = `/api/library/album-cover/${rg.id}?${params}`;
+                            }
+                        } catch {
+                            // Redis error - return lazy-load URL as fallback
+                            const params = new URLSearchParams({
+                                artist: artistName,
+                                album: rg.title,
+                            });
+                            coverUrl = `/api/library/album-cover/${rg.id}?${params}`;
+                        }
 
                         return {
                             id: rg.id, // MBID - used for linking

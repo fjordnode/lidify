@@ -6,6 +6,7 @@ import { prisma } from "../utils/db";
 import { musicBrainzService } from "../services/musicbrainz";
 import { imageProviderService } from "../services/imageProvider";
 import { coverArtService } from "../services/coverArt";
+import { redisClient } from "../utils/redis";
 
 const router = Router();
 
@@ -605,6 +606,22 @@ async function repairAlbumCovers(): Promise<void> {
                         where: { id: album.id },
                         data: { coverUrl },
                     });
+                    if (hasValidMbid) {
+                        try {
+                            await redisClient.setEx(
+                                `caa:${album.rgMbid}`,
+                                365 * 24 * 60 * 60,
+                                coverUrl
+                            );
+                            await redisClient.setEx(
+                                `album-cover-url:${album.rgMbid}`,
+                                7 * 24 * 60 * 60,
+                                coverUrl
+                            );
+                        } catch {
+                            // Redis error - non-critical
+                        }
+                    }
                     console.log(`[REPAIR] ✓ Cover found for: ${album.artist.name} - ${album.title}`);
                     repaired++;
                 } else {

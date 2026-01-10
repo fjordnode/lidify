@@ -30,6 +30,7 @@ const EXCLUDED_SECONDARY_TYPES = [
     "Live", "Compilation", "Soundtrack", "Remix", "DJ-mix",
     "Mixtape/Street", "Demo", "Interview", "Audio drama", "Audiobook", "Spokenword",
 ];
+const CAA_NOT_FOUND_TTL_SECONDS = 6 * 60 * 60;
 
 // Helper to enforce artist diversity - max N tracks per artist
 function diversifyTracksByArtist<T extends { album: { artist?: { id: string } } }>(
@@ -2132,10 +2133,28 @@ router.get("/albums/:id", async (req, res) => {
         // when external tools like Beets update MBIDs
         const hasTracksOnDisk = album.tracks && album.tracks.length > 0;
 
+        // Fetch bio from Last.fm (cached for 30 days)
+        let bio: string | null = null;
+        if (album.artist?.name && album.title) {
+            try {
+                const lastfmInfo = await lastFmService.getAlbumInfo(
+                    album.artist.name,
+                    album.title
+                );
+                if (lastfmInfo?.wiki?.summary) {
+                    bio = lastfmInfo.wiki.summary;
+                }
+            } catch (err) {
+                // Non-fatal: bio is optional
+                console.warn(`Failed to fetch Last.fm bio for ${album.title}:`, err);
+            }
+        }
+
         res.json({
             ...album,
             owned: hasTracksOnDisk,
             coverArt: album.coverUrl,
+            bio,
         });
     } catch (error) {
         console.error("Get album error:", error);
@@ -2550,28 +2569,50 @@ router.get("/album-cover/:mbid", imageLimiter, async (req, res) => {
         });
 
         // Cache key for URL lookups (separate from disk cache for image bytes)
+        const caaCacheKey = `caa:${mbid}`;
         const urlCacheKey = `album-cover-url:${mbid}`;
         let coverUrl: string | null = null;
+        let negativeCached = false;
 
         if (existingAlbum?.coverUrl && existingAlbum.coverUrl.trim() !== "") {
             // 1. Found in database
             coverUrl = existingAlbum.coverUrl;
         } else {
-            // 2. Check Redis cache for URL (avoids slow API calls on repeat visits)
+            // 2. Check caa: cache for URL (fastest path for discovery route)
             try {
-                const cachedUrl = await redisClient.get(urlCacheKey);
-                if (cachedUrl === "NOT_FOUND") {
-                    // Already tried, no cover exists
-                    coverUrl = null;
-                } else if (cachedUrl) {
-                    coverUrl = cachedUrl;
+                const cached = await redisClient.get(caaCacheKey);
+                if (cached === "NOT_FOUND") {
+                    negativeCached = true;
+                } else if (cached) {
+                    coverUrl = cached;
                 }
             } catch {
-                // Redis error - continue to API lookup
+                // Redis error - continue to other cache
             }
 
-            // 3. Cache miss - fetch using imageProviderService (Deezer -> CAA -> Fanart.tv)
-            if (coverUrl === null && artist && album) {
+            // 3. Check Redis cache for URL (avoids slow API calls on repeat visits)
+            if (!coverUrl) {
+                try {
+                    const cachedUrl = await redisClient.get(urlCacheKey);
+                    if (cachedUrl === "NOT_FOUND") {
+                        negativeCached = true;
+                    } else if (cachedUrl) {
+                        coverUrl = cachedUrl;
+                    }
+                } catch {
+                    // Redis error - continue to API lookup
+                }
+            }
+
+            if (coverUrl) {
+                negativeCached = false;
+            }
+
+            const hasMetadata = Boolean(artist && album);
+            if (negativeCached && !hasMetadata) {
+                coverUrl = null;
+            } else if (coverUrl === null && hasMetadata) {
+                // 4. Cache miss - fetch using imageProviderService (Deezer -> CAA -> Fanart.tv)
                 const result = await imageProviderService.getAlbumCover(
                     artist as string,
                     album as string,
@@ -2579,15 +2620,27 @@ router.get("/album-cover/:mbid", imageLimiter, async (req, res) => {
                 );
                 coverUrl = result?.url || null;
 
-                // Cache the URL lookup result (7 days) - much faster than re-querying Deezer
-                try {
-                    await redisClient.setEx(
-                        urlCacheKey,
-                        7 * 24 * 60 * 60,
-                        coverUrl || "NOT_FOUND"
-                    );
-                } catch {
-                    // Redis error - non-critical
+                if (coverUrl) {
+                    // Cache the URL lookup result (7 days) - much faster than re-querying Deezer
+                    try {
+                        await redisClient.setEx(
+                            urlCacheKey,
+                            7 * 24 * 60 * 60,
+                            coverUrl
+                        );
+                    } catch {
+                        // Redis error - non-critical
+                    }
+                } else {
+                    try {
+                        await redisClient.setEx(
+                            urlCacheKey,
+                            CAA_NOT_FOUND_TTL_SECONDS,
+                            "NOT_FOUND"
+                        );
+                    } catch {
+                        // Redis error - non-critical
+                    }
                 }
             } else if (coverUrl === null) {
                 // Fallback to CAA only (no artist/album provided)
@@ -2614,6 +2667,20 @@ router.get("/album-cover/:mbid", imageLimiter, async (req, res) => {
                 // Silently ignore - album may not exist in library (discovery albums)
             }
 
+            // Also update caa: cache so artist discovery route can find it quickly
+            // This syncs the two caching systems (caa: for quick lookups, DB for persistence)
+            try {
+                await redisClient.setEx(`caa:${mbid}`, 365 * 24 * 60 * 60, coverUrl);
+            } catch {
+                // Redis error - non-critical
+            }
+
+            try {
+                await redisClient.setEx(urlCacheKey, 7 * 24 * 60 * 60, coverUrl);
+            } catch {
+                // Redis error - non-critical
+            }
+
             const token =
                 typeof req.query.token === "string" ? req.query.token : null;
             const proxiedParams = new URLSearchParams({
@@ -2628,6 +2695,24 @@ router.get("/album-cover/:mbid", imageLimiter, async (req, res) => {
             }
             return res.redirect(302, proxiedCoverUrl);
         } else {
+            try {
+                await redisClient.setEx(
+                    `caa:${mbid}`,
+                    CAA_NOT_FOUND_TTL_SECONDS,
+                    "NOT_FOUND"
+                );
+            } catch {
+                // Redis error - non-critical
+            }
+            try {
+                await redisClient.setEx(
+                    urlCacheKey,
+                    CAA_NOT_FOUND_TTL_SECONDS,
+                    "NOT_FOUND"
+                );
+            } catch {
+                // Redis error - non-critical
+            }
             if (wantsJson) {
                 return res.json({ coverUrl: null });
             }
