@@ -121,48 +121,72 @@ router.get("/", async (req, res) => {
             podcasts: [],
         };
 
-        // Search artists using full-text search (only show artists with actual albums in library)
+        const artistSearchPromise =
+            type === "all" || type === "artists"
+                ? searchService.searchArtists({ query, limit: searchLimit })
+                : Promise.resolve([]);
+        const albumSearchPromise =
+            type === "all" || type === "albums"
+                ? searchService.searchAlbums({ query, limit: searchLimit })
+                : Promise.resolve([]);
+        const trackSearchPromise =
+            type === "all" || type === "tracks"
+                ? searchService.searchTracks({ query, limit: searchLimit })
+                : Promise.resolve([]);
+        const audiobookSearchPromise =
+            type === "all" || type === "audiobooks"
+                ? audiobookshelfService
+                      .searchAudiobooks(query)
+                      .catch((error) => {
+                          console.error("Audiobook search error:", error);
+                          return [];
+                      })
+                : Promise.resolve([]);
+        const podcastSearchPromise =
+            type === "all" || type === "podcasts"
+                ? audiobookshelfService.getAllPodcasts().catch((error) => {
+                      console.error("Podcast search error:", error);
+                      return [];
+                  })
+                : Promise.resolve([]);
+
         if (type === "all" || type === "artists") {
-            const artistResults = await searchService.searchArtists({
-                query,
-                limit: searchLimit,
-            });
-
-            // Filter to only include artists with albums
-            const artistIds = artistResults.map((a) => a.id);
-            const artistsWithAlbums = await prisma.artist.findMany({
-                where: {
-                    id: { in: artistIds },
-                    albums: {
-                        some: {},
+            const artistResults = await artistSearchPromise;
+            if (artistResults.length > 0) {
+                const artistIds = artistResults.map((a) => a.id);
+                const artistsWithAlbums = await prisma.artist.findMany({
+                    where: {
+                        id: { in: artistIds },
+                        albums: {
+                            some: {},
+                        },
                     },
-                },
-                select: {
-                    id: true,
-                    mbid: true,
-                    name: true,
-                    heroUrl: true,
-                    summary: true,
-                },
-            });
+                    select: {
+                        id: true,
+                        mbid: true,
+                        name: true,
+                        heroUrl: true,
+                        summary: true,
+                    },
+                });
 
-            // Preserve rank order from search, with name as secondary sort
-            const rankMap = new Map(artistResults.map((a) => [a.id, a.rank]));
-            results.artists = artistsWithAlbums.sort((a, b) => {
-                const rankA = rankMap.get(a.id) || 0;
-                const rankB = rankMap.get(b.id) || 0;
-                if (rankB !== rankA) return rankB - rankA; // Sort by rank DESC
-                return a.name.localeCompare(b.name); // Then by name ASC
-            });
+                // Preserve rank order from search, with name as secondary sort
+                const rankMap = new Map(
+                    artistResults.map((a) => [a.id, a.rank])
+                );
+                results.artists = artistsWithAlbums.sort((a, b) => {
+                    const rankA = rankMap.get(a.id) || 0;
+                    const rankB = rankMap.get(b.id) || 0;
+                    if (rankB !== rankA) return rankB - rankA; // Sort by rank DESC
+                    return a.name.localeCompare(b.name); // Then by name ASC
+                });
+            } else {
+                results.artists = [];
+            }
         }
 
-        // Search albums using full-text search
         if (type === "all" || type === "albums") {
-            const albumResults = await searchService.searchAlbums({
-                query,
-                limit: searchLimit,
-            });
-
+            const albumResults = await albumSearchPromise;
             results.albums = albumResults.map((album) => ({
                 id: album.id,
                 title: album.title,
@@ -177,14 +201,8 @@ router.get("/", async (req, res) => {
             }));
         }
 
-        // Search tracks using full-text search
         if (type === "all" || type === "tracks") {
-            const trackResults = await searchService.searchTracks({
-                query,
-                limit: searchLimit,
-            });
-
-            // If genre filter is applied, filter the results
+            const trackResults = await trackSearchPromise;
             if (genre) {
                 const trackIds = trackResults.map((t) => t.id);
                 const tracksWithGenre = await prisma.track.findMany({
@@ -247,39 +265,24 @@ router.get("/", async (req, res) => {
             }
         }
 
-        // Search audiobooks
         if (type === "all" || type === "audiobooks") {
-            try {
-                const audiobooks = await audiobookshelfService.searchAudiobooks(
-                    query
-                );
-                results.audiobooks = audiobooks.slice(0, searchLimit);
-            } catch (error) {
-                console.error("Audiobook search error:", error);
-                results.audiobooks = [];
-            }
+            const audiobooks = await audiobookSearchPromise;
+            results.audiobooks = audiobooks.slice(0, searchLimit);
         }
 
-        // Search podcasts (search through owned podcasts)
         if (type === "all" || type === "podcasts") {
-            try {
-                const allPodcasts =
-                    await audiobookshelfService.getAllPodcasts();
-                results.podcasts = allPodcasts
-                    .filter(
-                        (p) =>
-                            p.media?.metadata?.title
-                                ?.toLowerCase()
-                                .includes(query.toLowerCase()) ||
-                            p.media?.metadata?.author
-                                ?.toLowerCase()
-                                .includes(query.toLowerCase())
-                    )
-                    .slice(0, searchLimit);
-            } catch (error) {
-                console.error("Podcast search error:", error);
-                results.podcasts = [];
-            }
+            const allPodcasts = await podcastSearchPromise;
+            results.podcasts = allPodcasts
+                .filter(
+                    (p) =>
+                        p.media?.metadata?.title
+                            ?.toLowerCase()
+                            .includes(query.toLowerCase()) ||
+                        p.media?.metadata?.author
+                            ?.toLowerCase()
+                            .includes(query.toLowerCase())
+                )
+                .slice(0, searchLimit);
         }
 
         // Cache search results for 2 minutes (library can change)
@@ -352,37 +355,74 @@ router.get("/discover", async (req, res) => {
         const results: any[] = [];
 
         if (type === "music" || type === "all") {
-            // Get library artist names to filter out (normalized for comparison)
-            const libraryArtists = await prisma.artist.findMany({
-                select: { name: true },
-            });
-            const libraryArtistNames = new Set(
-                libraryArtists.map((a) => a.name.toLowerCase().trim())
-            );
-
             // Search Last.fm for artists AND tracks
             try {
-                // Search for artists
-                const lastfmArtistResults = await lastFmService.searchArtists(
-                    query,
-                    searchLimit + 10 // Request extra to account for filtering
+                const [lastfmArtistResults, lastfmTrackResults] =
+                    await Promise.all([
+                        lastFmService.searchArtists(
+                            query,
+                            searchLimit + 10 // Request extra to account for filtering
+                        ),
+                        lastFmService.searchTracks(query, searchLimit),
+                    ]);
+
+                const candidateNames = Array.from(
+                    new Set(
+                        lastfmArtistResults
+                            .map((artist: any) => artist.name?.trim())
+                            .filter(Boolean)
+                    )
                 );
+                const libraryArtistNames = new Set<string>();
+                if (candidateNames.length > 0) {
+                    const libraryArtists = await prisma.artist.findMany({
+                        where: {
+                            OR: candidateNames.map((name) => ({
+                                name: { equals: name, mode: "insensitive" },
+                            })),
+                        },
+                        select: { name: true },
+                    });
+                    for (const artist of libraryArtists) {
+                        libraryArtistNames.add(artist.name.toLowerCase().trim());
+                    }
+                }
 
                 // Filter out artists already in library
                 const filteredArtists = lastfmArtistResults.filter(
                     (artist: any) => !libraryArtistNames.has(artist.name?.toLowerCase().trim())
                 );
 
+                const enrichCount = Math.min(3, filteredArtists.length);
+                if (enrichCount > 0) {
+                    const enrichedArtists = await Promise.all(
+                        filteredArtists
+                            .slice(0, enrichCount)
+                            .map(async (artist) => {
+                                try {
+                                    return await lastFmService.enrichArtistSearchResult(
+                                        artist
+                                    );
+                                } catch (err) {
+                                    console.warn(
+                                        "[SEARCH ENDPOINT] Failed to enrich artist result:",
+                                        err
+                                    );
+                                    return artist;
+                                }
+                            })
+                    );
+
+                    for (let i = 0; i < enrichedArtists.length; i += 1) {
+                        filteredArtists[i] = enrichedArtists[i];
+                    }
+                }
+
                 console.log(
                     `[SEARCH ENDPOINT] Found ${lastfmArtistResults.length} artists, ${filteredArtists.length} after filtering library`
                 );
                 results.push(...filteredArtists.slice(0, searchLimit));
 
-                // Search for tracks (songs)
-                const lastfmTrackResults = await lastFmService.searchTracks(
-                    query,
-                    searchLimit
-                );
                 console.log(
                     `[SEARCH ENDPOINT] Found ${lastfmTrackResults.length} track results`
                 );

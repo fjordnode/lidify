@@ -291,7 +291,7 @@ Be concise and engaging (max 15 words).`;
             ? `\n\nUSER'S LIBRARY (${userLibraryArtists.length} artists, mark these as "inLibrary" if recommended):\n${userLibraryArtists.slice(0, 100).join(", ")}${userLibraryArtists.length > 100 ? "..." : ""}`
             : "";
 
-        const prompt = `Recommend 8 artists similar to "${artistName}".
+        const prompt = `Recommend 8 artists who SOUND similar to "${artistName}".
 
 ARTIST CONTEXT:
 - Name: ${artistName}
@@ -300,12 +300,12 @@ ARTIST CONTEXT:
 ${libraryContext}
 
 GUIDELINES:
-1. Focus on cultural/aesthetic lineage, not just "sounds like"
-2. Include deep cuts and cult favorites, not just obvious choices
-3. Reference specific albums when explaining why
-4. Consider influences, contemporaries, and followers
-5. Mix well-known names with lesser-known gems
-6. Explain connections briefly but meaningfully
+1. PRIORITIZE sonic similarity - artists who sound alike in production, instrumentation, vocals, and energy
+2. Match the tempo, mood, and sonic textures of ${artistName}
+3. Include both well-known and lesser-known artists with similar sound
+4. Reference specific albums that showcase the sonic similarity
+5. Mix mainstream with underground artists who share the sound
+6. Explain the sonic connections briefly but meaningfully
 
 Return ONLY valid JSON in this exact format:
 {
@@ -393,7 +393,7 @@ Return ONLY valid JSON in this exact format:
             ? `\n\nUSER'S LIBRARY (${userLibraryArtists.length} artists):\n${userLibraryArtists.slice(0, 50).join(", ")}${userLibraryArtists.length > 50 ? "..." : ""}`
             : "";
 
-        const systemPrompt = `You are an expert music curator helping discover artists similar to ${artistName}.
+        const systemPrompt = `You are an expert music curator helping discover artists who SOUND similar to ${artistName}.
 
 ARTIST CONTEXT:
 - Name: ${artistName}
@@ -403,11 +403,11 @@ ${libraryContext}
 
 GUIDELINES:
 1. Recommend 6-8 artists per response
-2. Focus on cultural/aesthetic lineage, not just "sounds like"
-3. Include deep cuts and cult favorites, not just obvious choices
-4. Reference specific albums when explaining why
-5. Consider influences, contemporaries, and followers
-6. Respond to user's specific requests (era, style, mood, gender, etc.)
+2. PRIORITIZE sonic similarity - artists who sound alike in production, instrumentation, vocals, and energy
+3. Match the tempo, mood, and sonic textures of ${artistName}
+4. Include both well-known and lesser-known artists with similar sound
+5. Reference specific albums that showcase the sonic similarity
+6. Respond to user's specific requests (era, style, mood, etc.)
 7. Keep your conversational text brief and engaging (1-3 sentences)
 
 ALWAYS respond with valid JSON in this exact format:

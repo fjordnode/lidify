@@ -1544,17 +1544,31 @@ router.get("/artists/:id", async (req, res) => {
             userPlays.map((p) => [p.trackId, p._count.id])
         );
 
-        // For owned artists, return library-only top tracks immediately
+        // Check for cached processed top tracks (avoids flash of wrong data)
+        const processedTopTracksCacheKey = `artist-top-tracks-processed:${artist.id}`;
+        let usedProcessedCache = false;
+
+        // Try to use cached processed tracks first (fast path for subsequent visits)
         if (skipExternal) {
-            topTracks = topTracks.map((t) => ({
-                ...t,
-                userPlayCount: userPlayCounts.get(t.id) || 0,
-                album: {
-                    ...t.album,
-                    coverArt: t.album.coverUrl,
-                },
-            }));
-        } else {
+            try {
+                const cachedProcessed = await redisClient.get(processedTopTracksCacheKey);
+                if (cachedProcessed && cachedProcessed !== "NOT_FOUND") {
+                    const processedTracks = JSON.parse(cachedProcessed);
+                    // Add user-specific play counts on top of cached data
+                    topTracks = processedTracks.map((t: any) => ({
+                        ...t,
+                        userPlayCount: userPlayCounts.get(t.id) || 0,
+                    }));
+                    usedProcessedCache = true;
+                    console.log(`[Artist] Using cached processed top tracks (${topTracks.length})`);
+                }
+            } catch {
+                // Cache error - will fetch external data below
+            }
+        }
+
+        // Fetch external data if: explicitly requested OR cache was cold (no processed tracks)
+        if (!usedProcessedCache) {
             // Fetch Last.fm top tracks (cached for 24 hours)
             const topTracksCacheKey = `top-tracks:${artist.id}`;
             try {
@@ -1688,6 +1702,23 @@ router.get("/artists/:id", async (req, res) => {
                 }
 
                 topTracks = combinedTracks.slice(0, 10);
+
+                // Cache processed top tracks (without user-specific data) for fast subsequent loads
+                try {
+                    // Remove user-specific data before caching
+                    const tracksToCache = topTracks.map((t: any) => {
+                        const { userPlayCount, ...rest } = t;
+                        return rest;
+                    });
+                    await redisClient.setEx(
+                        processedTopTracksCacheKey,
+                        24 * 60 * 60, // 24 hours
+                        JSON.stringify(tracksToCache)
+                    );
+                    console.log(`[Artist] Cached processed top tracks for ${artist.name}`);
+                } catch {
+                    // Cache write error - non-fatal
+                }
             } catch (error) {
                 console.error(
                     `Failed to get Last.fm top tracks for ${artist.name}:`,

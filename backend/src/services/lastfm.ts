@@ -544,6 +544,10 @@ class LastFmService {
             tags: [] as string[],
         };
 
+        if (!enrich) {
+            return baseResult;
+        }
+
         // Fetch artist info and images from multiple sources
         // Priority: Fanart.tv (MBID) > Last.fm info > Deezer (strict match) > Last.fm search
         const [info, fanartImage] = await Promise.all([
@@ -583,6 +587,39 @@ class LastFmService {
             image: resolvedImage,
             bio: info?.bio?.summary || info?.bio?.content || null,
             tags: info?.tags?.tag?.map((t: any) => t.name) || [],
+        };
+    }
+
+    public async enrichArtistSearchResult(result: {
+        name: string;
+        mbid?: string;
+        image?: string | null;
+        bio?: string | null;
+        tags?: string[];
+    }) {
+        const [info, fanartImage] = await Promise.all([
+            this.getArtistInfo(result.name, result.mbid),
+            result.mbid
+                ? fanartService
+                      .getArtistImage(result.mbid)
+                      .catch(() => null as string | null)
+                : Promise.resolve<string | null>(null),
+        ]);
+
+        let resolvedImage =
+            fanartImage || (info ? this.getBestImage(info.image) : null);
+
+        if (!resolvedImage) {
+            resolvedImage = await deezerService
+                .getArtistImageStrict(result.name)
+                .catch(() => null);
+        }
+
+        return {
+            ...result,
+            image: resolvedImage || result.image || null,
+            bio: info?.bio?.summary || info?.bio?.content || result.bio || null,
+            tags: info?.tags?.tag?.map((t: any) => t.name) || result.tags || [],
         };
     }
 
@@ -713,7 +750,7 @@ class LastFmService {
             );
             const limitedTracks = validTracks.slice(0, limit);
 
-            const enrichmentCount = Math.min(8, limitedTracks.length);
+            const enrichmentCount = Math.min(1, limitedTracks.length);
 
             const [enriched, fast] = await Promise.all([
                 Promise.all(

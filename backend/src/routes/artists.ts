@@ -327,12 +327,15 @@ router.post("/ai-chat/:artistId", async (req, res) => {
                         };
                     }
                 } catch (err) {
+                    // Last.fm error - will use fallback below
+                }
+
+                // Fallback: use the raw artist name if Last.fm didn't return data
+                // AI can still generate recommendations based on just the name
+                if (!artistInfo) {
+                    console.log(`[AI Chat] Using fallback for unknown artist: ${nameOrMbid}`);
                     artistInfo = { name: nameOrMbid, genres: [], albums: [] };
                 }
-            }
-
-            if (!artistInfo) {
-                return res.status(404).json({ error: "Artist not found" });
             }
 
             conversationData = {

@@ -32,6 +32,10 @@ export interface Track {
   trackNo?: number;
   discNo?: number;
   playCount?: number;
+  // Audio file info (for owned tracks)
+  mime?: string;
+  fileSize?: number;
+  filePath?: string;
   artist?: {
     id?: string;
     name?: string;

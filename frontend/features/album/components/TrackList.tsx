@@ -48,6 +48,68 @@ const formatNumber = (num: number) => {
   return num.toString();
 };
 
+// Extract codec/format from mime type or file path
+const getCodecLabel = (mime?: string, filePath?: string): string | null => {
+  // Try mime type first
+  if (mime) {
+    const mimeMap: Record<string, string> = {
+      'audio/flac': 'FLAC',
+      'audio/x-flac': 'FLAC',
+      'flac': 'FLAC',
+      'audio/mpeg': 'MP3',
+      'audio/mp3': 'MP3',
+      'audio/aac': 'AAC',
+      'audio/mp4': 'AAC',
+      'audio/x-m4a': 'AAC',
+      'audio/ogg': 'OGG',
+      'audio/vorbis': 'OGG',
+      'audio/opus': 'OPUS',
+      'audio/wav': 'WAV',
+      'audio/x-wav': 'WAV',
+      'audio/alac': 'ALAC',
+      'audio/x-alac': 'ALAC',
+      'audio/aiff': 'AIFF',
+      'audio/x-aiff': 'AIFF',
+    };
+    const normalized = mime.toLowerCase();
+    if (mimeMap[normalized]) return mimeMap[normalized];
+  }
+
+  // Fallback to file extension
+  if (filePath) {
+    const ext = filePath.split('.').pop()?.toLowerCase();
+    const extMap: Record<string, string> = {
+      'flac': 'FLAC',
+      'mp3': 'MP3',
+      'aac': 'AAC',
+      'm4a': 'AAC',
+      'ogg': 'OGG',
+      'opus': 'OPUS',
+      'wav': 'WAV',
+      'alac': 'ALAC',
+      'aiff': 'AIFF',
+      'aif': 'AIFF',
+      'wma': 'WMA',
+    };
+    if (ext && extMap[ext]) return extMap[ext];
+  }
+
+  return null;
+};
+
+// Calculate bitrate from file size and duration
+const formatBitrate = (fileSize?: number, duration?: number): string | null => {
+  if (!fileSize || !duration || duration === 0) return null;
+  const bitrate = Math.round((fileSize * 8) / duration / 1000);
+  return `${bitrate}`;
+};
+
+// Check if codec is lossless
+const isLossless = (codec: string | null): boolean => {
+  if (!codec) return false;
+  return ['FLAC', 'ALAC', 'WAV', 'AIFF'].includes(codec);
+};
+
 const TrackRow = memo(function TrackRow({
   track,
   index,
@@ -156,6 +218,28 @@ const TrackRow = memo(function TrackRow({
           <span>{formatNumber(track.playCount)}</span>
         </div>
       )}
+
+      {/* Codec/Bitrate badge for owned tracks */}
+      {isOwned && (() => {
+        const codec = getCodecLabel(track.mime, track.filePath);
+        const bitrate = formatBitrate(track.fileSize, track.duration);
+        if (!codec && !bitrate) return null;
+        const lossless = isLossless(codec);
+        return (
+          <div
+            className={cn(
+              "hidden md:flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium",
+              lossless
+                ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20"
+                : "bg-gray-500/15 text-gray-400 border border-gray-500/20"
+            )}
+            title={`${codec || 'Unknown'}${bitrate ? ` @ ${bitrate} kbps` : ''}`}
+          >
+            {codec && <span>{codec}</span>}
+            {bitrate && <span className="opacity-70">{bitrate}</span>}
+          </div>
+        );
+      })()}
 
       {isOwned && (
         <>

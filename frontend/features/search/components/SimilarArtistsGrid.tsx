@@ -26,7 +26,7 @@ export function SimilarArtistsGrid({
 
     // Skip first if it was shown in TopResult, otherwise show all
     const startIndex = skipFirst ? 1 : 0;
-    const displayResults = artistResults.slice(startIndex, startIndex + 6);
+    const displayResults = artistResults.slice(startIndex, startIndex + 3);
 
     // Show loading state
     if (isLoading) {
