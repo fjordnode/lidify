@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Radio, Play, Loader2, Shuffle, ChevronLeft } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Radio, Play, Loader2, Shuffle, ChevronLeft, ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { useRemoteAwareAudioControls } from "@/lib/remote-aware-audio-controls-context";
@@ -14,7 +14,7 @@ interface RadioStation {
     description: string;
     color: string;
     filter: {
-        type: "genre" | "decade" | "discovery" | "favorites" | "all" | "workout";
+        type: "genre" | "decade" | "discovery" | "favorites" | "all";
         value?: string;
     };
     minTracks?: number;
@@ -23,6 +23,92 @@ interface RadioStation {
 interface GenreCount {
     genre: string;
     count: number;
+}
+
+// ============================================================
+// GENRE HIERARCHY SYSTEM
+// ============================================================
+
+const GENRE_HIERARCHY: Record<string, string[]> = {
+    "Rock": ["rock", "grunge", "britpop", "shoegaze", "post-punk", "new wave", "classic rock", "hard rock", "progressive rock", "psychedelic rock", "blues rock", "garage rock", "stoner rock", "art rock", "glam rock", "southern rock", "surf rock", "noise rock", "math rock", "space rock", "acid rock"],
+    "Metal": ["metal", "heavy metal", "death metal", "black metal", "doom metal", "thrash metal", "progressive metal", "power metal", "symphonic metal", "melodic death metal", "stoner metal", "sludge metal", "folk metal", "gothic metal", "metalcore", "deathcore", "groove metal", "industrial metal", "nu metal", "speed metal", "viking metal", "post-metal", "djent", "alternative metal", "brutal death metal", "technical death metal", "melodic black metal", "symphonic black metal", "atmospheric black metal", "blackened death metal", "avant-garde metal", "rap metal", "grindcore", "hardcore"],
+    "Electronic": ["electronic", "house", "techno", "ambient", "trance", "drum and bass", "dubstep", "idm", "synthwave", "downtempo", "trip-hop", "industrial", "ebm", "electro", "breakbeat", "hardstyle", "gabber", "chillout", "vaporwave", "future bass", "uk garage", "jungle", "big beat", "minimal techno", "deep house", "tech house", "progressive house", "psytrance"],
+    "Hip-Hop": ["hip-hop", "rap", "trap", "boom bap", "gangsta rap", "conscious hip-hop", "lo-fi hip-hop", "instrumental hip-hop", "grime", "drill", "cloud rap", "jazz rap", "underground hip-hop", "east coast hip-hop", "west coast hip-hop", "southern hip-hop"],
+    "Jazz": ["jazz", "bebop", "hard bop", "cool jazz", "modal jazz", "free jazz", "jazz fusion", "smooth jazz", "vocal jazz", "swing", "big band", "latin jazz"],
+    "Blues": ["blues", "delta blues", "chicago blues", "electric blues", "country blues"],
+    "Folk": ["folk", "indie folk", "folk rock", "americana", "bluegrass", "celtic", "traditional folk", "singer-songwriter"],
+    "Classical": ["classical", "baroque", "romantic", "modern classical", "contemporary classical", "opera", "choral", "chamber music", "orchestral", "minimalism", "film score", "soundtrack"],
+    "Pop": ["pop", "synthpop", "dance pop", "electropop", "indie pop", "art pop", "k-pop", "j-pop", "teen pop", "soft rock"],
+    "Soul & R&B": ["soul", "r&b", "rhythm and blues", "neo soul", "funk", "disco", "motown", "gospel"],
+    "Punk": ["punk", "punk rock", "pop punk", "hardcore punk", "post-hardcore", "emo", "screamo", "ska punk"],
+    "Reggae": ["reggae", "dub", "dancehall", "ska", "rocksteady"],
+    "Country": ["country", "alt country", "outlaw country", "country rock", "country pop", "honky tonk"],
+    "World": ["world", "latin", "afrobeat", "afropop", "bossa nova", "samba", "flamenco", "reggaeton", "salsa"],
+    "Indie": ["indie", "indie rock", "indie pop", "lo-fi"],
+    "Alternative": ["alternative", "alternative rock", "grunge", "experimental", "post-rock", "new wave"],
+};
+
+const GENRE_PARENT_LOOKUP = new Map<string, string>(
+    Object.entries(GENRE_HIERARCHY).flatMap(([parent, subGenres]) => [
+        [parent.toLowerCase(), parent],
+        ...subGenres.map((sub) => [sub.toLowerCase(), parent] as [string, string]),
+    ])
+);
+
+function getParentForGenre(genre: string): string {
+    return GENRE_PARENT_LOOKUP.get(genre.toLowerCase()) ?? genre;
+}
+
+interface GenreGroup {
+    parent: string;
+    count: number;
+    subGenres: GenreCount[];
+}
+
+function groupGenresByParent(genres: GenreCount[]): GenreGroup[] {
+    const groups = new Map<string, { count: number; subGenres: GenreCount[] }>();
+    for (const genre of genres) {
+        const parent = getParentForGenre(genre.genre);
+        const existing = groups.get(parent) ?? { count: 0, subGenres: [] };
+        existing.count += genre.count;
+        existing.subGenres.push(genre);
+        groups.set(parent, existing);
+    }
+
+    return Array.from(groups.entries())
+        .map(([parent, data]) => ({
+            parent,
+            count: data.count,
+            subGenres: [...data.subGenres].sort((a, b) => b.count - a.count),
+        }))
+        .sort((a, b) => b.count - a.count);
+}
+
+// ============================================================
+// DYNAMIC COLOR GENERATION
+// ============================================================
+
+const PARENT_COLORS: Record<string, string> = {
+    "Rock": "from-red-500/30 to-orange-600/30",
+    "Metal": "from-zinc-600/30 to-neutral-800/30",
+    "Electronic": "from-cyan-500/30 to-blue-600/30",
+    "Hip-Hop": "from-purple-500/30 to-indigo-600/30",
+    "Jazz": "from-amber-500/30 to-yellow-600/30",
+    "Blues": "from-blue-600/30 to-indigo-700/30",
+    "Folk": "from-green-500/30 to-emerald-600/30",
+    "Classical": "from-slate-400/30 to-gray-500/30",
+    "Pop": "from-pink-500/30 to-rose-600/30",
+    "Soul & R&B": "from-fuchsia-500/30 to-pink-600/30",
+    "Punk": "from-lime-500/30 to-green-600/30",
+    "Reggae": "from-green-400/30 to-yellow-500/30",
+    "Country": "from-orange-400/30 to-amber-500/30",
+    "World": "from-teal-500/30 to-cyan-600/30",
+    "Indie": "from-violet-500/30 to-purple-600/30",
+    "Alternative": "from-indigo-500/30 to-blue-600/30",
+};
+
+function getParentColor(parent: string): string {
+    return PARENT_COLORS[parent] ?? "from-slate-500/30 to-gray-600/30";
 }
 
 // Static radio stations
@@ -34,14 +120,6 @@ const STATIC_STATIONS: RadioStation[] = [
         color: "from-brand/40 to-amber-600/30",
         filter: { type: "all" },
         minTracks: 10,
-    },
-    {
-        id: "workout",
-        name: "Workout",
-        description: "High energy tracks",
-        color: "from-red-500/30 to-orange-600/30",
-        filter: { type: "workout" },
-        minTracks: 15,
     },
     {
         id: "discovery",
@@ -117,60 +195,52 @@ const getDecadeDescription = (decade: number, count: number): string => {
     return `${decade}-${decade + 9} • ${count} tracks`;
 };
 
-// Genre color mapping
-const GENRE_COLORS: Record<string, string> = {
-    rock: "from-red-500/30 to-orange-600/30",
-    pop: "from-pink-500/30 to-rose-600/30",
-    "hip hop": "from-purple-500/30 to-indigo-600/30",
-    "hip-hop": "from-purple-500/30 to-indigo-600/30",
-    rap: "from-purple-500/30 to-indigo-600/30",
-    electronic: "from-cyan-500/30 to-blue-600/30",
-    jazz: "from-amber-500/30 to-yellow-600/30",
-    classical: "from-slate-400/30 to-gray-500/30",
-    metal: "from-zinc-600/30 to-neutral-700/30",
-    country: "from-orange-400/30 to-amber-500/30",
-    folk: "from-green-500/30 to-emerald-600/30",
-    indie: "from-violet-500/30 to-purple-600/30",
-    alternative: "from-indigo-500/30 to-blue-600/30",
-    "r&b": "from-fuchsia-500/30 to-pink-600/30",
-    soul: "from-amber-600/30 to-orange-700/30",
-    blues: "from-blue-600/30 to-indigo-700/30",
-    punk: "from-lime-500/30 to-green-600/30",
-    reggae: "from-green-400/30 to-yellow-500/30",
-    default: "from-gray-500/30 to-slate-600/30",
-};
 
-const getGenreColor = (genre: string): string => {
-    const lower = genre.toLowerCase();
-    return GENRE_COLORS[lower] || GENRE_COLORS.default;
-};
 
 // Radio Station Card Component
 function RadioStationCard({ 
     station, 
     onPlay, 
-    isLoading 
+    isLoading,
+    size = "normal",
 }: { 
     station: RadioStation; 
     onPlay: () => void; 
     isLoading: boolean;
+    size?: "normal" | "large" | "small";
 }) {
+    const sizeClasses = {
+        large: "aspect-[3/2] md:col-span-2 md:row-span-1",
+        normal: "aspect-[4/3]",
+        small: "aspect-[5/3]",
+    };
+    
+    const textSizes = {
+        large: { title: "text-base md:text-lg", desc: "text-sm" },
+        normal: { title: "text-sm", desc: "text-xs" },
+        small: { title: "text-xs", desc: "text-[10px]" },
+    };
+    
     return (
         <button
             onClick={onPlay}
             disabled={isLoading}
             className={`
                 relative group w-full
-                aspect-[4/3] rounded-lg overflow-hidden
+                ${sizeClasses[size]} rounded-xl overflow-hidden
                 bg-gradient-to-br ${station.color}
                 border border-white/10 hover:border-white/20
-                transition-all duration-200
-                hover:scale-[1.02] active:scale-[0.98]
+                transition-all duration-300 ease-out
+                hover:scale-[1.02] hover:shadow-lg hover:shadow-black/30
+                active:scale-[0.98]
                 disabled:opacity-50 disabled:cursor-not-allowed
             `}
         >
+            {/* Subtle noise texture overlay */}
+            <div className="absolute inset-0 opacity-30 mix-blend-overlay bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMzAwIj48ZmlsdGVyIGlkPSJhIiB4PSIwIiB5PSIwIj48ZmVUdXJidWxlbmNlIGJhc2VGcmVxdWVuY3k9Ii43NSIgc3RpdGNoVGlsZXM9InN0aXRjaCIgdHlwZT0iZnJhY3RhbE5vaXNlIi8+PGZlQ29sb3JNYXRyaXggdHlwZT0ic2F0dXJhdGUiIHZhbHVlcz0iMCIvPjwvZmlsdGVyPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbHRlcj0idXJsKCNhKSIvPjwvc3ZnPg==')]" />
+            
             {/* Content */}
-            <div className="absolute inset-0 p-3 flex flex-col justify-between">
+            <div className="absolute inset-0 p-3 md:p-4 flex flex-col justify-between">
                 <div className="flex items-center gap-1.5">
                     <Radio className="w-4 h-4 text-white/60" />
                     <span className="text-[10px] text-white/60 font-medium uppercase tracking-wider">
@@ -178,26 +248,181 @@ function RadioStationCard({
                     </span>
                 </div>
                 <div>
-                    <h3 className="text-sm font-bold text-white truncate leading-tight">
+                    <h3 className={`${textSizes[size].title} font-bold text-white truncate leading-tight`}>
                         {station.name}
                     </h3>
-                    <p className="text-xs text-white/50 truncate">
+                    <p className={`${textSizes[size].desc} text-white/50 truncate`}>
                         {station.description}
                     </p>
                 </div>
             </div>
 
             {/* Play overlay on hover */}
-            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
                 {isLoading ? (
                     <Loader2 className="w-8 h-8 text-white animate-spin" />
                 ) : (
-                    <div className="w-12 h-12 rounded-full bg-brand flex items-center justify-center shadow-lg">
+                    <div className="w-12 h-12 rounded-full bg-brand flex items-center justify-center shadow-lg shadow-brand/30 transition-transform group-hover:scale-110">
                         <Play className="w-5 h-5 text-black ml-0.5" fill="currentColor" />
                     </div>
                 )}
             </div>
         </button>
+    );
+}
+
+// ============================================================
+// GENRE GROUP CARD - Expandable parent genre with sub-genres
+// ============================================================
+
+interface GenreGroupCardProps {
+    group: GenreGroup;
+    onPlayGenre: (genre: string, count: number) => void;
+    loadingGenre: string | null;
+    isLarge?: boolean;
+}
+
+function GenreGroupCard({ group, onPlayGenre, loadingGenre, isLarge = false }: GenreGroupCardProps) {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const color = getParentColor(group.parent);
+    const hasSubGenres = group.subGenres.length > 1 || group.subGenres[0]?.genre.toLowerCase() !== group.parent.toLowerCase();
+    
+    // Format track count
+    const formatCount = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : n.toString();
+    
+    return (
+        <div className={`${isLarge ? "md:col-span-2" : ""}`}>
+            {/* Main parent card */}
+            <div
+                className={`
+                    relative group rounded-xl overflow-hidden
+                    bg-gradient-to-br ${color}
+                    border border-white/10 
+                    transition-all duration-300 ease-out
+                    ${isExpanded ? "rounded-b-none border-b-0" : "hover:border-white/20 hover:shadow-lg hover:shadow-black/30"}
+                `}
+                role="button"
+                tabIndex={0}
+                onClick={() => onPlayGenre(group.parent, group.count)}
+                onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onPlayGenre(group.parent, group.count);
+                    }
+                }}
+            >
+                {/* Noise texture */}
+                <div className="absolute inset-0 opacity-30 mix-blend-overlay bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMzAwIj48ZmlsdGVyIGlkPSJhIiB4PSIwIiB5PSIwIj48ZmVUdXJidWxlbmNlIGJhc2VGcmVxdWVuY3k9Ii43NSIgc3RpdGNoVGlsZXM9InN0aXRjaCIgdHlwZT0iZnJhY3RhbE5vaXNlIi8+PGZlQ29sb3JNYXRyaXggdHlwZT0ic2F0dXJhdGUiIHZhbHVlcz0iMCIvPjwvZmlsdGVyPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbHRlcj0idXJsKCNhKSIvPjwvc3ZnPg==')]" />
+                
+                <div className={`relative ${isLarge ? "p-5" : "p-4"} flex items-center justify-between gap-3`}>
+                    {/* Left: Genre info */}
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                            <Radio className="w-4 h-4 text-white/60 flex-shrink-0" />
+                            <span className="text-[10px] text-white/60 font-medium uppercase tracking-wider">
+                                {hasSubGenres ? `${group.subGenres.length} styles` : "Radio"}
+                            </span>
+                        </div>
+                        <h3 className={`${isLarge ? "text-xl" : "text-base"} font-bold text-white truncate`}>
+                            {group.parent}
+                        </h3>
+                        <p className="text-xs text-white/50">
+                            {formatCount(group.count)} tracks
+                        </p>
+                    </div>
+                    
+                    {/* Right: Actions */}
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                        {/* Play button */}
+                        <button
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                onPlayGenre(group.parent, group.count);
+                            }}
+                            disabled={loadingGenre !== null}
+                            className={`
+                                ${isLarge ? "w-12 h-12" : "w-10 h-10"} rounded-full 
+                                bg-white/20 hover:bg-brand 
+                                flex items-center justify-center 
+                                transition-all duration-200
+                                hover:scale-105 active:scale-95
+                                disabled:opacity-50
+                                group/play
+                            `}
+                        >
+                            {loadingGenre === group.parent ? (
+                                <Loader2 className="w-5 h-5 text-white animate-spin" />
+                            ) : (
+                                <Play className="w-5 h-5 text-white group-hover/play:text-black ml-0.5" fill="currentColor" />
+                            )}
+                        </button>
+                        
+                        {/* Expand button (only if has sub-genres) */}
+                        {hasSubGenres && (
+                            <button
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    setIsExpanded(!isExpanded);
+                                }}
+                                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all duration-200"
+                            >
+                                <ChevronDown 
+                                    className={`w-4 h-4 text-white/70 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} 
+                                />
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+            
+            {/* Expanded sub-genres panel */}
+            {hasSubGenres && (
+                <div 
+                    className={`
+                        overflow-hidden transition-all duration-300 ease-out
+                        ${isExpanded ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"}
+                    `}
+                >
+                    <div className={`
+                        bg-gradient-to-b ${color} 
+                        border border-t-0 border-white/10 rounded-b-xl
+                        p-3 space-y-1
+                    `}>
+                        {group.subGenres.map((sub) => (
+                            <button
+                                key={sub.genre}
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    onPlayGenre(sub.genre, sub.count);
+                                }}
+                                disabled={loadingGenre !== null}
+                                className="
+                                    w-full flex items-center justify-between gap-3
+                                    px-3 py-2 rounded-lg
+                                    bg-black/20 hover:bg-black/40
+                                    transition-all duration-150
+                                    group/sub
+                                    disabled:opacity-50
+                                "
+                            >
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <ChevronRight className="w-3 h-3 text-white/40 flex-shrink-0" />
+                                    <span className="text-sm text-white/90 truncate">{sub.genre}</span>
+                                </div>
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                    <span className="text-xs text-white/40">{sub.count}</span>
+                                    {loadingGenre === sub.genre ? (
+                                        <Loader2 className="w-4 h-4 text-white/60 animate-spin" />
+                                    ) : (
+                                        <Play className="w-4 h-4 text-white/40 group-hover/sub:text-white transition-colors" fill="currentColor" />
+                                    )}
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
     );
 }
 
@@ -285,15 +510,27 @@ export default function RadioPage() {
         }
     };
 
-    // Create genre stations from library
-    const genreStations: RadioStation[] = genres.map((g) => ({
-        id: `genre-${g.genre}`,
-        name: g.genre,
-        description: `${g.count} tracks`,
-        color: getGenreColor(g.genre),
-        filter: { type: "genre" as const, value: g.genre },
-        minTracks: 15,
-    }));
+    // Group genres by parent
+    const groupedGenres = useMemo(() => groupGenresByParent(genres), [genres]);
+    
+    // Separate into featured (large) and regular genres
+    const featuredGenres = groupedGenres.filter((g) => g.count >= 1000).slice(0, 4);
+    const regularGenres = groupedGenres
+        .filter((g) => !featuredGenres.includes(g))
+        .slice(0, Math.max(12 - featuredGenres.length, 0));
+    
+    // Handler for playing a specific genre
+    const handlePlayGenre = async (genre: string, count: number) => {
+        const station: RadioStation = {
+            id: `genre-${genre}`,
+            name: genre,
+            description: `${count} tracks`,
+            color: getParentColor(getParentForGenre(genre)),
+            filter: { type: "genre", value: genre },
+            minTracks: 15,
+        };
+        await startRadio(station);
+    };
 
     // Create decade stations from library (dynamically based on what's available)
     const decadeStations: RadioStation[] = decades.map((d) => ({
@@ -365,29 +602,49 @@ export default function RadioPage() {
                     </div>
                 </section>
 
-                {/* Genres Section */}
-                {(isLoading || genreStations.length > 0) && (
+                {/* Genres Section - Redesigned with hierarchy */}
+                {(isLoading || groupedGenres.length > 0) && (
                     <section className="mb-10">
                         <SectionHeader 
                             title="By Genre" 
-                            description="Shuffle tracks from specific genres" 
+                            description="Explore your library by musical style" 
                         />
                         {isLoading ? (
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-                                {Array.from({ length: 6 }).map((_, i) => (
-                                    <div key={i} className="aspect-[4/3] rounded-lg bg-white/5 animate-pulse" />
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                                {Array.from({ length: 8 }).map((_, i) => (
+                                    <div key={i} className={`${i < 2 ? "md:col-span-2" : ""} h-24 rounded-xl bg-white/5 animate-pulse`} />
                                 ))}
                             </div>
                         ) : (
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-                                {genreStations.map((station) => (
-                                    <RadioStationCard
-                                        key={station.id}
-                                        station={station}
-                                        onPlay={() => startRadio(station)}
-                                        isLoading={loadingStation === station.id}
-                                    />
-                                ))}
+                            <div className="space-y-6">
+                                {/* Featured genres (500+ tracks) - larger cards */}
+                                {featuredGenres.length > 0 && (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                        {featuredGenres.map((group) => (
+                                            <GenreGroupCard
+                                                key={group.parent}
+                                                group={group}
+                                                onPlayGenre={handlePlayGenre}
+                                                loadingGenre={loadingStation?.startsWith("genre-") ? loadingStation.slice(6) : null}
+                                                isLarge
+                                            />
+                                        ))}
+                                    </div>
+                                )}
+                                
+                                {/* Regular genres - 4 columns max for better readability */}
+                                {regularGenres.length > 0 && (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                                        {regularGenres.map((group) => (
+                                            <GenreGroupCard
+                                                key={group.parent}
+                                                group={group}
+                                                onPlayGenre={handlePlayGenre}
+                                                loadingGenre={loadingStation?.startsWith("genre-") ? loadingStation.slice(6) : null}
+                                            />
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         )}
                     </section>
@@ -425,9 +682,7 @@ export default function RadioPage() {
                 <div className="mt-12 p-4 rounded-lg bg-white/5 border border-white/10">
                     <h3 className="text-sm font-semibold text-white mb-2">About Radio Stations</h3>
                     <p className="text-sm text-white/60">
-                        Radio stations are generated from your personal music library. As you add more music, 
-                        new genre and decade stations will automatically appear. Each station requires a minimum 
-                        number of tracks to ensure a good listening experience.
+                        Browse your library by genre. Click a genre to shuffle all matching tracks, or expand to see sub-genres.
                     </p>
                 </div>
             </div>

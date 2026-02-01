@@ -40,6 +40,7 @@ import analysisRoutes from "./routes/analysis";
 import releasesRoutes from "./routes/releases";
 import remotePlaybackRoutes from "./routes/remotePlayback";
 import subsonicRoutes from "./routes/subsonic";
+import adminRoutes from "./routes/admin";
 import { dataCacheService } from "./services/dataCache";
 import { errorHandler } from "./middleware/errorHandler";
 import {
@@ -166,6 +167,7 @@ app.use("/api/browse", apiLimiter, browseRoutes);
 app.use("/api/analysis", apiLimiter, analysisRoutes);
 app.use("/api/releases", apiLimiter, releasesRoutes);
 app.use("/api/remote-playback", apiLimiter, remotePlaybackRoutes);
+app.use("/api/admin", apiLimiter, adminRoutes);
 
 // Subsonic API compatibility layer (for clients like Supersonic, Symfonium, etc.)
 // No rate limiting - Subsonic clients make many rapid requests

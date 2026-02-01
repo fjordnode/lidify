@@ -4233,10 +4233,11 @@ router.get("/genres", async (req, res) => {
         }
 
         // Convert to array and sort by count
+        // Return all genres with 15+ tracks (frontend will group them)
         const genres = Array.from(genreMap.entries())
             .map(([genre, count]) => ({ genre, count }))
-            .sort((a, b) => b.count - a.count)
-            .slice(0, 20); // Top 20 genres
+            .filter(g => g.count >= 15)
+            .sort((a, b) => b.count - a.count);
 
         res.json({ genres });
     } catch (error) {
