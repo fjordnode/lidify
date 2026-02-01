@@ -5,7 +5,7 @@ import { SettingsSection, SettingsRow, SettingsToggle } from "../ui";
 import { SystemSettings } from "../../types";
 import { api } from "@/lib/api";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
-import { CheckCircle, Loader2, User, Heart, Activity } from "lucide-react";
+import { CheckCircle, Loader2, User, Activity } from "lucide-react";
 
 interface CacheSectionProps {
     settings: SystemSettings;
@@ -205,15 +205,6 @@ export function CacheSection({ settings, onUpdate }: CacheSectionProps) {
                             total={enrichmentProgress.artists.total}
                             progress={enrichmentProgress.artists.progress}
                             failed={enrichmentProgress.artists.failed}
-                        />
-                        
-                        <EnrichmentStage
-                            icon={Heart}
-                            label="Mood Tags"
-                            description="Vibes and mood data from Last.fm"
-                            completed={enrichmentProgress.trackTags.enriched}
-                            total={enrichmentProgress.trackTags.total}
-                            progress={enrichmentProgress.trackTags.progress}
                         />
                         
                         <EnrichmentStage

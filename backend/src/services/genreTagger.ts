@@ -22,6 +22,11 @@ type GenreTaggerOptions = {
     force?: boolean;
 };
 
+type TagCandidate = {
+    name: string;
+    count: number;
+};
+
 const GENRE_WHITELIST = [
     "Rock",
     "Classic Rock",
@@ -282,6 +287,9 @@ const TAG_ALIASES: Record<string, string> = {
     "alternative rock": "Alternative Rock",
 };
 
+const MIN_TAG_WEIGHT = 20;
+const MAX_TAGS_PER_ALBUM = 5;
+
 const client: AxiosInstance = axios.create({
     baseURL: "https://ws.audioscrobbler.com/2.0/",
     timeout: 10000,
@@ -350,7 +358,7 @@ async function lastFmRequest(params: Record<string, string>, apiKey: string) {
     return response.data as any;
 }
 
-function extractTagNames(data: any): string[] {
+function extractTagNames(data: any): TagCandidate[] {
     const rawTags =
         data?.toptags?.tag ||
         data?.tags?.tag ||
@@ -363,17 +371,22 @@ function extractTagNames(data: any): string[] {
     }
 
     return rawTags
-        .map((tag: any) => (typeof tag?.name === "string" ? tag.name : ""))
-        .map(tag => tag.trim())
-        .filter(Boolean);
+        .map((tag: any) => {
+            const name = typeof tag?.name === "string" ? tag.name.trim() : "";
+            const rawCount = Number(tag?.count ?? tag?.weight ?? 0);
+            const count = Number.isFinite(rawCount) ? rawCount : 0;
+            return { name, count };
+        })
+        .filter(tag => Boolean(tag.name));
 }
 
-function filterTags(tags: string[]): string[] {
+function filterTags(tags: TagCandidate[]): string[] {
+    const eligible = tags.filter(tag => tag.count >= MIN_TAG_WEIGHT);
     const seen = new Set<string>();
     const filtered: string[] = [];
 
-    for (const tag of tags) {
-        const normalized = normalizeTagKey(tag);
+    for (const tag of eligible) {
+        const normalized = normalizeTagKey(tag.name);
         const alias = TAG_ALIASES[normalized];
         const canonical = alias || WHITELIST_KEY_MAP.get(normalized);
         if (!canonical) continue;
@@ -382,14 +395,14 @@ function filterTags(tags: string[]): string[] {
         filtered.push(canonical);
     }
 
-    return filtered;
+    return filtered.slice(0, MAX_TAGS_PER_ALBUM);
 }
 
 async function getAlbumTopTags(
     apiKey: string,
     artistName: string,
     albumTitle: string
-): Promise<string[]> {
+): Promise<TagCandidate[]> {
     const data = await lastFmRequest(
         {
             method: "album.getTopTags",
@@ -405,7 +418,7 @@ async function getAlbumTopTags(
 async function getArtistTopTags(
     apiKey: string,
     artistName: string
-): Promise<string[]> {
+): Promise<TagCandidate[]> {
     const data = await lastFmRequest(
         {
             method: "artist.getTopTags",

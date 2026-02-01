@@ -63,6 +63,7 @@ export default function RootLayout({
                 <Toaster
                     position="bottom-center"
                     offset={120}
+                    closeButton
                     toastOptions={{
                         style: {
                             background: "linear-gradient(135deg, #1a1a2e 0%, #0f0f15 100%)",

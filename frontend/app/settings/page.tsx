@@ -27,6 +27,7 @@ import { SoulseekSection } from "@/features/settings/components/sections/Soulsee
 import { AIServicesSection } from "@/features/settings/components/sections/AIServicesSection";
 import { StoragePathsSection } from "@/features/settings/components/sections/StoragePathsSection";
 import { CacheSection } from "@/features/settings/components/sections/CacheSection";
+import { LibrarySection } from "@/features/settings/components/sections/LibrarySection";
 import { UserManagementSection } from "@/features/settings/components/sections/UserManagementSection";
 import { SubsonicSection } from "@/features/settings/components/sections/SubsonicSection";
 
@@ -42,6 +43,7 @@ const sidebarItems: SidebarItem[] = [
     { id: "ai-services", label: "Artwork", adminOnly: true },
     { id: "storage", label: "Storage", adminOnly: true },
     { id: "cache", label: "Cache & Automation", adminOnly: true },
+    { id: "library", label: "Library Management", adminOnly: true },
     { id: "users", label: "Users", adminOnly: true },
 ];
 
@@ -204,6 +206,9 @@ export default function SettingsPage() {
                             settings={systemSettings}
                             onUpdate={updateSystemSettings}
                         />
+
+                        {/* Library Management */}
+                        <LibrarySection />
 
                         {/* User Management */}
                         <UserManagementSection />

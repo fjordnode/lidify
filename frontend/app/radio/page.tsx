@@ -36,13 +36,13 @@ const GENRE_HIERARCHY: Record<string, string[]> = {
     "Hip-Hop": ["hip-hop", "rap", "trap", "boom bap", "gangsta rap", "conscious hip-hop", "lo-fi hip-hop", "instrumental hip-hop", "grime", "drill", "cloud rap", "jazz rap", "underground hip-hop", "east coast hip-hop", "west coast hip-hop", "southern hip-hop"],
     "Jazz": ["jazz", "bebop", "hard bop", "cool jazz", "modal jazz", "free jazz", "jazz fusion", "smooth jazz", "vocal jazz", "swing", "big band", "latin jazz"],
     "Blues": ["blues", "delta blues", "chicago blues", "electric blues", "country blues"],
-    "Folk": ["folk", "indie folk", "folk rock", "americana", "bluegrass", "celtic", "traditional folk", "singer-songwriter"],
+    "Folk": ["folk", "indie folk", "folk rock", "americana", "bluegrass", "celtic", "traditional folk", "singer-songwriter", "alt country"],
     "Classical": ["classical", "baroque", "romantic", "modern classical", "contemporary classical", "opera", "choral", "chamber music", "orchestral", "minimalism", "film score", "soundtrack"],
     "Pop": ["pop", "synthpop", "dance pop", "electropop", "indie pop", "art pop", "k-pop", "j-pop", "teen pop", "soft rock"],
     "Soul & R&B": ["soul", "r&b", "rhythm and blues", "neo soul", "funk", "disco", "motown", "gospel"],
     "Punk": ["punk", "punk rock", "pop punk", "hardcore punk", "post-hardcore", "emo", "screamo", "ska punk"],
     "Reggae": ["reggae", "dub", "dancehall", "ska", "rocksteady"],
-    "Country": ["country", "alt country", "outlaw country", "country rock", "country pop", "honky tonk"],
+    "Country": ["country", "outlaw country", "country rock", "country pop", "honky tonk"],
     "World": ["world", "latin", "afrobeat", "afropop", "bossa nova", "samba", "flamenco", "reggaeton", "salsa"],
     "Indie": ["indie", "indie rock", "indie pop", "lo-fi"],
     "Alternative": ["alternative", "alternative rock", "grunge", "experimental", "post-rock", "new wave"],
@@ -55,8 +55,61 @@ const GENRE_PARENT_LOOKUP = new Map<string, string>(
     ])
 );
 
+// Keywords that map to parent genres for fuzzy matching
+const PARENT_KEYWORDS: [string, string][] = [
+    ["rock", "Rock"],
+    ["metal", "Metal"],
+    ["punk", "Punk"],
+    ["jazz", "Jazz"],
+    ["blues", "Blues"],
+    ["folk", "Folk"],
+    ["country", "Country"],
+    ["classical", "Classical"],
+    ["hip-hop", "Hip-Hop"],
+    ["hip hop", "Hip-Hop"],
+    ["rap", "Hip-Hop"],
+    ["electronic", "Electronic"],
+    ["electro", "Electronic"],
+    ["house", "Electronic"],
+    ["techno", "Electronic"],
+    ["ambient", "Electronic"],
+    ["trance", "Electronic"],
+    ["dubstep", "Electronic"],
+    ["drum and bass", "Electronic"],
+    ["industrial", "Electronic"],
+    ["synth", "Electronic"],
+    ["pop", "Pop"],
+    ["soul", "Soul & R&B"],
+    ["r&b", "Soul & R&B"],
+    ["funk", "Soul & R&B"],
+    ["disco", "Soul & R&B"],
+    ["reggae", "Reggae"],
+    ["ska", "Reggae"],
+    ["dub", "Reggae"],
+    ["latin", "World"],
+    ["world", "World"],
+    ["indie", "Indie"],
+    ["alternative", "Alternative"],
+];
+
 function getParentForGenre(genre: string): string {
-    return GENRE_PARENT_LOOKUP.get(genre.toLowerCase()) ?? genre;
+    const lower = genre.toLowerCase();
+    
+    // 1. Exact match in lookup table
+    const exact = GENRE_PARENT_LOOKUP.get(lower);
+    if (exact) return exact;
+    
+    // 2. Fuzzy match: check if genre contains a parent keyword
+    // Sort by keyword length descending to match more specific terms first
+    // e.g., "hip-hop" before "hop", "electronic" before "electro"
+    for (const [keyword, parent] of PARENT_KEYWORDS) {
+        if (lower.includes(keyword)) {
+            return parent;
+        }
+    }
+    
+    // 3. No match - return as-is (will become its own group)
+    return genre;
 }
 
 interface GenreGroup {
@@ -510,14 +563,8 @@ export default function RadioPage() {
         }
     };
 
-    // Group genres by parent
+    // Group genres by parent - show all in unified grid
     const groupedGenres = useMemo(() => groupGenresByParent(genres), [genres]);
-    
-    // Separate into featured (large) and regular genres
-    const featuredGenres = groupedGenres.filter((g) => g.count >= 1000).slice(0, 4);
-    const regularGenres = groupedGenres
-        .filter((g) => !featuredGenres.includes(g))
-        .slice(0, Math.max(12 - featuredGenres.length, 0));
     
     // Handler for playing a specific genre
     const handlePlayGenre = async (genre: string, count: number) => {
@@ -616,35 +663,15 @@ export default function RadioPage() {
                                 ))}
                             </div>
                         ) : (
-                            <div className="space-y-6">
-                                {/* Featured genres (500+ tracks) - larger cards */}
-                                {featuredGenres.length > 0 && (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                                        {featuredGenres.map((group) => (
-                                            <GenreGroupCard
-                                                key={group.parent}
-                                                group={group}
-                                                onPlayGenre={handlePlayGenre}
-                                                loadingGenre={loadingStation?.startsWith("genre-") ? loadingStation.slice(6) : null}
-                                                isLarge
-                                            />
-                                        ))}
-                                    </div>
-                                )}
-                                
-                                {/* Regular genres - 4 columns max for better readability */}
-                                {regularGenres.length > 0 && (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                                        {regularGenres.map((group) => (
-                                            <GenreGroupCard
-                                                key={group.parent}
-                                                group={group}
-                                                onPlayGenre={handlePlayGenre}
-                                                loadingGenre={loadingStation?.startsWith("genre-") ? loadingStation.slice(6) : null}
-                                            />
-                                        ))}
-                                    </div>
-                                )}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                                {groupedGenres.map((group) => (
+                                    <GenreGroupCard
+                                        key={group.parent}
+                                        group={group}
+                                        onPlayGenre={handlePlayGenre}
+                                        loadingGenre={loadingStation?.startsWith("genre-") ? loadingStation.slice(6) : null}
+                                    />
+                                ))}
                             </div>
                         )}
                     </section>
