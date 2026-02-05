@@ -12,6 +12,7 @@
  */
 
 import { prisma } from "../utils/db";
+import { Prisma } from "@prisma/client";
 import { enrichSimilarArtist } from "./artistEnrichment";
 import { lastFmService } from "../services/lastfm";
 import Redis from "ioredis";
@@ -472,6 +473,17 @@ export async function getEnrichmentProgress() {
         where: { NOT: { lastfmTags: { equals: [] } } },
     });
 
+    // Album genre tag progress (Last.fm)
+    const albumTotal = await prisma.album.count();
+    const albumTagsCompleted = await prisma.album.count({
+        where: {
+            AND: [
+                { genres: { not: Prisma.DbNull } },
+                { NOT: { genres: { equals: [] } } },
+            ],
+        },
+    });
+
     // Audio analysis progress (background task)
     const audioCompleted = await prisma.track.count({
         where: { analysisStatus: "completed" },
@@ -515,6 +527,14 @@ export async function getEnrichmentProgress() {
             progress:
                 trackTotal > 0
                     ? Math.round((trackTagsEnriched / trackTotal) * 100)
+                    : 0,
+        },
+        genreTags: {
+            total: albumTotal,
+            completed: albumTagsCompleted,
+            progress:
+                albumTotal > 0
+                    ? Math.round((albumTagsCompleted / albumTotal) * 100)
                     : 0,
         },
 

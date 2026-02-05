@@ -8,7 +8,6 @@ const defaultSystemSettings: SystemSettings = {
     lidarrUrl: "http://localhost:8686",
     lidarrApiKey: "",
     lidarrQualityProfileId: null,
-    openrouterEnabled: false,
     openrouterModel: "openai/gpt-4o-mini",
     fanartEnabled: false,
     fanartApiKey: "",
@@ -27,9 +26,6 @@ const defaultSystemSettings: SystemSettings = {
     maxCacheSizeMb: 10240,
     autoSync: true,
     autoEnrichMetadata: true,
-    // Download preferences
-    downloadSource: "soulseek",
-    soulseekFallback: "none",
 };
 
 export function useSystemSettings() {

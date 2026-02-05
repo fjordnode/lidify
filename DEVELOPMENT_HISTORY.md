@@ -18,6 +18,196 @@ Implementing a Spotify Connect-like remote playback feature that allows controll
 └─────────────────┘
 ```
 
+
+---
+
+## Commit-Derived Update (Jan-Feb 2026)
+
+This section was added by reviewing the recent commit stream directly (`git log -n 90`) and consolidating major work that was not fully captured above.
+
+### High-Level Themes
+
+#### 1. Radio + Genre Tagging Overhaul (Feb 2026)
+- Introduced Last.fm-driven genre tagging flow and admin/script support for tagging (`327e915`, `3f0b702`)
+- Polished and redesigned `/radio` UX with better controls and presentation (`327e915`, `3f0b702`)
+- Continued UI consistency by centralizing semantic color usage via Tailwind v4 `@theme` tokens (`fad0bf1`)
+
+#### 2. YouTube Streaming as First-Class Fallback
+- Added backend YouTube Music service + library endpoints (`bcbc42e`)
+- Added frontend source tracking and API support (`1255691`)
+- Implemented fallback playback in player engine (`3af296e`)
+- Prioritized local-file playback when `filePath` exists to avoid unnecessary fallback (`9667eea`, `5b07f16`, `4a5304b`)
+- Added source badges in player UI (`b3ba902`)
+- Added pre-cache for near-instant start and smoother queue transitions (`1116774`)
+- Improved YouTube download and metadata/tag extraction workflows (`72baac8`, `6514f82`)
+
+#### 3. Remote Playback Completion and Stabilization
+- Completed core remote playback infrastructure and command/state plumbing (`f6813f1`)
+- Improved bidirectional sync and controller/target consistency (`c05836f`)
+- Fixed reconnect behavior where playback could stop unexpectedly (`cf5c24f`)
+- Reduced noise by removing verbose remote debug logs once stable (`6ec5d7a`)
+
+#### 4. Podcast System Expansion
+- Added AI-powered ad-removal pipeline and progress/notification improvements (`faa3927`)
+- Added per-subscription automation (auto-download, auto-remove-ads), M3U export, and scheduled refresh (`d067214`)
+- Added per-podcast access tokens + external RSS feed support (`82d5f6b`)
+- Added URL-based subscription path and compact subscription UI components (`4e8d05d`, `5cb9841`)
+
+#### 5. Discovery / Recommendations Redesign
+- Reworked discovery into mode-driven UX (safe/adjacent/adventurous/mix), preview-first interactions, and better defaults (`fb637bb`, `f21bfb1`, `f8a3541`)
+- Unified home/discover recommendation surfaces and simplified recommendation internals (`9aead4e`, `0a41959`)
+- Improved AI Weekly signal quality and filtering with sonic similarity upgrades (`833ba40`)
+
+#### 6. Data Integrity and Scanner Safety
+- Added dual-root path safeguards and prevented destructive scanner edge cases (`962b54c`, `e8e4fe5`, `d14964d`)
+- Improved scanner metadata sanitization, duplicate prevention, and release-year handling (`8d260d4`, `6973290`, `c2b8290`)
+- Fixed play-tracking + scanner cascade issues (`7d81b1a`)
+
+#### 7. Search / Metadata / Library UX Improvements
+- Added search vectors/triggers and improved ranking + Last.fm integration (`971bb20`, `ac1b7ab`)
+- Added MBID edit flow, genre support improvements, and temp-MBID handling fixes (`575abe0`, `9ef1919`)
+- Added disc number support for multi-disc albums across backend/frontend/subsonic surfaces (`2674b03`)
+- Added interactive release selection for manual download grabs (`be8a79b`)
+
+#### 8. Subsonic Compatibility and Sync Ecosystem
+- Added `getAlbumInfo2` / `getArtistInfo2` and additional Subsonic request handling/logging (`067f534`)
+- Added compatibility hardening for client behavior differences (`de28f1a`)
+- Added ntfy push integration for downstream client auto-sync flows (Symfonium-style workflows) (`f0c710b`)
+
+#### 9. Quality, Build, and Operational Work
+- Large TS/ESLint cleanup passes across backend/frontend (`b0167e2`, `e67da2e`, `5d11ae9`)
+- Dependency security updates via npm audit fixes (`14b9b5c`)
+- CI/container pipeline improvements (GHCR + tag-based publishing) and deploy docs/examples refresh (`632683e`, `482cbbd`, `49ce24c`, `d85bfde`)
+
+---
+
+### Chronological Commit Digest (Reviewed)
+
+#### 2026-02-01
+- `3f0b702` feat: genre tagging improvements and Radio page polish
+- `327e915` feat: Last.fm genre tagging and radio page redesign
+- `fad0bf1` refactor: centralize color system with Tailwind v4 @theme tokens
+
+#### 2026-01-31
+- `6514f82` feat: YouTube streaming improvements and mobile player fixes
+- `f854ede` feat: artist-focused recommendations, performance improvements, and UX enhancements
+
+#### 2026-01-29
+- `14b9b5c` fix: resolve npm audit vulnerabilities
+- `1116774` feat: YouTube streaming with pre-cache for instant playback
+
+#### 2026-01-26
+- `72baac8` feat: save playlists without download + YouTube download improvements
+- `823a20a` fix: multiple playback, playlist, and UX improvements
+- `5d11ae9` fix: replace 'any' types in page components
+- `e67da2e` fix: resolve ESLint and TypeScript errors (340 -> 76)
+- `3189f4b` fix: show correct source (Spotify/Deezer) in playlist detail page
+
+#### 2026-01-25
+- `7ca33c5` feat: add Spotify playlist detail support
+- `4a5304b` fix: include filePath in artist track playback for local streaming
+- `f6813f1` feat: complete remote playback infrastructure
+- `c05836f` fix: improve bidirectional remote playback synchronization
+- `b0167e2` fix: resolve 235 TypeScript errors across backend and frontend
+- `cfcf1f8` feat(downloads): add toggles to enable/disable Soulseek and YouTube sources
+- `5b07f16` fix(youtube): pass filePath in playlists page and skip play logging for external tracks
+- `8ad9189` feat(browse): enable full playback for Deezer playlists via YouTube
+- `b3ba902` feat(player): show YouTube source indicator badge
+- `9667eea` fix(streaming): pass filePath to use local files over YouTube fallback
+- `3af296e` feat(youtube): implement YouTube fallback in audio player
+- `1255691` feat(youtube): add frontend API client and audio source tracking
+- `bcbc42e` feat(youtube): add YouTube Music streaming service and API endpoints
+- `6ec5d7a` chore: remove noisy RemoteIntegration debug logs
+
+#### 2026-01-24
+- `d14964d` fix(downloads): namespace playlist downloads and improve streaming paths
+- `229bda7` refactor(import): simplify to track-only Soulseek downloads
+- `48d3d68` feat(soulseek): add rate limiting, user reputation, and improved matching
+- `c4eff9a` feat(browse): add Spotify as second source with combined search
+- `bd0121f` chore: UI cleanup and code simplification
+- `56de02d` feat: deezer pagination, playlist pending removal, mood mix staleness
+- `5cb9841` feat(podcasts): add compact subscription list components
+- `e8e4fe5` feat(downloads): namespace playlist downloads for dual-root safety
+- `962b54c` fix(scanner): prevent catastrophic data loss with dual-root paths
+- `4e8d05d` feat(podcasts): add podcast by URL subscription
+
+#### 2026-01-21
+- `82d5f6b` feat(podcasts): per-podcast access tokens and RSS feed for external apps
+- `d067214` feat(podcasts): auto-download, ad-removal, M3U export, and scheduled refresh
+- `faa3927` feat(podcasts): AI-powered ad removal and playback improvements
+
+#### 2026-01-18
+- `de28f1a` fix(subsonic): improve client compatibility
+- `fb637bb` feat(discover): AI-powered discovery redesign with mode controls
+
+#### 2026-01-16
+- `f8a3541` fix(recommendations): change default timeframe from 7 days to 4 weeks
+
+#### 2026-01-14
+- `49ce24c` chore: documentation, CI, and config updates
+- `91145cc` refactor(frontend): UI cleanup and settings improvements
+- `73afafb` fix(backend): playlist diversity and data integrity improvements
+- `9d92b18` docs: add discovery UX redesign plan and handoff notes
+- `0a41959` refactor(backend): simplify recommendation algorithms
+- `9aead4e` feat(frontend): unify main page and discover recommendations
+- `f21bfb1` feat(discover): rewrite as preview-only mode with auto-load
+- `7d81b1a` fix(backend): fix play tracking and scanner cascade bugs
+
+#### 2026-01-12
+- `c2b8290` fix(artist): sort same-year albums by release date (newest first)
+- `6973290` fix(scanner): prefer original release year over remaster date
+
+#### 2026-01-11
+- `3066be8` refactor(frontend): reorganize settings and fix artist link
+- `067f534` feat(subsonic): add getAlbumInfo2, getArtistInfo2, and request logging
+- `f0c710b` feat(backend): add ntfy push notifications for Symfonium auto-sync
+- `8d260d4` fix(scanner): sanitize metadata and prevent duplicate album errors
+- `51b7fa0` fix(analyzer): prevent stuck tracks and improve reliability
+- `482cbbd` ci: only build on version tags, add auto-changelog
+- `632683e` ci: add GHCR workflow for easy container pulls
+- `99693f9` fix: ML audio analysis and playlist diversity improvements
+
+#### 2026-01-10
+- `833ba40` feat: AI Weekly improvements - sonic similarity, filtering, and UX
+- `d85bfde` docs: add examples folder with all-in-one deployment config
+- `4d5731c` feat: lazy enrichment for search, AI recs improvements, and codec display
+- `42e7d4a` feat: album bio for owned albums, cover caching improvements, and CI workflow
+- `c718d27` feat: album bio display, discover search timeout fix, and misc improvements
+
+#### 2026-01-05
+- `cf5c24f` websocket: fix playback stopping on reconnect
+- `52fa608` covers: fix album art loading and extend cache TTLs
+
+#### 2026-01-04
+- `ac1b7ab` search: improve album search, Last.fm discovery, and UI enhancements
+- `971bb20` search: improve library search ranking and Last.fm integration
+- `575abe0` feat: add MBID editor, genre support, and fix temp MBID links
+- `2674b03` tracks: add disc number support for multi-disc albums
+- `be8a79b` downloads: add interactive search for manual release selection
+- `6e0d718` library: improve artist page cover loading and ownership detection
+
+#### 2026-01-03
+- `8cd27fb` musicbrainz: add retry logic with exponential backoff
+- `8a7272d` frontend: fix scan animation starting immediately on click
+- `9ef1919` scanner: improve reliability, MBID handling, and UI feedback
+
+#### 2026-01-02 (already partly documented above, listed for completeness)
+- `5325e24` fix: remove non-existent manualGenres/manuallyEdited fields
+- `7844740` enrichment: improve album cover fetching with Deezer fallback
+- `3e69fe0` playlists: add artist diversity to more generators
+- `b09817d` frontend: add skipped count to enrichment progress type
+- `f79fe86` enrichment: add repair endpoints for album MBIDs and covers
+- `d8379d8` analyzer: add 'skipped' status for oversized/timeout tracks
+- `2b64feb` artist: prefetch Deezer album info and improve preview indicators
+- `2490ff2` fix: Recently Added now reflects actual new album additions
+- `d7b92c6` scanner: fix artist name truncation and add improvements
+- `713a6a9` ui: mobile nav, library state persistence, and UX improvements
+
+#### 2026-01-01 (already partly documented above, listed for completeness)
+- `fb5ca2e` security: harden authentication and input validation
+- `4de98bd` subsonic: add Subsonic/OpenSubsonic API for Symfonium compatibility
+- `6cf13d7` docs: add Symfonium compatibility section to CLAUDE.md
+- `038c0a3` docs: add Subsonic authentication setup to CLAUDE.md
 **Expected Behavior:**
 1. Only ONE device plays audio at any time (the "active player")
 2. When a remote device is selected, local playback STOPS
@@ -1219,4 +1409,3 @@ SELECT
   COUNT(*) as total 
 FROM \"Album\";"
 ```
-

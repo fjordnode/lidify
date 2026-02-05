@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
-import { SettingsSection, SettingsRow, SettingsInput, SettingsToggle } from "../ui";
+import { SettingsSection, SettingsRow } from "../ui";
 import { SystemSettings } from "../../types";
 import { InlineStatus, StatusType } from "@/components/ui/InlineStatus";
 import { api, OpenRouterModel } from "@/lib/api";
@@ -18,8 +18,6 @@ export function AIServicesSection({ settings, onUpdate, onTest, isTesting }: AIS
     const [openrouterConfigured, setOpenrouterConfigured] = useState<boolean | null>(null);
     const [openrouterTestStatus, setOpenrouterTestStatus] = useState<StatusType>("idle");
     const [openrouterTestMessage, setOpenrouterTestMessage] = useState("");
-    const [fanartTestStatus, setFanartTestStatus] = useState<StatusType>("idle");
-    const [fanartTestMessage, setFanartTestMessage] = useState("");
 
     // Model dropdown state
     const [models, setModels] = useState<OpenRouterModel[]>([]);
@@ -41,7 +39,6 @@ export function AIServicesSection({ settings, onUpdate, onTest, isTesting }: AIS
     const prevDropdownOpenRef = useRef(isDropdownOpen);
     
     // Set loading state synchronously when dropdown opens (before effect)
-    // eslint-disable-next-line react-hooks/rules-of-hooks, react-hooks/refs -- Intentional ref tracking pattern
     if (isDropdownOpen && !prevDropdownOpenRef.current && models.length === 0 && !hasStartedLoadingRef.current) {
         hasStartedLoadingRef.current = true;
         setModelsLoading(true);
@@ -99,19 +96,6 @@ export function AIServicesSection({ settings, onUpdate, onTest, isTesting }: AIS
         }
     };
 
-    const handleFanartTest = async () => {
-        setFanartTestStatus("loading");
-        setFanartTestMessage("Testing...");
-        const result = await onTest("fanart");
-        if (result.success) {
-            setFanartTestStatus("success");
-            setFanartTestMessage("Connected");
-        } else {
-            setFanartTestStatus("error");
-            setFanartTestMessage(result.error || "Failed");
-        }
-    };
-
     const handleSelectModel = (modelId: string) => {
         onUpdate({ openrouterModel: modelId });
         setIsDropdownOpen(false);
@@ -121,25 +105,27 @@ export function AIServicesSection({ settings, onUpdate, onTest, isTesting }: AIS
     return (
         <SettingsSection
             id="ai-services"
-            title="AI & Enhancement Services"
-            description="Configure AI recommendations and artwork enhancement"
+            title="AI Services"
+            description="AI-powered recommendations and discovery features"
         >
             {/* OpenRouter */}
             <SettingsRow
-                label="Enable OpenRouter"
+                label="OpenRouter"
                 description={
                     openrouterConfigured === false
-                        ? "API key not configured"
-                        : "AI-powered artist recommendations via OpenRouter"
+                        ? "Set OPENROUTER_API_KEY to enable AI features"
+                        : openrouterConfigured === null
+                            ? "Checking for API key..."
+                            : "AI features are enabled via OpenRouter"
                 }
-                htmlFor="openrouter-enabled"
             >
-                <SettingsToggle
-                    id="openrouter-enabled"
-                    checked={settings.openrouterEnabled}
-                    onChange={(checked) => onUpdate({ openrouterEnabled: checked })}
-                    disabled={openrouterConfigured === false}
-                />
+                <div className="text-sm text-[#888]">
+                    {openrouterConfigured
+                        ? "Enabled"
+                        : openrouterConfigured === false
+                            ? "Not configured"
+                            : "Checking"}
+                </div>
             </SettingsRow>
 
             {/* Show configuration message if API key is not set */}
@@ -155,8 +141,8 @@ export function AIServicesSection({ settings, onUpdate, onTest, isTesting }: AIS
                 </div>
             )}
 
-            {/* Show model selector and test button when enabled and configured */}
-            {settings.openrouterEnabled && openrouterConfigured && (
+            {/* Show model selector and test button when configured */}
+            {openrouterConfigured && (
                 <>
                     <SettingsRow
                         label="Model"
@@ -260,53 +246,6 @@ export function AIServicesSection({ settings, onUpdate, onTest, isTesting }: AIS
                                 status={openrouterTestStatus}
                                 message={openrouterTestMessage}
                                 onClear={() => setOpenrouterTestStatus("idle")}
-                            />
-                        </div>
-                    </div>
-                </>
-            )}
-
-            <div className="my-6 border-t border-[#262626]" />
-
-            {/* Fanart.tv */}
-            <SettingsRow
-                label="Enable Fanart.tv"
-                description="Enhanced artist and album artwork"
-                htmlFor="fanart-enabled"
-            >
-                <SettingsToggle
-                    id="fanart-enabled"
-                    checked={settings.fanartEnabled}
-                    onChange={(checked) => onUpdate({ fanartEnabled: checked })}
-                />
-            </SettingsRow>
-
-            {settings.fanartEnabled && (
-                <>
-                    <SettingsRow label="API Key">
-                        <SettingsInput
-                            type="password"
-                            value={settings.fanartApiKey}
-                            onChange={(v) => onUpdate({ fanartApiKey: v })}
-                            placeholder="Enter Fanart.tv API key"
-                            className="w-64"
-                        />
-                    </SettingsRow>
-
-                    <div className="pt-2">
-                        <div className="inline-flex items-center gap-3">
-                            <button
-                                onClick={handleFanartTest}
-                                disabled={isTesting || !settings.fanartApiKey}
-                                className="px-4 py-1.5 text-sm bg-[#333] text-white rounded-full
-                                    hover:bg-[#404040] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            >
-                                {fanartTestStatus === "loading" ? "Testing..." : "Test Connection"}
-                            </button>
-                            <InlineStatus
-                                status={fanartTestStatus}
-                                message={fanartTestMessage}
-                                onClear={() => setFanartTestStatus("idle")}
                             />
                         </div>
                     </div>

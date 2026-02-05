@@ -634,16 +634,10 @@ Return ONLY valid JSON:
 
     /**
      * Check if OpenRouter is configured and available
-     * Returns true if: API key is set in env AND feature is enabled in settings
+     * Returns true if: API key is set in env
      */
     async isAvailable(): Promise<boolean> {
-        // API key must be set via environment variable
-        if (!config.openrouter.apiKey) {
-            return false;
-        }
-        // Feature must be enabled in settings
-        const settings = await getSystemSettings();
-        return !!settings?.openrouterEnabled;
+        return !!config.openrouter.apiKey;
     }
 
     /**

@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { SettingsSection, SettingsRow } from "../ui";
 import { api } from "@/lib/api";
-import { CheckCircle, Loader2, Music2, AlertCircle } from "lucide-react";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { CheckCircle, Loader2, AlertCircle, User, Activity, Tag } from "lucide-react";
 
 interface GenreTaggingStatus {
     running: boolean;
@@ -39,7 +40,86 @@ function ProgressBar({
     );
 }
 
+// Enrichment stage component
+function EnrichmentStage({
+    icon: Icon,
+    label,
+    description,
+    completed,
+    total,
+    progress,
+    isBackground = false,
+    failed = 0,
+    skipped = 0,
+    processing = 0,
+    showAllStats = false,
+}: {
+    icon: React.ElementType;
+    label: string;
+    description: string;
+    completed: number;
+    total: number;
+    progress: number;
+    isBackground?: boolean;
+    failed?: number;
+    skipped?: number;
+    processing?: number;
+    showAllStats?: boolean;
+}) {
+    // Complete when: 100% OR (no processing AND all tracks accounted for by completed+skipped+failed)
+    const allAccountedFor = (completed + skipped + failed) >= total && total > 0;
+    const isComplete = progress === 100 || (processing === 0 && allAccountedFor);
+    const hasActivity = processing > 0;
+    
+    return (
+        <div className="flex items-start gap-3 py-2">
+            <div className={`mt-0.5 p-1.5 rounded-lg ${isComplete ? "bg-green-500/20" : "bg-white/5"}`}>
+                {isComplete ? (
+                    <CheckCircle className="w-4 h-4 text-green-400" />
+                ) : hasActivity ? (
+                    <Loader2 className="w-4 h-4 text-brand animate-spin" />
+                ) : (
+                    <Icon className="w-4 h-4 text-white/40" />
+                )}
+            </div>
+            <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-white">{label}</span>
+                    {isBackground && !isComplete && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-white/50">
+                            background
+                        </span>
+                    )}
+                </div>
+                <p className="text-xs text-white/40 mt-0.5">{description}</p>
+                <div className="flex items-center gap-2 mt-2">
+                    <ProgressBar 
+                        progress={progress} 
+                        color={isComplete ? "bg-green-500" : isBackground ? "bg-purple-500" : "bg-brand"}
+                    />
+                </div>
+                <div className="flex items-center gap-3 mt-1 text-[10px] text-white/30">
+                    <span>{completed} / {total}</span>
+                    {processing > 0 && <span className="text-brand">{processing} processing</span>}
+                    {(showAllStats || skipped > 0) && (
+                        <span className="text-orange-400">{skipped} skipped</span>
+                    )}
+                    {(showAllStats || failed > 0) && (
+                        <span className={failed > 0 ? "text-red-400" : "text-white/30"}>{failed} errors</span>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export function LibrarySection() {
+    const [syncing, setSyncing] = useState(false);
+    const [reEnriching, setReEnriching] = useState(false);
+    const [cleaningOrphans, setCleaningOrphans] = useState(false);
+    const [enrichmentError, setEnrichmentError] = useState<string | null>(null);
+    const [cleanOrphansError, setCleanOrphansError] = useState<string | null>(null);
+    const [cleanOrphansResult, setCleanOrphansResult] = useState<string | null>(null);
     const [status, setStatus] = useState<GenreTaggingStatus | null>(null);
     const [isStarting, setIsStarting] = useState(false);
     const [forceRetag, setForceRetag] = useState(false);
@@ -50,6 +130,69 @@ export function LibrarySection() {
         skipped: number;
         duration: string;
     } | null>(null);
+    const queryClient = useQueryClient();
+
+    // Fetch enrichment progress
+    const { data: enrichmentProgress, refetch: refetchProgress } = useQuery({
+        queryKey: ["enrichment-progress"],
+        queryFn: () => api.getEnrichmentProgress(),
+        refetchInterval: 5000,
+        staleTime: 2000,
+    });
+
+    const refreshNotifications = () => {
+        queryClient.invalidateQueries({ queryKey: ["notifications"] });
+        queryClient.invalidateQueries({ queryKey: ["unread-notification-count"] });
+        window.dispatchEvent(new CustomEvent("notifications-changed"));
+    };
+
+    const handleSyncAndEnrich = async () => {
+        setSyncing(true);
+        setEnrichmentError(null);
+        try {
+            await api.post("/podcasts/sync-covers", {});
+            await api.startLibraryEnrichment();
+            refreshNotifications();
+            refetchProgress();
+        } catch (err) {
+            console.error("Sync error:", err);
+            setEnrichmentError("Failed to sync");
+        } finally {
+            setSyncing(false);
+        }
+    };
+
+    const handleFullEnrichment = async () => {
+        setReEnriching(true);
+        setEnrichmentError(null);
+        try {
+            await api.triggerFullEnrichment();
+            refreshNotifications();
+            refetchProgress();
+        } catch (err) {
+            console.error("Full enrichment error:", err);
+            setEnrichmentError("Failed to start full enrichment");
+        } finally {
+            setReEnriching(false);
+        }
+    };
+
+    const handleCleanOrphans = async () => {
+        setCleaningOrphans(true);
+        setCleanOrphansError(null);
+        setCleanOrphansResult(null);
+        try {
+            const result = await api.cleanOrphanedTracks();
+            setCleanOrphansResult(
+                `Removed ${result.deleted} orphaned tracks (checked ${result.checked}).`
+            );
+        } catch (err) {
+            console.error("Clean orphans error:", err);
+            setCleanOrphansError("Failed to clean orphaned tracks");
+        } finally {
+            setCleaningOrphans(false);
+        }
+    };
 
     // Poll for status while running
     const fetchStatus = useCallback(async () => {
@@ -120,19 +263,105 @@ export function LibrarySection() {
 
     return (
         <SettingsSection id="library" title="Library Management">
+            {/* Library Enrichment */}
+            {enrichmentProgress && (
+                <div className="mb-6 p-4 bg-white/5 rounded-lg border border-white/10">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-sm font-medium text-white">Library Enrichment</h3>
+                        {enrichmentProgress.coreComplete && !enrichmentProgress.isFullyComplete && (
+                            <span className="text-xs text-purple-400 flex items-center gap-1">
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                Audio analysis running
+                            </span>
+                        )}
+                        {enrichmentProgress.isFullyComplete && (
+                            <span className="text-xs text-green-400 flex items-center gap-1">
+                                <CheckCircle className="w-3 h-3" />
+                                Complete
+                            </span>
+                        )}
+                    </div>
+                    
+                    <div className="space-y-1">
+                        <EnrichmentStage
+                            icon={User}
+                            label="Artist Metadata"
+                            description="Bios, images, and similar artists from Last.fm"
+                            completed={enrichmentProgress.artists.completed}
+                            total={enrichmentProgress.artists.total}
+                            progress={enrichmentProgress.artists.progress}
+                            failed={enrichmentProgress.artists.failed}
+                        />
+                        
+                        <EnrichmentStage
+                            icon={Activity}
+                            label="Audio Analysis"
+                            description="BPM, key, energy, and danceability from audio files"
+                            completed={enrichmentProgress.audioAnalysis.completed}
+                            total={enrichmentProgress.audioAnalysis.total}
+                            progress={enrichmentProgress.audioAnalysis.progress}
+                            processing={enrichmentProgress.audioAnalysis.processing}
+                            failed={enrichmentProgress.audioAnalysis.failed}
+                            skipped={enrichmentProgress.audioAnalysis.skipped}
+                            isBackground={true}
+                            showAllStats={true}
+                        />
+
+                        <EnrichmentStage
+                            icon={Tag}
+                            label="Genre Tags"
+                            description="Album genres from Last.fm"
+                            completed={enrichmentProgress.genreTags.completed}
+                            total={enrichmentProgress.genreTags.total}
+                            progress={enrichmentProgress.genreTags.progress}
+                        />
+                    </div>
+                    
+                    <div className="flex gap-2 mt-4 pt-3 border-t border-white/10">
+                        <button
+                            onClick={handleSyncAndEnrich}
+                            disabled={syncing || reEnriching}
+                            className="px-3 py-1.5 text-xs bg-white text-black font-medium rounded-full
+                                hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed transition-transform"
+                        >
+                            {syncing ? "Syncing..." : "Sync New"}
+                        </button>
+                        <button
+                            onClick={handleFullEnrichment}
+                            disabled={syncing || reEnriching}
+                            className="px-3 py-1.5 text-xs bg-[#333] text-white rounded-full
+                                hover:bg-[#404040] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            {reEnriching ? "Starting..." : "Re-enrich All"}
+                        </button>
+                        <button
+                            onClick={handleCleanOrphans}
+                            disabled={syncing || reEnriching || cleaningOrphans}
+                            className="px-3 py-1.5 text-xs bg-[#333] text-white rounded-full
+                                hover:bg-[#404040] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            {cleaningOrphans ? "Cleaning..." : "Clean Orphans"}
+                        </button>
+                    </div>
+                    {enrichmentError && (
+                        <p className="mt-3 text-sm text-red-400">{enrichmentError}</p>
+                    )}
+                    {cleanOrphansError && (
+                        <p className="mt-3 text-sm text-red-400">{cleanOrphansError}</p>
+                    )}
+                    {cleanOrphansResult && (
+                        <p className="mt-3 text-sm text-green-400">{cleanOrphansResult}</p>
+                    )}
+                </div>
+            )}
             {/* Genre Tagging */}
             <div className="p-4 bg-white/5 rounded-lg border border-white/10">
-                <div className="flex items-start gap-3 mb-4">
-                    <div className="p-2 rounded-lg bg-amber-500/20">
-                        <Music2 className="w-5 h-5 text-amber-400" />
-                    </div>
-                    <div className="flex-1">
-                        <h3 className="text-sm font-medium text-white">Genre Tagging</h3>
-                        <p className="text-xs text-white/50 mt-1">
-                            Fetch genre tags from Last.fm for all albums in your library. 
-                            This updates the database only — your music files are not modified.
-                        </p>
-                    </div>
+                <div className="mb-4">
+                    <h3 className="text-sm font-medium text-white">Genre Tagging</h3>
+                    <p className="text-xs text-white/50 mt-1">
+                        Fetch genre tags from Last.fm for all albums in your library. 
+                        This updates the database only — your music files are not modified.
+                    </p>
                 </div>
 
                 {/* Progress display when running */}
@@ -196,7 +425,7 @@ export function LibrarySection() {
                     <button
                         onClick={handleStartTagging}
                         disabled={isRunning || isStarting}
-                        className="px-4 py-2 text-sm bg-white text-black font-medium rounded-full
+                        className="px-3 py-1.5 text-xs bg-white text-black font-medium rounded-full
                             hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed 
                             disabled:hover:scale-100 transition-transform"
                     >

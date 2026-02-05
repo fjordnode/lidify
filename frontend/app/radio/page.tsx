@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Radio, Play, Loader2, Shuffle, ChevronLeft, ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { api, MoodBucketPreset, MoodType } from "@/lib/api";
 import { useRemoteAwareAudioControls } from "@/lib/remote-aware-audio-controls-context";
 import { Track } from "@/lib/audio-state-context";
 import { toast } from "sonner";
@@ -14,7 +14,7 @@ interface RadioStation {
     description: string;
     color: string;
     filter: {
-        type: "genre" | "decade" | "discovery" | "favorites" | "all";
+        type: "genre" | "decade" | "mood" | "discovery" | "favorites" | "all";
         value?: string;
     };
     minTracks?: number;
@@ -248,6 +248,46 @@ const getDecadeDescription = (decade: number, count: number): string => {
     return `${decade}-${decade + 9} • ${count} tracks`;
 };
 
+const formatCount = (count: number): string => {
+    return count >= 1000 ? `${(count / 1000).toFixed(1)}k` : count.toString();
+};
+
+const MOOD_ORDER: MoodType[] = [
+    "happy",
+    "energetic",
+    "party",
+    "chill",
+    "focus",
+    "acoustic",
+    "melancholy",
+    "sad",
+    "aggressive",
+];
+
+const MOOD_LABELS: Record<MoodType, string> = {
+    happy: "Happy & Upbeat",
+    energetic: "High Energy",
+    party: "Dance Party",
+    chill: "Chill & Relaxed",
+    focus: "Focus Mode",
+    acoustic: "Acoustic Vibes",
+    melancholy: "Deep Feels",
+    sad: "Melancholic",
+    aggressive: "Intense",
+};
+
+const MOOD_COLORS: Record<MoodType, string> = {
+    happy: "from-yellow-500/30 to-orange-500/30",
+    energetic: "from-orange-500/30 to-red-500/30",
+    party: "from-pink-500/30 to-purple-600/30",
+    chill: "from-teal-500/30 to-cyan-600/30",
+    focus: "from-emerald-500/30 to-green-600/30",
+    acoustic: "from-amber-600/30 to-yellow-600/30",
+    melancholy: "from-slate-600/30 to-gray-700/30",
+    sad: "from-blue-600/30 to-indigo-700/30",
+    aggressive: "from-red-600/30 to-rose-700/30",
+};
+
 
 
 // Radio Station Card Component
@@ -265,13 +305,13 @@ function RadioStationCard({
     const sizeClasses = {
         large: "aspect-[3/2] md:col-span-2 md:row-span-1",
         normal: "aspect-[4/3]",
-        small: "aspect-[5/3]",
+        small: "aspect-[16/9]",
     };
     
     const textSizes = {
         large: { title: "text-base md:text-lg", desc: "text-sm" },
         normal: { title: "text-sm", desc: "text-xs" },
-        small: { title: "text-xs", desc: "text-[10px]" },
+        small: { title: "text-base", desc: "text-xs" },
     };
     
     return (
@@ -494,23 +534,39 @@ export default function RadioPage() {
     const [loadingStation, setLoadingStation] = useState<string | null>(null);
     const [genres, setGenres] = useState<GenreCount[]>([]);
     const [decades, setDecades] = useState<DecadeCount[]>([]);
+    const [moodPresets, setMoodPresets] = useState<MoodBucketPreset[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
     // Fetch available genres and decades from library
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [genresRes, decadesRes] = await Promise.all([
+                const [genresRes, decadesRes, moodRes] = await Promise.allSettled([
                     api.get<{ genres: GenreCount[] }>("/library/genres"),
                     api.get<{ decades: DecadeCount[] }>("/library/decades"),
+                    api.getMoodBucketPresets(),
                 ]);
                 
-                // Filter to genres with enough tracks (at least 15)
-                const validGenres = (genresRes.genres || []).filter((g) => g.count >= 15);
-                setGenres(validGenres);
-                
-                // Decades already filtered by backend (15+ tracks)
-                setDecades(decadesRes.decades || []);
+                if (genresRes.status === "fulfilled") {
+                    // Filter to genres with enough tracks (at least 15)
+                    const validGenres = (genresRes.value.genres || []).filter((g) => g.count >= 15);
+                    setGenres(validGenres);
+                } else {
+                    console.error("Failed to fetch genres:", genresRes.reason);
+                }
+
+                if (decadesRes.status === "fulfilled") {
+                    // Decades already filtered by backend (15+ tracks)
+                    setDecades(decadesRes.value.decades || []);
+                } else {
+                    console.error("Failed to fetch decades:", decadesRes.reason);
+                }
+
+                if (moodRes.status === "fulfilled") {
+                    setMoodPresets(moodRes.value || []);
+                } else {
+                    console.error("Failed to fetch mood presets:", moodRes.reason);
+                }
             } catch (error) {
                 console.error("Failed to fetch radio data:", error);
             } finally {
@@ -589,6 +645,24 @@ export default function RadioPage() {
         minTracks: 15,
     }));
 
+    const moodCounts = useMemo(() => {
+        return new Map(moodPresets.map((preset) => [preset.id, preset.trackCount]));
+    }, [moodPresets]);
+
+    const moodStations: RadioStation[] = useMemo(() => {
+        return MOOD_ORDER.map((mood) => {
+            const count = moodCounts.get(mood) ?? 0;
+            return {
+                id: `mood-${mood}`,
+                name: MOOD_LABELS[mood],
+                description: count > 0 ? `${formatCount(count)} tracks` : "Mood mix",
+                color: MOOD_COLORS[mood],
+                filter: { type: "mood" as const, value: mood },
+                minTracks: 8,
+            };
+        });
+    }, [moodCounts]);
+
     return (
         <div className="min-h-screen relative">
             {/* Hero gradient */}
@@ -644,9 +718,37 @@ export default function RadioPage() {
                                 station={station}
                                 onPlay={() => startRadio(station)}
                                 isLoading={loadingStation === station.id}
+                                size="small"
                             />
                         ))}
                     </div>
+                </section>
+
+                {/* Mood Section */}
+                <section className="mb-10">
+                    <SectionHeader
+                        title="By Mood"
+                        description="Music for every feeling"
+                    />
+                    {isLoading && moodPresets.length === 0 ? (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                            {Array.from({ length: 6 }).map((_, i) => (
+                                <div key={i} className="aspect-[16/9] rounded-lg bg-white/5 animate-pulse" />
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                            {moodStations.map((station) => (
+                                <RadioStationCard
+                                    key={station.id}
+                                    station={station}
+                                    onPlay={() => startRadio(station)}
+                                    isLoading={loadingStation === station.id}
+                                    size="small"
+                                />
+                            ))}
+                        </div>
+                    )}
                 </section>
 
                 {/* Genres Section - Redesigned with hierarchy */}
@@ -687,7 +789,7 @@ export default function RadioPage() {
                         {isLoading ? (
                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                                 {Array.from({ length: 6 }).map((_, i) => (
-                                    <div key={i} className="aspect-[4/3] rounded-lg bg-white/5 animate-pulse" />
+                                    <div key={i} className="aspect-[16/9] rounded-lg bg-white/5 animate-pulse" />
                                 ))}
                             </div>
                         ) : (
@@ -698,6 +800,7 @@ export default function RadioPage() {
                                         station={station}
                                         onPlay={() => startRadio(station)}
                                         isLoading={loadingStation === station.id}
+                                        size="small"
                                     />
                                 ))}
                             </div>
@@ -705,13 +808,7 @@ export default function RadioPage() {
                     </section>
                 )}
 
-                {/* Info */}
-                <div className="mt-12 p-4 rounded-lg bg-white/5 border border-white/10">
-                    <h3 className="text-sm font-semibold text-white mb-2">About Radio Stations</h3>
-                    <p className="text-sm text-white/60">
-                        Browse your library by genre. Click a genre to shuffle all matching tracks, or expand to see sub-genres.
-                    </p>
-                </div>
+
             </div>
         </div>
     );

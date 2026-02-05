@@ -297,6 +297,98 @@ router.post("/re-enrich-all", async (req, res) => {
     }
 });
 
+// POST /library/clean-orphans - Remove tracks whose files no longer exist (admin only)
+router.post("/clean-orphans", requireAdmin, async (req, res) => {
+    try {
+        const musicRoot = config.music.musicPath;
+        if (!musicRoot) {
+            return res.json({
+                deleted: 0,
+                checked: 0,
+                message: "Music path not configured. Skipping orphan cleanup.",
+            });
+        }
+
+        const hasMusicRoot = fs.existsSync(musicRoot);
+        if (!hasMusicRoot) {
+            return res.json({
+                deleted: 0,
+                checked: 0,
+                message: "Music path not found. Skipping orphan cleanup.",
+            });
+        }
+
+        const settings = await prisma.systemSettings.findFirst();
+        const downloadPath = settings?.downloadPath || "/soulseek-downloads";
+        const hasDownloadRoot = downloadPath && fs.existsSync(downloadPath);
+
+        const resolveCandidate = (root: string, filePath: string): string | null => {
+            const normalizedFilePath = filePath.replace(/\\/g, "/");
+            const normalizedRoot = path.normalize(root);
+            const candidate = path.normalize(path.join(root, normalizedFilePath));
+            if (!candidate.startsWith(normalizedRoot + path.sep) && candidate !== normalizedRoot) {
+                return null;
+            }
+            return candidate;
+        };
+
+        const batchSize = 1000;
+        let checked = 0;
+        let deleted = 0;
+        let lastId: string | null = null;
+
+        while (true) {
+            const tracks = await prisma.track.findMany({
+                select: { id: true, filePath: true },
+                orderBy: { id: "asc" },
+                take: batchSize,
+                ...(lastId ? { skip: 1, cursor: { id: lastId } } : {}),
+            });
+
+            if (tracks.length === 0) break;
+
+            const missingTrackIds: string[] = [];
+
+            for (const track of tracks) {
+                checked += 1;
+
+                if (!track.filePath) {
+                    missingTrackIds.push(track.id);
+                    continue;
+                }
+
+                const candidateMusic = resolveCandidate(musicRoot, track.filePath);
+                const candidateDownload =
+                    hasDownloadRoot && downloadPath
+                        ? resolveCandidate(downloadPath, track.filePath)
+                        : null;
+
+                const exists =
+                    (candidateMusic && fs.existsSync(candidateMusic)) ||
+                    (candidateDownload && fs.existsSync(candidateDownload));
+
+                if (!exists) {
+                    missingTrackIds.push(track.id);
+                }
+            }
+
+            if (missingTrackIds.length > 0) {
+                const result = await prisma.track.deleteMany({
+                    where: { id: { in: missingTrackIds } },
+                });
+                deleted += result.count;
+            }
+
+            lastId = tracks[tracks.length - 1].id;
+        }
+
+        return res.json({ deleted, checked });
+    } catch (error: any) {
+        console.error("[Library] Clean orphans error:", error?.message || error);
+        return res.status(500).json({ error: "Failed to clean orphaned tracks" });
+    }
+});
+
 // GET /library/recently-listened?limit=10
 router.get("/recently-listened", async (req, res) => {
     try {
@@ -4444,74 +4536,26 @@ router.get("/radio", async (req, res) => {
                 break;
 
             case "mood":
-                // Mood-based filtering using audio analysis features
-                const moodValue = ((value as string) || "").toLowerCase();
-                let moodWhere: any = { analysisStatus: "completed" };
+                const moodValue = (value?.toLowerCase() || "happy");
 
-                switch (moodValue) {
-                    case "high-energy":
-                        moodWhere = {
-                            analysisStatus: "completed",
-                            energy: { gte: 0.7 },
-                            bpm: { gte: 120 },
-                        };
-                        break;
-                    case "chill":
-                        moodWhere = {
-                            analysisStatus: "completed",
-                            OR: [
-                                { energy: { lte: 0.4 } },
-                                { arousal: { lte: 0.4 } },
-                            ],
-                        };
-                        break;
-                    case "happy":
-                        moodWhere = {
-                            analysisStatus: "completed",
-                            valence: { gte: 0.6 },
-                            energy: { gte: 0.5 },
-                        };
-                        break;
-                    case "melancholy":
-                        moodWhere = {
-                            analysisStatus: "completed",
-                            OR: [
-                                { valence: { lte: 0.4 } },
-                                { keyScale: "minor" },
-                            ],
-                        };
-                        break;
-                    case "dance":
-                        moodWhere = {
-                            analysisStatus: "completed",
-                            danceability: { gte: 0.7 },
-                        };
-                        break;
-                    case "acoustic":
-                        moodWhere = {
-                            analysisStatus: "completed",
-                            acousticness: { gte: 0.6 },
-                        };
-                        break;
-                    case "instrumental":
-                        moodWhere = {
-                            analysisStatus: "completed",
-                            instrumentalness: { gte: 0.7 },
-                        };
-                        break;
-                    default:
-                        // Try Last.fm tags if mood not recognized
-                        moodWhere = {
-                            lastfmTags: { has: moodValue },
-                        };
+                const moodBuckets = await prisma.moodBucket.findMany({
+                    where: { mood: moodValue, score: { gte: 0.5 } },
+                    select: { trackId: true },
+                    take: 1000,
+                });
+
+                if (moodBuckets.length === 0) {
+                    return res.json({ tracks: [], total: 0 });
                 }
 
+                const moodTrackIds = moodBuckets.map((bucket) => bucket.trackId);
                 const moodTracks = await prisma.track.findMany({
-                    where: moodWhere,
-                    select: { id: true },
-                    take: limitNum * 3,
+                    where: { id: { in: moodTrackIds } },
+                    include: { album: { select: { artist: { select: { id: true } } } } },
                 });
-                trackIds = moodTracks.map((t) => t.id);
+
+                const diverseMoodTracks = diversifyTracksByArtist(moodTracks, 3);
+                trackIds = diverseMoodTracks.slice(0, limitNum).map((t) => t.id);
                 break;
 
             case "workout":

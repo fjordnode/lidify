@@ -20,31 +20,33 @@ import {
 // Section components
 import { AccountSection } from "@/features/settings/components/sections/AccountSection";
 import { PlaybackSection } from "@/features/settings/components/sections/PlaybackSection";
-import { DownloadPreferencesSection } from "@/features/settings/components/sections/DownloadPreferencesSection";
+import { SubsonicSection } from "@/features/settings/components/sections/SubsonicSection";
 import { LidarrSection } from "@/features/settings/components/sections/LidarrSection";
-
 import { SoulseekSection } from "@/features/settings/components/sections/SoulseekSection";
 import { AIServicesSection } from "@/features/settings/components/sections/AIServicesSection";
+import { ArtworkSection } from "@/features/settings/components/sections/ArtworkSection";
 import { StoragePathsSection } from "@/features/settings/components/sections/StoragePathsSection";
 import { CacheSection } from "@/features/settings/components/sections/CacheSection";
 import { LibrarySection } from "@/features/settings/components/sections/LibrarySection";
 import { UserManagementSection } from "@/features/settings/components/sections/UserManagementSection";
-import { SubsonicSection } from "@/features/settings/components/sections/SubsonicSection";
 
-// Define sidebar items
+// Define sidebar items - organized by logical groupings
 const sidebarItems: SidebarItem[] = [
+    // User Settings (all users)
     { id: "account", label: "Account" },
-    { id: "subsonic", label: "Subsonic" },
     { id: "playback", label: "Playback" },
-    { id: "download-preferences", label: "Download Preferences", adminOnly: true },
-    { id: "lidarr", label: "Download Services", adminOnly: true },
-
-    { id: "soulseek", label: "P2P Networks", adminOnly: true },
-    { id: "ai-services", label: "Artwork", adminOnly: true },
+    { id: "subsonic", label: "Subsonic" },
+    // Download Sources (admin)
+    { id: "lidarr", label: "Album Downloads", adminOnly: true },
+    { id: "soulseek", label: "Track Downloads", adminOnly: true },
+    // AI & Enrichment (admin)
+    { id: "ai-services", label: "AI Services", adminOnly: true },
+    { id: "artwork", label: "Artwork Sources", adminOnly: true },
+    // System (admin)
     { id: "storage", label: "Storage", adminOnly: true },
     { id: "cache", label: "Cache & Automation", adminOnly: true },
     { id: "library", label: "Library Management", adminOnly: true },
-    { id: "users", label: "Users", adminOnly: true },
+    { id: "users", label: "User Management", adminOnly: true },
 ];
 
 export default function SettingsPage() {
@@ -148,11 +150,12 @@ export default function SettingsPage() {
     return (
         <>
             <SettingsLayout sidebarItems={sidebarItems} isAdmin={isAdmin}>
+                {/* ═══════════════════════════════════════════════════════════
+                    USER SETTINGS (all users)
+                ═══════════════════════════════════════════════════════════ */}
+                
                 {/* Account Section */}
                 <AccountSection />
-
-                {/* Subsonic Section */}
-                <SubsonicSection />
 
                 {/* Playback Section */}
                 <PlaybackSection
@@ -160,15 +163,18 @@ export default function SettingsPage() {
                     onChange={(quality) => updateUserSettings({ playbackQuality: quality })}
                 />
 
-                {/* Admin-only sections */}
+                {/* Subsonic Section - API compatibility for external apps */}
+                <SubsonicSection />
+
+                {/* ═══════════════════════════════════════════════════════════
+                    ADMIN-ONLY SECTIONS
+                ═══════════════════════════════════════════════════════════ */}
                 {isAdmin && (
                     <>
-                        {/* Download Preferences */}
-                        <DownloadPreferencesSection
-                            settings={systemSettings}
-                            onUpdate={updateSystemSettings}
-                        />
-
+                        {/* ─────────────────────────────────────────────────────
+                            Download Sources
+                        ───────────────────────────────────────────────────── */}
+                        
                         {/* Download Services - Lidarr */}
                         <LidarrSection
                             settings={systemSettings}
@@ -185,14 +191,30 @@ export default function SettingsPage() {
                             isTesting={testingServices.soulseek || false}
                         />
 
-                        {/* AI Services */}
+                        {/* ─────────────────────────────────────────────────────
+                            AI & Enrichment
+                        ───────────────────────────────────────────────────── */}
+                        
+                        {/* AI Services - OpenRouter */}
                         <AIServicesSection
                             settings={systemSettings}
                             onUpdate={updateSystemSettings}
                             onTest={handleTestService}
-                            isTesting={testingServices.openrouter || testingServices.fanart || false}
+                            isTesting={testingServices.openrouter || false}
                         />
 
+                        {/* Artwork Sources - Fanart.tv */}
+                        <ArtworkSection
+                            settings={systemSettings}
+                            onUpdate={updateSystemSettings}
+                            onTest={handleTestService}
+                            isTesting={testingServices.fanart || false}
+                        />
+
+                        {/* ─────────────────────────────────────────────────────
+                            System
+                        ───────────────────────────────────────────────────── */}
+                        
                         {/* Storage */}
                         <StoragePathsSection
                             settings={systemSettings}

@@ -29,7 +29,7 @@ export function SettingsSection({
             </div>
             
             {showSeparator && (
-                <div className="border-t border-white/5 mt-6 mb-6" />
+                <div className="border-t border-white/10 mt-8 mb-8" />
             )}
         </section>
     );

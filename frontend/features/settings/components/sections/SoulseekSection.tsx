@@ -37,13 +37,13 @@ export function SoulseekSection({ settings, onUpdate, onTest, isTesting }: Souls
     return (
         <SettingsSection
             id="soulseek"
-            title="Download Sources"
-            description="Configure download sources for playlist imports and track downloads"
+            title="Track Downloads"
+            description="Download individual tracks for playlist imports"
         >
             {/* Soulseek Toggle */}
             <SettingsRow
                 label="Enable Soulseek"
-                description="Use Soulseek P2P network for high-quality downloads (FLAC/MP3)"
+                description="Use Soulseek for track downloads (FLAC/MP3)"
                 htmlFor="soulseek-enabled"
             >
                 <SettingsToggle
@@ -116,7 +116,7 @@ export function SoulseekSection({ settings, onUpdate, onTest, isTesting }: Souls
             {/* YouTube Toggle */}
             <SettingsRow
                 label="Enable YouTube Music"
-                description="Use YouTube Music as fallback for streaming and downloads (MP3)"
+                description="Fallback when Soulseek fails or is disabled (MP3)"
                 htmlFor="youtube-enabled"
             >
                 <SettingsToggle
@@ -135,7 +135,7 @@ export function SoulseekSection({ settings, onUpdate, onTest, isTesting }: Souls
             )}
 
             <p className="text-xs text-white/40 mt-4">
-                When both are enabled, Soulseek is tried first (better quality), with YouTube as fallback.
+                Track downloads try Soulseek first for quality, then fall back to YouTube when needed.
             </p>
         </SettingsSection>
     );

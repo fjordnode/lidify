@@ -442,6 +442,13 @@ class ApiClient {
         });
     }
 
+    async cleanOrphanedTracks() {
+        return this.post<{ deleted: number; checked: number }>(
+            "/library/clean-orphans",
+            {}
+        );
+    }
+
     async getArtist(id: string, options?: { includeExternal?: boolean }) {
         const params = new URLSearchParams();
         if (options?.includeExternal) {
@@ -1801,6 +1808,11 @@ class ApiClient {
                 total: number;
                 enriched: number;
                 pending: number;
+                progress: number;
+            };
+            genreTags: {
+                completed: number;
+                total: number;
                 progress: number;
             };
             audioAnalysis: {

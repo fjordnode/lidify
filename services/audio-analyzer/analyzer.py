@@ -910,24 +910,23 @@ def _analyze_track_in_process(args: Tuple[str, str]) -> Tuple[str, str, Dict[str
                 file_path,
                 {"_error": "Skipped Opus file", "_skip": True},
             )
+
+        # Skip playlist downloads - only analyze main library
+        if normalized_path.startswith("Playlists/"):
+            return (
+                track_id,
+                file_path,
+                {"_error": "Skipped playlist track", "_skip": True},
+            )
+
         full_path = os.path.join(MUSIC_PATH, normalized_path)
 
-        if DOWNLOAD_PATH:
-            normalized_download_root = DOWNLOAD_PATH.replace("\\", "/").rstrip("/")
-            if full_path.startswith(normalized_download_root + "/"):
-                return (
-                    track_id,
-                    file_path,
-                    {"_error": "Skipped download/playlist path", "_skip": True},
-                )
-
-        if not os.path.exists(full_path) and DOWNLOAD_PATH:
-            fallback_path = os.path.join(DOWNLOAD_PATH, normalized_path)
-            if os.path.exists(fallback_path):
-                full_path = fallback_path
-
         if not os.path.exists(full_path):
-            return (track_id, file_path, {"_error": "File not found"})
+            return (
+                track_id,
+                file_path,
+                {"_error": "Skipped non-library track", "_skip": True},
+            )
 
         # Check file size before processing
         file_size_bytes = os.path.getsize(full_path)

@@ -85,7 +85,6 @@ model SystemSettings {
 
   // === AI Services ===
   // OpenRouter (multi-provider LLM gateway)
-  openrouterEnabled Boolean @default(false)
   openrouterModel   String? @default("openai/gpt-4o-mini")
 
   // Fanart.tv (for high-quality images - optional)

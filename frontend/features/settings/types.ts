@@ -19,7 +19,6 @@ export interface SystemSettings {
     lidarrApiKey: string;
     lidarrQualityProfileId: number | null;
     // AI Services (API key set via OPENROUTER_API_KEY environment variable)
-    openrouterEnabled: boolean;
     openrouterModel: string;
     fanartEnabled: boolean;
     fanartApiKey: string;
@@ -44,9 +43,6 @@ export interface SystemSettings {
     maxCacheSizeMb: number;
     autoSync: boolean;
     autoEnrichMetadata: boolean;
-    // Download Preferences
-    downloadSource: "soulseek" | "lidarr";
-    soulseekFallback: "none" | "lidarr";
 }
 
 export interface ApiKey {

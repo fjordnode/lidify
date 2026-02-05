@@ -104,7 +104,6 @@ const systemSettingsSchema = z.object({
     lidarrQualityProfileId: z.number().nullable().optional(),
 
     // AI Services (API key set via OPENROUTER_API_KEY environment variable)
-    openrouterEnabled: z.boolean().optional(),
     openrouterModel: z.string().optional(),
 
     fanartEnabled: z.boolean().optional(),
@@ -140,9 +139,6 @@ const systemSettingsSchema = z.object({
     downloadRetryAttempts: z.number().optional(),
     transcodeCacheMaxGb: z.number().optional(),
 
-    // Download Preferences
-    downloadSource: z.enum(["soulseek", "lidarr"]).optional(),
-    soulseekFallback: z.enum(["none", "lidarr"]).optional(),
 });
 
 // GET /system-settings
@@ -159,7 +155,6 @@ router.get("/", async (req, res) => {
                     id: "default",
                     lidarrEnabled: true,
                     lidarrUrl: "http://localhost:8686",
-                    openrouterEnabled: false,
                     openrouterModel: "openai/gpt-4o-mini",
                     fanartEnabled: false,
                     audiobookshelfEnabled: false,
