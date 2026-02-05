@@ -118,7 +118,33 @@ export function RemoteAwareAudioControlsProvider({ children }: { children: React
     const remote = useRemotePlayback();
 
     // Use getter functions to avoid stale closures - these always return current values
-    const { isActivePlayer, activePlayerId, activePlayerState, sendCommand, getIsActivePlayer, getActivePlayerId, getControlMode, getControlTargetId, controlMode, controlTargetId } = remote;
+    const {
+        isActivePlayer,
+        activePlayerId,
+        activePlayerState,
+        sendCommand,
+        getActivePlayerId,
+        getControlMode,
+        getControlTargetId,
+        currentDeviceId,
+        becomeActivePlayer,
+    } = remote;
+
+    const ensureLocalDeviceActive = useCallback(
+        (reason: string) => {
+            const currentActivePlayerId = getActivePlayerId();
+            if (!currentDeviceId) return;
+
+            // If another device is active, explicitly take ownership before local playback actions.
+            if (currentActivePlayerId !== null && currentActivePlayerId !== currentDeviceId) {
+                console.log(
+                    `[RemoteAware] Taking active player before local ${reason}: ${currentActivePlayerId} -> ${currentDeviceId}`
+                );
+                becomeActivePlayer();
+            }
+        },
+        [getActivePlayerId, currentDeviceId, becomeActivePlayer]
+    );
 
     // Helper to either execute locally or send to controlled device
     // CRITICAL: Uses getter functions to get CURRENT values, not stale closure values
@@ -137,7 +163,10 @@ export function RemoteAwareAudioControlsProvider({ children }: { children: React
             console.log(`[RemoteAware] ${command}: controlMode=${currentControlMode}, controlTargetId=${currentControlTargetId}, activePlayerId=${currentActivePlayerId}`);
 
             if (currentControlMode === "local") {
-                // Local mode - execute locally regardless of who's the active player
+                if (command !== "pause" && command !== "volume") {
+                    ensureLocalDeviceActive(command);
+                }
+                // Local mode - execute locally after taking ownership if needed
                 console.log(`[RemoteAware] Executing ${command} locally (local control mode)`);
                 localAction();
             } else if (currentControlTargetId) {
@@ -151,7 +180,7 @@ export function RemoteAwareAudioControlsProvider({ children }: { children: React
                 localAction();
             }
         },
-        [getControlMode, getControlTargetId, getActivePlayerId, sendCommand]
+        [getControlMode, getControlTargetId, getActivePlayerId, sendCommand, ensureLocalDeviceActive]
     );
 
     // Wrapped playback controls
@@ -196,6 +225,7 @@ export function RemoteAwareAudioControlsProvider({ children }: { children: React
             console.log(`[RemoteAware] skipForward: controlMode=${currentControlMode}, controlTargetId=${currentControlTargetId}`);
 
             if (currentControlMode === "local") {
+                ensureLocalDeviceActive("skipForward");
                 controls.skipForward(seconds);
             } else if (currentControlTargetId) {
                 // For skip, we send a relative seek command
@@ -204,7 +234,7 @@ export function RemoteAwareAudioControlsProvider({ children }: { children: React
                 controls.skipForward(seconds);
             }
         },
-        [getControlMode, getControlTargetId, sendCommand, controls.skipForward]
+        [getControlMode, getControlTargetId, sendCommand, controls.skipForward, ensureLocalDeviceActive]
     );
 
     const skipBackward = useCallback(
@@ -214,6 +244,7 @@ export function RemoteAwareAudioControlsProvider({ children }: { children: React
             console.log(`[RemoteAware] skipBackward: controlMode=${currentControlMode}, controlTargetId=${currentControlTargetId}`);
 
             if (currentControlMode === "local") {
+                ensureLocalDeviceActive("skipBackward");
                 controls.skipBackward(seconds);
             } else if (currentControlTargetId) {
                 sendCommand(currentControlTargetId, "seek", { relative: -seconds });
@@ -221,7 +252,7 @@ export function RemoteAwareAudioControlsProvider({ children }: { children: React
                 controls.skipBackward(seconds);
             }
         },
-        [getControlMode, getControlTargetId, sendCommand, controls.skipBackward]
+        [getControlMode, getControlTargetId, sendCommand, controls.skipBackward, ensureLocalDeviceActive]
     );
 
     // For playTrack - when controlling remotely, send the track to play
@@ -232,6 +263,7 @@ export function RemoteAwareAudioControlsProvider({ children }: { children: React
             console.log(`[RemoteAware] playTrack: controlMode=${currentControlMode}, controlTargetId=${currentControlTargetId}`);
 
             if (currentControlMode === "local") {
+                ensureLocalDeviceActive("playTrack");
                 controls.playTrack(track);
             } else if (currentControlTargetId) {
                 // Send playTrack command to remote device
@@ -240,7 +272,7 @@ export function RemoteAwareAudioControlsProvider({ children }: { children: React
                 controls.playTrack(track);
             }
         },
-        [getControlMode, getControlTargetId, sendCommand, controls.playTrack]
+        [getControlMode, getControlTargetId, sendCommand, controls.playTrack, ensureLocalDeviceActive]
     );
 
     // For playTracks - when controlling remotely, send the queue
@@ -259,6 +291,7 @@ export function RemoteAwareAudioControlsProvider({ children }: { children: React
             }
 
             if (currentControlMode === "local") {
+                ensureLocalDeviceActive("playTracks");
                 controls.playTracks(tracks, startIndex, isVibeQueue);
             } else if (currentControlTargetId) {
                 sendCommand(currentControlTargetId, "setQueue", { tracks, startIndex });
@@ -266,7 +299,7 @@ export function RemoteAwareAudioControlsProvider({ children }: { children: React
                 controls.playTracks(tracks, startIndex, isVibeQueue);
             }
         },
-        [getControlMode, getControlTargetId, sendCommand, controls.playTracks]
+        [getControlMode, getControlTargetId, sendCommand, controls.playTracks, ensureLocalDeviceActive]
     );
 
     // These controls are always local (UI state, not playback)

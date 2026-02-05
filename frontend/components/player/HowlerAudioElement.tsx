@@ -114,6 +114,24 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
     // Debounce timer for rapid podcast seeks
     const seekDebounceRef = useRef<NodeJS.Timeout | null>(null);
     const pendingSeekTimeRef = useRef<number | null>(null);
+    const loadWatchdogTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    const clearLoadWatchdogTimeout = useCallback(() => {
+        if (loadWatchdogTimeoutRef.current) {
+            clearTimeout(loadWatchdogTimeoutRef.current);
+            loadWatchdogTimeoutRef.current = null;
+        }
+    }, []);
+
+    const startLoadWatchdogTimeout = useCallback((loadId: number) => {
+        clearLoadWatchdogTimeout();
+        loadWatchdogTimeoutRef.current = setTimeout(() => {
+            if (loadIdRef.current !== loadId) return;
+            console.warn("[HowlerAudioElement] Load watchdog timeout - clearing loading state");
+            isLoadingRef.current = false;
+            loadWatchdogTimeoutRef.current = null;
+        }, 15000);
+    }, [clearLoadWatchdogTimeout]);
 
     // Reset duration when nothing is playing
     useEffect(() => {
@@ -390,13 +408,13 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
     // Load and play audio when track changes
     useEffect(() => {
         const loadAudio = async () => {
-            // If we're in remote control mode, NEVER load audio on this device.
-            // This prevents the controller device from trying to resolve streams
-            // (and falling back to YouTube) based on incomplete track data.
-            if (controlModeRef.current === "remote") {
+            // If we're in remote control mode OR this device is not the active player,
+            // NEVER load audio on this device.
+            if (controlModeRef.current === "remote" || !isActivePlayerRef.current) {
                 howlerEngine.stop();
                 lastTrackIdRef.current = null;
                 isLoadingRef.current = false;
+                clearLoadWatchdogTimeout();
                 return;
             }
 
@@ -410,6 +428,7 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
                 howlerEngine.stop();
                 lastTrackIdRef.current = null;
                 isLoadingRef.current = false;
+                clearLoadWatchdogTimeout();
                 return;
             }
 
@@ -422,13 +441,13 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
                 const shouldPlay = lastPlayingStateRef.current || isPlaying;
                 const isCurrentlyPlaying = howlerEngine.isPlaying();
 
-                // Only play if this device is in local mode
-                const canPlayLocally = controlModeRef.current === "local";
+                // Only play if this device is in local mode AND is active player
+                const canPlayLocally = controlModeRef.current === "local" && isActivePlayerRef.current;
                 if (shouldPlay && !isCurrentlyPlaying && canPlayLocally) {
                     // Resume from current position (don't seek to 0)
                     howlerEngine.play();
                 } else if (shouldPlay && !canPlayLocally) {
-                    console.log("[HowlerAudioElement] Blocking same-track play - in remote mode");
+                    console.log("[HowlerAudioElement] Blocking same-track play - not local active player");
                 }
                 return;
             }
@@ -439,6 +458,7 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
             lastTrackIdRef.current = currentMediaId;
             loadIdRef.current += 1;
             const thisLoadId = loadIdRef.current;
+            startLoadWatchdogTimeout(thisLoadId);
 
         let streamUrl: string | null = null;
         let startTime = 0;
@@ -487,6 +507,7 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
                         // Track has no local file and no YouTube match - skip to next
                         toast.error(`Track unavailable: ${currentTrack.title}`);
                         isLoadingRef.current = false;
+                        clearLoadWatchdogTimeout();
                         next();
                         return;
                     }
@@ -494,6 +515,7 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
                     console.error("[HowlerAudioElement] YouTube match error:", error);
                     toast.error(`Failed to stream: ${currentTrack.title}`);
                     isLoadingRef.current = false;
+                    clearLoadWatchdogTimeout();
                     next();
                     return;
                 }
@@ -555,6 +577,7 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
                 if (loadIdRef.current !== thisLoadId) return;
 
                 isLoadingRef.current = false;
+                clearLoadWatchdogTimeout();
 
                 if (startTime > 0) {
                     howlerEngine.seek(startTime);
@@ -575,8 +598,9 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
 
                 console.log(`[HowlerAudioElement] handleLoaded: shouldAutoPlay=${shouldAutoPlay}, lastPlayingState=${lastPlayingStateRef.current}, wasHowlerPlaying=${wasHowlerPlayingBeforeLoad}`);
 
-                // Only autoplay if this device is in local mode AND play isn't already pending
-                const canPlayLocally = controlModeRef.current === "local";
+                // Only autoplay if this device is in local mode, is active player,
+                // and play isn't already pending.
+                const canPlayLocally = controlModeRef.current === "local" && isActivePlayerRef.current;
                 if (shouldAutoPlay && canPlayLocally && !howlerEngine.isPendingPlay()) {
                     console.log("[HowlerAudioElement] Calling howlerEngine.play() from handleLoaded");
                     howlerEngine.play();
@@ -584,7 +608,7 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
                         setIsPlaying(true);
                     }
                 } else if (shouldAutoPlay && !canPlayLocally) {
-                    console.log("[HowlerAudioElement] Blocking autoplay - in remote mode");
+                    console.log("[HowlerAudioElement] Blocking autoplay - not local active player");
                 }
 
                 // Clean up both listeners
@@ -596,6 +620,7 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
 
             const handleLoadError = () => {
                 isLoadingRef.current = false;
+                clearLoadWatchdogTimeout();
                 howlerEngine.off("load", handleLoaded);
                 howlerEngine.off("loaderror", handleLoadError);
                 loadListenerRef.current = null;
@@ -610,11 +635,12 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
             howlerEngine.on("loaderror", handleLoadError);
         } else {
             isLoadingRef.current = false;
+            clearLoadWatchdogTimeout();
         }
         };
 
         loadAudio();
-    }, [currentTrack, currentAudiobook, currentPodcast, playbackType, setDuration, setCurrentSource, next]);
+    }, [currentTrack, currentAudiobook, currentPodcast, playbackType, setDuration, setCurrentSource, next, clearLoadWatchdogTimeout, startLoadWatchdogTimeout]);
 
     // Check podcast cache status and control canSeek
     useEffect(() => {
@@ -695,20 +721,17 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
     // CRITICAL: Only play if this device is the active player!
     useEffect(() => {
         console.log(`[HowlerAudioElement] isPlaying effect triggered: isPlaying=${isPlaying}, controlMode=${controlMode}, isLoading=${isLoadingRef.current}`);
-        
-        if (isLoadingRef.current) {
-            console.log("[HowlerAudioElement] isPlaying effect: skipping, still loading");
-            return;
-        }
 
         isUserInitiatedRef.current = true;
 
         if (isPlaying) {
-            // Guard: Only play locally if we're in local control mode
-            // When in local mode, this device controls itself - play locally
-            // When in remote mode, this device is controlling another device - don't play locally
-            if (controlMode === "remote") {
-                console.log("[HowlerAudioElement] Blocking local play - in remote control mode");
+            if (isLoadingRef.current) {
+                console.log("[HowlerAudioElement] isPlaying effect: blocking play, still loading");
+                return;
+            }
+            // Guard: only the active local device may play audio.
+            if (controlMode === "remote" || !isActivePlayer) {
+                console.log("[HowlerAudioElement] Blocking local play - not local active player");
                 return;
             }
             console.log("[HowlerAudioElement] isPlaying effect: calling howlerEngine.play()");
@@ -718,7 +741,7 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
             // Always allow pause (stopping local audio is always safe)
             howlerEngine.pause();
         }
-    }, [isPlaying, controlMode]);
+    }, [isPlaying, controlMode, isActivePlayer]);
 
     // Handle volume changes
     useEffect(() => {
@@ -1238,6 +1261,10 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
             if (cachePollingLoadListenerRef.current) {
                 howlerEngine.off("load", cachePollingLoadListenerRef.current);
                 cachePollingLoadListenerRef.current = null;
+            }
+            if (loadWatchdogTimeoutRef.current) {
+                clearTimeout(loadWatchdogTimeoutRef.current);
+                loadWatchdogTimeoutRef.current = null;
             }
         };
     }, []);

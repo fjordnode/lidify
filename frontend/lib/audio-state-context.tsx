@@ -10,6 +10,7 @@ import {
     useMemo,
 } from "react";
 import { api } from "@/lib/api";
+import { getCurrentDeviceId, normalizeActivePlayerId } from "@/lib/device-identity";
 
 function queueDebugEnabled(): boolean {
     try {
@@ -39,8 +40,9 @@ function getRemotePlaybackStorageSnapshot(): {
         return { deviceId: null, activePlayerId: null, controlMode: "local" };
     }
 
-    const deviceId = localStorage.getItem("lidify_device_id");
-    const activePlayerId = localStorage.getItem("lidify_active_player_id");
+    const deviceId = getCurrentDeviceId();
+    const persistedActivePlayerId = localStorage.getItem("lidify_active_player_id");
+    const activePlayerId = normalizeActivePlayerId(persistedActivePlayerId, deviceId);
 
     let controlMode: PlaybackSyncControlMode = "local";
     const raw = localStorage.getItem("lidify_control_mode");

@@ -13,6 +13,7 @@ import { io, Socket } from "socket.io-client";
 import { useAuth } from "./auth-context";
 import { api } from "./api";
 import { Track } from "./audio-state-context";
+import { getCurrentDeviceId, normalizeActivePlayerId } from "./device-identity";
 
 // Types
 export interface RemoteDevice {
@@ -116,16 +117,10 @@ interface RemotePlaybackContextType {
 
 const RemotePlaybackContext = createContext<RemotePlaybackContextType | undefined>(undefined);
 
-// Generate a unique device ID (persisted in localStorage)
+// Generate a unique device ID (browser ID + tab ID)
 function getOrCreateDeviceId(): string {
     if (typeof window === "undefined") return "";
-
-    let deviceId = localStorage.getItem("lidify_device_id");
-    if (!deviceId) {
-        deviceId = `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        localStorage.setItem("lidify_device_id", deviceId);
-    }
-    return deviceId;
+    return getCurrentDeviceId();
 }
 
 // Get device name (with fallback detection)
@@ -161,7 +156,19 @@ function getDefaultDeviceName(): string {
 // Get persisted active player ID
 function getPersistedActivePlayerId(): string | null {
     if (typeof window === "undefined") return null;
-    return localStorage.getItem("lidify_active_player_id");
+    const currentDeviceId = getCurrentDeviceId();
+    const persisted = localStorage.getItem("lidify_active_player_id");
+    const normalized = normalizeActivePlayerId(persisted, currentDeviceId);
+
+    if (normalized !== persisted) {
+        if (normalized) {
+            localStorage.setItem("lidify_active_player_id", normalized);
+        } else {
+            localStorage.removeItem("lidify_active_player_id");
+        }
+    }
+
+    return normalized;
 }
 
 // Persist active player ID
@@ -236,6 +243,7 @@ export function RemotePlaybackProvider({ children }: { children: ReactNode }) {
     const socketRef = useRef<Socket | null>(null);
     const heartbeatRef = useRef<NodeJS.Timeout | null>(null);
     const onRemoteCommandRef = useRef<((command: RemoteCommand) => void) | null>(null);
+    const queuedRemoteCommandsRef = useRef<RemoteCommand[]>([]);
     const onBecomeActivePlayerRef = useRef<(() => void) | null>(null);
     const onStopPlaybackRef = useRef<(() => void) | null>(null);
     const onStateRequestRef = useRef<(() => void) | null>(null);
@@ -281,6 +289,7 @@ export function RemotePlaybackProvider({ children }: { children: ReactNode }) {
             console.warn(`[RemotePlayback] WARNING: activePlayerId being reset to null from ${previousId}`);
         }
 
+        activePlayerIdRef.current = id;
         setActivePlayerIdState(id);
         persistActivePlayerId(id);
     }, []);
@@ -339,19 +348,11 @@ export function RemotePlaybackProvider({ children }: { children: ReactNode }) {
         }
 
         // Determine WebSocket URL
-        // Backend WebSocket runs on port 3006, frontend on 3030
-        // For LAN access (IP:3030), connect to IP:3006
+        // Always use current origin and rely on frontend proxy path (/api/socket.io).
+        // This keeps reverse-proxy setups working when only port 3030 is exposed.
         let wsUrl = "";
         if (typeof window !== "undefined") {
-            const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-            const hostname = window.location.hostname;
-            const currentPort = window.location.port;
-
-            // If accessing via port 3030 (Next.js), switch to 3006 (Express backend)
-            // If accessing via domain (no port or 443), assume reverse proxy handles it
-            const wsPort = currentPort === "3030" ? "3006" : currentPort;
-            const wsHost = wsPort ? `${hostname}:${wsPort}` : hostname;
-            wsUrl = `${protocol}//${wsHost}`;
+            wsUrl = window.location.origin;
         }
 
         console.log("[RemotePlayback] Connecting to WebSocket...");
@@ -404,6 +405,26 @@ export function RemotePlaybackProvider({ children }: { children: ReactNode }) {
                 isCurrentDevice: d.deviceId === currentDeviceId,
             }));
             setDevices(devicesWithCurrent);
+
+            // If we're controlling a device that disappeared, reconcile control target.
+            const currentMode = controlModeRef.current;
+            const currentTarget = controlTargetIdRef.current;
+            if (currentMode === "remote" && currentTarget) {
+                const targetOnline = devicesWithCurrent.some(d => d.deviceId === currentTarget);
+                if (!targetOnline) {
+                    const currentActive = activePlayerIdRef.current;
+                    const canControlActive =
+                        !!currentActive &&
+                        currentActive !== currentDeviceId &&
+                        devicesWithCurrent.some(d => d.deviceId === currentActive);
+
+                    if (canControlActive) {
+                        setControlMode("remote", currentActive);
+                    } else {
+                        setControlMode("local", null);
+                    }
+                }
+            }
         });
 
         // Handle remote commands
@@ -422,6 +443,12 @@ export function RemotePlaybackProvider({ children }: { children: ReactNode }) {
             console.log("[RemotePlayback] remoteCommand STACK:", new Error().stack?.split('\n').slice(1, 5).join('\n'));
             if (onRemoteCommandRef.current) {
                 onRemoteCommandRef.current(command);
+                return;
+            }
+
+            queuedRemoteCommandsRef.current.push(command);
+            if (queuedRemoteCommandsRef.current.length > 20) {
+                queuedRemoteCommandsRef.current = queuedRemoteCommandsRef.current.slice(-20);
             }
         });
 
@@ -678,6 +705,14 @@ export function RemotePlaybackProvider({ children }: { children: ReactNode }) {
     // Wrapper for setOnRemoteCommand - uses ref to avoid re-renders
     const setOnRemoteCommand = useCallback((handler: (command: RemoteCommand) => void) => {
         onRemoteCommandRef.current = handler;
+
+        if (queuedRemoteCommandsRef.current.length > 0) {
+            const queuedCommands = queuedRemoteCommandsRef.current;
+            queuedRemoteCommandsRef.current = [];
+            for (const command of queuedCommands) {
+                handler(command);
+            }
+        }
     }, []);
 
     // Callback when this device becomes active player

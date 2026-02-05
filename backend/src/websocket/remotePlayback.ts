@@ -106,6 +106,17 @@ function getDevice(deviceId: string): PlaybackDevice | undefined {
     return activeDevices.get(deviceId);
 }
 
+function pickFallbackActivePlayer(userId: string): string | null {
+    const userDevices = getUserDevices(userId);
+    if (userDevices.length === 0) return null;
+
+    // Prefer the most recently seen device for deterministic takeover behavior.
+    const [mostRecent] = [...userDevices].sort(
+        (a, b) => b.lastSeen.getTime() - a.lastSeen.getTime()
+    );
+    return mostRecent.deviceId;
+}
+
 // Redis channel for user playback events
 function getUserChannel(userId: string): string {
     return `playback:user:${userId}`;
@@ -233,14 +244,16 @@ export function initializeWebSocket(httpServer: HTTPServer): SocketIOServer {
             // Send current active player state to the newly registered device
             // This is critical for reconnection - ensures the client knows if it should be playing
             let currentActivePlayer = getActivePlayer(user.id);
+            const activePlayerDevice = currentActivePlayer ? getDevice(currentActivePlayer) : undefined;
 
             // If no active player is set (common after server restart), pick the first registering device.
             // This prevents multiple clients from treating themselves as active simultaneously.
-            if (!currentActivePlayer) {
+            // Also recover from stale/orphaned active player IDs.
+            if (!currentActivePlayer || !activePlayerDevice || activePlayerDevice.userId !== user.id) {
                 setActivePlayer(user.id, data.deviceId);
                 currentActivePlayer = data.deviceId;
                 io.to(`user:${user.id}`).emit("playback:activePlayer", { deviceId: currentActivePlayer });
-                console.log(`[WebSocket] No active player set; defaulting to ${data.deviceName} (${data.deviceId})`);
+                console.log(`[WebSocket] Active player initialized/recovered: ${data.deviceName} (${data.deviceId})`);
             }
 
             socket.emit("playback:activePlayer", { deviceId: currentActivePlayer });
@@ -371,28 +384,53 @@ export function initializeWebSocket(httpServer: HTTPServer): SocketIOServer {
             const previousActivePlayer = getActivePlayer(user.id);
             console.log(`[WebSocket] Active player change requested: ${previousActivePlayer} -> ${data.deviceId}`);
 
-            // Validate: warn if setting to null (this resets all devices to think they're active)
-            if (data.deviceId === null) {
-                console.warn(`[WebSocket] WARNING: Setting activePlayer to null for user ${user.username}. This may cause playback issues.`);
-            }
+            // Normalize null to a deterministic fallback when user has connected devices.
+            // This preserves the "exactly one active player" invariant.
+            let nextActivePlayerId = data.deviceId;
+            if (nextActivePlayerId === null) {
+                const userDevices = getUserDevices(user.id);
+                const requestingDevice = getDeviceBySocketId(socket.id);
 
-            // Validate: check if the device exists (if not null)
-            if (data.deviceId !== null) {
-                const device = getDevice(data.deviceId);
-                if (!device) {
-                    console.warn(`[WebSocket] WARNING: Setting activePlayer to non-existent device: ${data.deviceId}`);
-                } else if (device.userId !== user.id) {
-                    console.error(`[WebSocket] ERROR: Attempted to set activePlayer to device owned by another user: ${data.deviceId}`);
-                    socket.emit("playback:error", { message: "Device not authorized" });
+                if (userDevices.length === 0) {
+                    setActivePlayer(user.id, null);
+                    io.to(`user:${user.id}`).emit("playback:activePlayer", { deviceId: null });
+                    console.log(`[WebSocket] Active player cleared for user ${user.username} (no connected devices)`);
                     return;
                 }
+
+                nextActivePlayerId = requestingDevice && requestingDevice.userId === user.id
+                    ? requestingDevice.deviceId
+                    : pickFallbackActivePlayer(user.id);
+
+                console.warn(
+                    `[WebSocket] Replacing null active player request with fallback device: ${nextActivePlayerId}`
+                );
             }
 
-            setActivePlayer(user.id, data.deviceId);
-            console.log(`[WebSocket] Active player set to: ${data.deviceId} for user ${user.username}`);
+            if (!nextActivePlayerId) {
+                socket.emit("playback:error", { message: "No active device available" });
+                return;
+            }
+
+            // Validate: active player target must exist and belong to this user.
+            const device = getDevice(nextActivePlayerId);
+            if (!device) {
+                console.warn(`[WebSocket] Rejecting activePlayer change to non-existent device: ${nextActivePlayerId}`);
+                socket.emit("playback:error", { message: "Device not found" });
+                return;
+            }
+
+            if (device.userId !== user.id) {
+                console.error(`[WebSocket] ERROR: Attempted to set activePlayer to device owned by another user: ${nextActivePlayerId}`);
+                socket.emit("playback:error", { message: "Device not authorized" });
+                return;
+            }
+
+            setActivePlayer(user.id, nextActivePlayerId);
+            console.log(`[WebSocket] Active player set to: ${nextActivePlayerId} for user ${user.username}`);
 
             // Broadcast to all user's devices
-            io.to(`user:${user.id}`).emit("playback:activePlayer", { deviceId: data.deviceId });
+            io.to(`user:${user.id}`).emit("playback:activePlayer", { deviceId: nextActivePlayerId });
         });
 
         // Handle disconnect
@@ -401,6 +439,16 @@ export function initializeWebSocket(httpServer: HTTPServer): SocketIOServer {
             if (device) {
                 activeDevices.delete(device.deviceId);
                 console.log(`[WebSocket] Device disconnected: ${device.deviceName}`);
+
+                // If disconnected device was active, immediately elect a fallback.
+                const activePlayer = getActivePlayer(user.id);
+                if (activePlayer === device.deviceId) {
+                    const fallbackDeviceId = pickFallbackActivePlayer(user.id);
+                    setActivePlayer(user.id, fallbackDeviceId);
+                    io.to(`user:${user.id}`).emit("playback:activePlayer", { deviceId: fallbackDeviceId });
+                    console.log(`[WebSocket] Active player reassigned on disconnect: ${device.deviceId} -> ${fallbackDeviceId}`);
+                }
+
                 broadcastDeviceList(io, user.id);
             }
             console.log(`[WebSocket] User ${user.username} disconnected`);
@@ -423,13 +471,13 @@ export function initializeWebSocket(httpServer: HTTPServer): SocketIOServer {
                 activeDevices.delete(deviceId);
                 console.log(`[WebSocket] Removed stale device: ${device.deviceName}`);
 
-                // If this was the active player for its user, clear it
-                // This handles permanently disconnected devices (not brief reconnects)
+                // If this was the active player for its user, elect fallback instead of null when possible.
                 const activePlayer = getActivePlayer(device.userId);
                 if (activePlayer === deviceId) {
-                    setActivePlayer(device.userId, null);
-                    io.to(`user:${device.userId}`).emit("playback:activePlayer", { deviceId: null });
-                    console.log(`[WebSocket] Cleared stale active player for user: ${device.userId}`);
+                    const fallbackDeviceId = pickFallbackActivePlayer(device.userId);
+                    setActivePlayer(device.userId, fallbackDeviceId);
+                    io.to(`user:${device.userId}`).emit("playback:activePlayer", { deviceId: fallbackDeviceId });
+                    console.log(`[WebSocket] Reassigned stale active player for user ${device.userId}: ${deviceId} -> ${fallbackDeviceId}`);
                 }
             }
         }
