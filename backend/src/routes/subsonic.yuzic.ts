@@ -1616,7 +1616,7 @@ router.get("/getPlaylists.view", async (req: Request, res: Response) => {
             public: false,
             owner: req.user!.username,
             created: pl.createdAt.toISOString(),
-            changed: pl.createdAt.toISOString(), // No updatedAt field, use createdAt
+            changed: pl.updatedAt.toISOString(),
         }));
 
         sendSubsonicSuccess(
@@ -1732,7 +1732,7 @@ router.get("/getPlaylist.view", async (req: Request, res: Response) => {
                     public: false,
                     owner: req.user!.username,
                     created: playlist.createdAt.toISOString(),
-                    changed: playlist.createdAt.toISOString(), // No updatedAt field
+                    changed: playlist.updatedAt.toISOString(),
                     entry: songs,
                 },
             },
@@ -1772,7 +1772,7 @@ router.get("/createPlaylist.view", async (req: Request, res: Response) => {
             // Verify ownership
             const existingPlaylist = await prisma.playlist.findUnique({
                 where: { id: plId },
-                select: { userId: true },
+                select: { userId: true, _count: { select: { pendingTracks: true, items: true } } },
             });
 
             if (!existingPlaylist || existingPlaylist.userId !== req.user!.id) {
@@ -1793,21 +1793,34 @@ router.get("/createPlaylist.view", async (req: Request, res: Response) => {
             }
 
             if (songId && Array.isArray(songId)) {
-                // Clear existing and add new tracks
-                await prisma.playlistItem.deleteMany({
-                    where: { playlistId: plId },
-                });
+                // Guard: don't let a client with stale data wipe a server-managed playlist.
+                const hasPending = existingPlaylist._count.pendingTracks > 0;
+                const clientHasFewer = (songId as string[]).length < existingPlaylist._count.items;
 
-                const trackIds = (songId as string[]).map((id) => parseSubsonicId(id).id);
+                if (hasPending || clientHasFewer) {
+                    console.log(
+                        `[Subsonic] createPlaylist: skipping track replacement for playlist ${plId} ` +
+                        `(pending=${existingPlaylist._count.pendingTracks}, server=${existingPlaylist._count.items}, client=${(songId as string[]).length})`
+                    );
+                } else {
+                    await prisma.playlistItem.deleteMany({
+                        where: { playlistId: plId },
+                    });
 
-                await prisma.playlistItem.createMany({
-                    data: trackIds.map((trackId, index) => ({
-                        playlistId: plId,
-                        trackId,
-                        sort: index,
-                    })),
-                });
+                    const trackIds = (songId as string[]).map((id) => parseSubsonicId(id).id);
+
+                    await prisma.playlistItem.createMany({
+                        data: trackIds.map((trackId, index) => ({
+                            playlistId: plId,
+                            trackId,
+                            sort: index,
+                        })),
+                    });
+                }
             }
+
+            // Touch playlist so Subsonic clients detect the change
+            await prisma.playlist.update({ where: { id: plId }, data: { updatedAt: new Date() } });
 
             sendSubsonicSuccess(res, {}, format, req.query.callback as string);
         } else if (name) {
@@ -1829,6 +1842,9 @@ router.get("/createPlaylist.view", async (req: Request, res: Response) => {
                         sort: index,
                     })),
                 });
+
+                // Touch playlist so Subsonic clients detect the change
+                await prisma.playlist.update({ where: { id: playlist.id }, data: { updatedAt: new Date() } });
             }
 
             sendSubsonicSuccess(res, {}, format, req.query.callback as string);
@@ -1937,6 +1953,11 @@ router.get("/updatePlaylist.view", async (req: Request, res: Response) => {
                     where: { id: { in: idsToDelete } },
                 });
             }
+        }
+
+        // Touch playlist so Subsonic clients detect the change
+        if (songIdToAdd || songIndexToRemove || name) {
+            await prisma.playlist.update({ where: { id: plId }, data: { updatedAt: new Date() } });
         }
 
         sendSubsonicSuccess(res, {}, format, req.query.callback as string);

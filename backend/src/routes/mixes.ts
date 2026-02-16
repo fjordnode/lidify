@@ -849,6 +849,9 @@ router.post("/:id/save", async (req, res) => {
             data: playlistItems,
         });
 
+        // Touch playlist so Subsonic clients detect the change
+        await prisma.playlist.update({ where: { id: playlist.id }, data: { updatedAt: new Date() } });
+
         console.log(
             `[MIXES] Saved mix ${mixId} as playlist ${playlist.id} (${mix.trackIds.length} tracks)`
         );

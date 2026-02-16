@@ -21,38 +21,40 @@ export function PWAInstallPrompt() {
     const [isIOS] = useState(getIsIOS);
 
     useEffect(() => {
+        const dismissKey = "pwa-prompt-dismissed";
+
         // Check if already installed as PWA
         if (window.matchMedia("(display-mode: standalone)").matches) {
             return;
         }
 
-        // Check if dismissed recently (within 7 days)
-        const dismissedAt = localStorage.getItem("pwa-prompt-dismissed");
-        if (dismissedAt) {
-            const dismissedTime = parseInt(dismissedAt, 10);
-            const sevenDays = 7 * 24 * 60 * 60 * 1000;
-            if (Date.now() - dismissedTime < sevenDays) {
-                return;
-            }
+        // Permanently dismiss after one user dismissal
+        if (localStorage.getItem(dismissKey)) {
+            return;
         }
+
+        let promptTimer: ReturnType<typeof setTimeout> | null = null;
+        let iosTimer: ReturnType<typeof setTimeout> | null = null;
 
         // Listen for beforeinstallprompt (Chrome, Edge, etc.)
         const handleBeforeInstallPrompt = (e: Event) => {
             e.preventDefault();
             setDeferredPrompt(e as BeforeInstallPromptEvent);
             // Show prompt after a short delay
-            setTimeout(() => setShowPrompt(true), 3000);
+            promptTimer = setTimeout(() => setShowPrompt(true), 3000);
         };
 
         window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
 
         // For iOS, show instructions after delay if on mobile
         if (isIOS) {
-            setTimeout(() => setShowPrompt(true), 5000);
+            iosTimer = setTimeout(() => setShowPrompt(true), 5000);
         }
 
         return () => {
             window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+            if (promptTimer) clearTimeout(promptTimer);
+            if (iosTimer) clearTimeout(iosTimer);
         };
     }, [isIOS]);
 
@@ -61,17 +63,21 @@ export function PWAInstallPrompt() {
 
         deferredPrompt.prompt();
         const { outcome } = await deferredPrompt.userChoice;
-        
+
         if (outcome === "accepted") {
             setShowPrompt(false);
+            localStorage.setItem("pwa-prompt-dismissed", "accepted");
+        } else {
+            setShowPrompt(false);
+            localStorage.setItem("pwa-prompt-dismissed", "dismissed");
         }
-        
+
         setDeferredPrompt(null);
     };
 
     const handleDismiss = () => {
         setShowPrompt(false);
-        localStorage.setItem("pwa-prompt-dismissed", Date.now().toString());
+        localStorage.setItem("pwa-prompt-dismissed", "dismissed");
     };
 
     if (!showPrompt) return null;
@@ -121,4 +127,3 @@ export function PWAInstallPrompt() {
         </div>
     );
 }
-

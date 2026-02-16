@@ -24,13 +24,23 @@ interface Toast {
     };
 }
 
+interface ToastOptions {
+    action?: {
+        label: string;
+        onClick: () => void;
+    };
+    duration?: number;
+}
+
 interface ToastContextType {
     toast: {
-        success: (message: string) => void;
-        error: (message: string) => void;
-        warning: (message: string) => void;
-        info: (message: string) => void;
+        success: (message: string, options?: ToastOptions) => void;
+        error: (message: string, options?: ToastOptions) => void;
+        warning: (message: string, options?: ToastOptions) => void;
+        info: (message: string, options?: ToastOptions) => void;
     };
+    /** Dismiss a toast by id and cancel its auto-dismiss timer */
+    dismissToast: (id: string) => void;
 }
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
@@ -43,25 +53,30 @@ export function useToast() {
     return context;
 }
 
+export type { ToastOptions };
+
 export function ToastProvider({ children }: { children: ReactNode }) {
     const [toasts, setToasts] = useState<Toast[]>([]);
     const timeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
-    const addToast = useCallback((type: ToastType, message: string) => {
+    const addToast = useCallback((type: ToastType, message: string, options?: ToastOptions) => {
         // Use a more unique ID that combines timestamp, counter, and random value
         const id = `${Date.now()}-${Math.random()
             .toString(36)
             .substring(2, 9)}`;
 
-        setToasts((prev) => [...prev, { id, type, message }]);
+        setToasts((prev) => [...prev, { id, type, message, action: options?.action }]);
 
-        // Auto-dismiss after 5 seconds and store timeout ID
+        // Auto-dismiss (default 5s, customizable via options)
+        const duration = options?.duration ?? 5000;
         const timeoutId = setTimeout(() => {
             setToasts((prev) => prev.filter((t) => t.id !== id));
             timeoutsRef.current.delete(id);
-        }, 5000);
+        }, duration);
 
         timeoutsRef.current.set(id, timeoutId);
+
+        return id;
     }, []);
 
     const removeToast = useCallback((id: string) => {
@@ -85,14 +100,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const toast = {
-        success: (message: string) => addToast("success", message),
-        error: (message: string) => addToast("error", message),
-        warning: (message: string) => addToast("warning", message),
-        info: (message: string) => addToast("info", message),
+        success: (message: string, options?: ToastOptions) => addToast("success", message, options),
+        error: (message: string, options?: ToastOptions) => addToast("error", message, options),
+        warning: (message: string, options?: ToastOptions) => addToast("warning", message, options),
+        info: (message: string, options?: ToastOptions) => addToast("info", message, options),
     };
 
     return (
-        <ToastContext.Provider value={{ toast }}>
+        <ToastContext.Provider value={{ toast, dismissToast: removeToast }}>
             {children}
 
             {/* Toast Container */}
@@ -136,9 +151,22 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
             )}
         >
             <Icon className="w-5 h-5 flex-shrink-0 mt-0.5" />
-            <p className="flex-1 text-sm text-white font-medium">
-                {toast.message}
-            </p>
+            <div className="flex-1 flex items-center gap-3">
+                <p className="flex-1 text-sm text-white font-medium">
+                    {toast.message}
+                </p>
+                {toast.action && (
+                    <button
+                        onClick={() => {
+                            toast.action!.onClick();
+                            onClose();
+                        }}
+                        className="text-sm font-semibold text-brand hover:text-brand/80 transition-colors whitespace-nowrap"
+                    >
+                        {toast.action.label}
+                    </button>
+                )}
+            </div>
             <button
                 onClick={onClose}
                 className="text-gray-400 hover:text-white transition-colors"

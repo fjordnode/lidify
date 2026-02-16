@@ -55,6 +55,27 @@ export interface DownloadResult {
     duration: number;
 }
 
+export interface YouTubeMusicPlaylistPreview {
+    id: string;
+    title: string;
+    description: string | null;
+    creator: string;
+    imageUrl: string | null;
+    trackCount: number;
+}
+
+export interface YouTubeMusicPlaylist {
+    id: string;
+    title: string;
+    description: string | null;
+    creator: string;
+    imageUrl: string | null;
+    trackCount: number;
+    tracks: YouTubeMusicTrack[];
+    isPublic: boolean;
+    url: string;
+}
+
 interface MatchScore {
     track: YouTubeMusicTrack;
     score: number;
@@ -86,6 +107,12 @@ const CACHE_PREFIX = "ytm:";
 const STREAM_KEY = (videoId: string) => `${CACHE_PREFIX}stream:${videoId}`;
 const MATCH_KEY = (hash: string) => `${CACHE_PREFIX}match:${hash}`;
 const SEARCH_KEY = (query: string) => `${CACHE_PREFIX}search:${query.toLowerCase().replace(/\s+/g, "_")}`;
+const PLAYLIST_KEY = (id: string) => `${CACHE_PREFIX}playlist:${id}`;
+const PLAYLIST_META_KEY = (id: string) => `${CACHE_PREFIX}playlist_meta:${id}`;
+const PLAYLIST_SEARCH_KEY = (query: string) => `${CACHE_PREFIX}plsearch:${query.toLowerCase().replace(/\s+/g, "_")}`;
+const EXPLORE_KEY = `${CACHE_PREFIX}explore:playlists`;
+const EXPLORE_FEATURED_KEY = `${CACHE_PREFIX}explore:featured`;
+const EXPLORE_COMMUNITY_KEY = `${CACHE_PREFIX}explore:community`;
 
 // Match thresholds
 const MINIMUM_MATCH_SCORE = 0.65;
@@ -239,78 +266,165 @@ class YouTubeMusicService {
      * Parse a track from YouTube Music search result item
      */
     private parseTrackFromSearchResult(item: any): YouTubeMusicTrack | null {
+        return this.parseTrackFromMusicItem(item);
+    }
+
+    private parseTrackFromMusicItem(item: any): YouTubeMusicTrack | null {
         try {
-            // Handle MusicResponsiveListItem (common format)
-            if (item.type === "MusicResponsiveListItem" || item.id) {
-                const videoId = item.id || item.video_id;
-                if (!videoId) return null;
+            if (!item || item.type === "ContinuationItem") {
+                return null;
+            }
 
-                // Get title
-                let title = "";
-                if (item.title) {
-                    title = typeof item.title === "string" ? item.title : item.title.text || "";
-                } else if (item.flex_columns?.[0]?.title?.text) {
-                    title = item.flex_columns[0].title.text;
-                }
+            const videoId =
+                item.id ||
+                item.video_id ||
+                item.videoId ||
+                item.endpoint?.payload?.videoId ||
+                item.navigation_endpoint?.payload?.videoId ||
+                "";
+            if (!videoId) {
+                return null;
+            }
 
-                // Get artist(s)
-                let artist = "";
-                if (item.artists && Array.isArray(item.artists)) {
-                    artist = item.artists.map((a: any) => a.name || a.text || a).join(", ");
-                } else if (item.subtitle?.text) {
-                    // Subtitle often contains "Artist - Album" or just "Artist"
-                    const subtitleParts = item.subtitle.text.split(" - ");
-                    artist = subtitleParts[0] || "";
-                } else if (item.flex_columns?.[1]?.title?.text) {
-                    artist = item.flex_columns[1].title.text.split(" - ")[0];
-                }
+            const title =
+                this.extractText(item.title) ||
+                this.extractText(item.name) ||
+                this.extractText(item.flex_columns?.[0]?.title) ||
+                this.extractText(item.flex_columns?.[0]?.text);
 
-                // Get album
-                let album: string | undefined;
-                if (item.album?.name) {
-                    album = item.album.name;
-                } else if (item.subtitle?.text) {
-                    const parts = item.subtitle.text.split(" - ");
-                    if (parts.length > 1) {
-                        album = parts[1];
-                    }
+            let artist = "";
+            if (Array.isArray(item.artists) && item.artists.length > 0) {
+                artist = item.artists
+                    .map((a: any) => this.extractText(a?.name || a?.text || a))
+                    .filter(Boolean)
+                    .join(", ");
+            }
+            if (!artist && Array.isArray(item.authors) && item.authors.length > 0) {
+                artist = item.authors
+                    .map((a: any) => this.extractText(a?.name || a?.text || a))
+                    .filter(Boolean)
+                    .join(", ");
+            }
+            if (!artist) {
+                const subtitle =
+                    this.extractText(item.subtitle) ||
+                    this.extractText(item.flex_columns?.[1]?.title) ||
+                    this.extractText(item.flex_columns?.[1]?.text);
+                if (subtitle) {
+                    const parts = subtitle
+                        .split(" • ")
+                        .map((p) => p.trim())
+                        .filter(Boolean);
+                    artist =
+                        parts.find((p) => !/^\d+:\d{2}(?::\d{2})?$/.test(p)) ||
+                        parts[0] ||
+                        "";
                 }
+            }
 
-                // Get duration
-                let duration = 0;
-                if (item.duration?.seconds) {
-                    duration = item.duration.seconds;
-                } else if (typeof item.duration === "number") {
-                    duration = item.duration;
-                } else if (item.duration?.text) {
-                    duration = this.parseDurationString(item.duration.text);
-                }
+            let album =
+                this.extractText(item.album?.name) ||
+                this.extractText(item.album?.title) ||
+                undefined;
 
-                // Get thumbnail
-                let thumbnail: string | undefined;
-                if (item.thumbnails && Array.isArray(item.thumbnails) && item.thumbnails.length > 0) {
-                    // Get highest quality thumbnail
-                    const sorted = [...item.thumbnails].sort((a, b) => (b.width || 0) - (a.width || 0));
-                    thumbnail = sorted[0]?.url;
-                } else if (item.thumbnail?.contents?.[0]?.url) {
-                    thumbnail = item.thumbnail.contents[0].url;
+            let duration = 0;
+            if (typeof item.duration?.seconds === "number") {
+                duration = item.duration.seconds;
+            } else if (typeof item.duration === "number") {
+                duration = item.duration;
+            } else {
+                const durationText =
+                    this.extractText(item.duration?.text) ||
+                    this.extractText(item.duration) ||
+                    this.extractText(item.fixed_columns?.[0]?.title);
+                if (durationText) {
+                    duration = this.parseDurationString(durationText);
                 }
+            }
 
-                if (title && artist) {
-                    return {
-                        videoId,
-                        title: title.trim(),
-                        artist: artist.trim(),
-                        album: album?.trim(),
-                        duration,
-                        thumbnail,
-                    };
-                }
+            const thumbnail = this.extractThumbnailUrl(
+                item.thumbnails || item.thumbnail?.contents || item.thumbnail
+            );
+
+            if (title && artist) {
+                return {
+                    videoId: String(videoId),
+                    title: title.trim(),
+                    artist: artist.trim(),
+                    album: album?.trim(),
+                    duration,
+                    thumbnail: thumbnail || undefined,
+                };
             }
         } catch (err) {
             // Skip malformed items
         }
         return null;
+    }
+
+    private extractText(value: any): string {
+        if (value == null) return "";
+        if (typeof value === "string") return value;
+        if (typeof value === "number") return String(value);
+
+        if (typeof value.text === "string") {
+            return value.text;
+        }
+
+        if (Array.isArray(value.runs)) {
+            return value.runs
+                .map((r: any) => this.extractText(r?.text || r))
+                .filter(Boolean)
+                .join("");
+        }
+
+        if (typeof value.toString === "function") {
+            const stringValue = String(value.toString());
+            if (stringValue && stringValue !== "[object Object]") {
+                return stringValue;
+            }
+        }
+
+        return "";
+    }
+
+    private extractTrackCount(value: any): number {
+        if (typeof value === "number" && Number.isFinite(value)) {
+            return value;
+        }
+
+        const text = this.extractText(value);
+        if (!text) {
+            return 0;
+        }
+
+        const match = text.match(/(\d[\d,]*)\s+(song|songs|track|tracks|video|videos)/i);
+        if (!match) {
+            return 0;
+        }
+
+        const parsed = parseInt(match[1].replace(/,/g, ""), 10);
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    private extractThumbnailUrl(value: any): string | null {
+        const thumbnails = Array.isArray(value)
+            ? value
+            : Array.isArray(value?.contents)
+            ? value.contents
+            : value
+            ? [value]
+            : [];
+
+        if (thumbnails.length === 0) {
+            return null;
+        }
+
+        const sorted = [...thumbnails].sort(
+            (a: any, b: any) => (b?.width || 0) - (a?.width || 0)
+        );
+        const best = sorted[0];
+        return best?.url || null;
     }
 
     /**
@@ -325,6 +439,710 @@ class YouTubeMusicService {
             return parts[0] * 3600 + parts[1] * 60 + parts[2];
         }
         return 0;
+    }
+
+    // ============================================
+    // Playlist Methods
+    // ============================================
+
+    /**
+     * Parse a YouTube Music or YouTube playlist URL
+     */
+    parseUrl(url: string): { type: string; id: string } | null {
+        try {
+            const urlObj = new URL(url);
+            const hostname = urlObj.hostname.replace("www.", "");
+
+            if (hostname === "music.youtube.com" || hostname === "youtube.com") {
+                // Playlist: music.youtube.com/playlist?list=PLxxxx
+                if (urlObj.pathname === "/playlist" || urlObj.pathname === "/playlist/") {
+                    const listId = urlObj.searchParams.get("list");
+                    if (listId) {
+                        return { type: "playlist", id: listId };
+                    }
+                }
+                // Video with list param: music.youtube.com/watch?v=xxx&list=PLxxxx
+                if (urlObj.pathname === "/watch") {
+                    const listId = urlObj.searchParams.get("list");
+                    if (listId) {
+                        return { type: "playlist", id: listId };
+                    }
+                }
+            }
+        } catch {
+            // Invalid URL
+        }
+        return null;
+    }
+
+    /**
+     * Fetch a full YouTube Music playlist with tracks
+     */
+    async getPlaylist(playlistId: string): Promise<YouTubeMusicPlaylist | null> {
+        if (!this.isEnabled()) {
+            return null;
+        }
+
+        const cacheKey = PLAYLIST_KEY(playlistId);
+        const cached = await this.getCached<YouTubeMusicPlaylist>(cacheKey);
+        if (cached) {
+            const cachedLooksBroken =
+                cached.title === "Unknown Playlist" &&
+                cached.creator === "Unknown" &&
+                cached.trackCount === 0 &&
+                cached.tracks.length === 0;
+
+            if (cachedLooksBroken) {
+                await this.deleteCache(cacheKey);
+                console.log(
+                    `[YouTube Music] Discarding stale playlist cache for ${playlistId}`
+                );
+            } else {
+                console.log(`[YouTube Music] Playlist cache hit for ${playlistId}`);
+                return cached;
+            }
+        }
+
+        try {
+            const yt = await this.ensureInitialized();
+            const playlist = await yt.music.getPlaylist(playlistId);
+            let {
+                title,
+                creator,
+                description,
+                imageUrl,
+                trackCount,
+            } = this.parsePlaylistMetadata(playlist);
+
+            // Parse all tracks, handling pagination
+            const tracks: YouTubeMusicTrack[] = [];
+            let currentPage = playlist;
+
+            while (true) {
+                const items = currentPage.items || currentPage.contents;
+                if (items) {
+                    for (const item of items) {
+                        const track = this.parseTrackFromMusicItem(item);
+                        if (track) {
+                            tracks.push(track);
+                        }
+                    }
+                }
+
+                if (currentPage.has_continuation) {
+                    try {
+                        currentPage = await currentPage.getContinuation();
+                    } catch {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+
+                // Safety limit
+                if (tracks.length > 5000) break;
+            }
+
+            if (trackCount === 0) {
+                trackCount = tracks.length;
+            }
+
+            const result: YouTubeMusicPlaylist = {
+                id: playlistId,
+                title,
+                description,
+                creator,
+                imageUrl,
+                trackCount,
+                tracks,
+                isPublic: true,
+                url: `https://music.youtube.com/playlist?list=${playlistId}`,
+            };
+
+            await this.setCache(cacheKey, result, SEARCH_CACHE_TTL);
+            console.log(`[YouTube Music] Fetched playlist "${title}" with ${tracks.length} tracks`);
+            return result;
+        } catch (error: any) {
+            console.error(`[YouTube Music] Failed to fetch playlist ${playlistId}:`, error.message);
+            return null;
+        }
+    }
+
+    private parsePlaylistMetadata(playlist: any): {
+        title: string;
+        creator: string;
+        description: string | null;
+        imageUrl: string | null;
+        trackCount: number;
+    } {
+        const header = playlist?.header as any;
+        const fallbackTitle = this.extractText(playlist?.title);
+
+        let title = fallbackTitle || "Unknown Playlist";
+        let creator = "Unknown";
+        let description: string | null = null;
+        let imageUrl: string | null = null;
+        let trackCount = 0;
+
+        if (header) {
+            title =
+                this.extractText(header.title) ||
+                this.extractText(header.edit_header?.title) ||
+                this.extractText(header.header?.title) ||
+                title;
+
+            creator =
+                this.extractText(header.author?.name) ||
+                this.extractText(header.strapline_text_one) ||
+                this.extractText(
+                    header.subtitle?.runs?.find(
+                        (r: any) =>
+                            r?.endpoint?.payload?.browseId &&
+                            String(r.endpoint.payload.browseId).startsWith("UC")
+                    )?.text
+                ) ||
+                this.extractText(header.subtitle).split(" • ")[0] ||
+                "YouTube Music";
+
+            description =
+                this.extractText(header.description) ||
+                this.extractText(header.description?.description) ||
+                this.extractText(header.edit_header?.edit_description) ||
+                null;
+
+            trackCount =
+                this.extractTrackCount(header.song_count) ||
+                this.extractTrackCount(header.second_subtitle) ||
+                this.extractTrackCount(header.subtitle) ||
+                this.extractTrackCount(playlist?.track_count);
+
+            imageUrl =
+                this.extractThumbnailUrl(header.thumbnails) ||
+                this.extractThumbnailUrl(header.thumbnail?.contents) ||
+                this.extractThumbnailUrl(playlist?.background?.contents) ||
+                null;
+        }
+
+        return { title, creator, description, imageUrl, trackCount };
+    }
+
+    private async getPlaylistMetadata(playlistId: string): Promise<{
+        title: string;
+        creator: string;
+        description: string | null;
+        imageUrl: string | null;
+        trackCount: number;
+    } | null> {
+        const cacheKey = PLAYLIST_META_KEY(playlistId);
+        const cached = await this.getCached<{
+            title: string;
+            creator: string;
+            description: string | null;
+            imageUrl: string | null;
+            trackCount: number;
+        }>(cacheKey);
+        if (cached) {
+            return cached;
+        }
+
+        try {
+            const yt = await this.ensureInitialized();
+            const playlist = await yt.music.getPlaylist(playlistId);
+            const metadata = this.parsePlaylistMetadata(playlist);
+            await this.setCache(cacheKey, metadata, SEARCH_CACHE_TTL);
+            return metadata;
+        } catch {
+            return null;
+        }
+    }
+
+    private async enrichPlaylistPreviewCounts(
+        playlists: YouTubeMusicPlaylistPreview[]
+    ): Promise<YouTubeMusicPlaylistPreview[]> {
+        const missingCounts = playlists.filter((playlist) => playlist.trackCount <= 0);
+        if (missingCounts.length === 0) {
+            return playlists;
+        }
+
+        const hydratedCounts = new Map<string, number>();
+        const concurrency = 4;
+
+        for (let i = 0; i < missingCounts.length; i += concurrency) {
+            const batch = missingCounts.slice(i, i + concurrency);
+            const metadataBatch = await Promise.all(
+                batch.map((playlist) => this.getPlaylistMetadata(playlist.id))
+            );
+
+            for (let j = 0; j < batch.length; j++) {
+                const metadata = metadataBatch[j];
+                if (metadata && metadata.trackCount > 0) {
+                    hydratedCounts.set(batch[j].id, metadata.trackCount);
+                }
+            }
+        }
+
+        if (hydratedCounts.size === 0) {
+            return playlists;
+        }
+
+        return playlists.map((playlist) => {
+            const hydratedCount = hydratedCounts.get(playlist.id);
+            if (hydratedCount && hydratedCount > 0) {
+                return { ...playlist, trackCount: hydratedCount };
+            }
+            return playlist;
+        });
+    }
+
+    /**
+     * Search YouTube Music for playlists
+     */
+    async searchPlaylists(query: string, limit: number = 20): Promise<YouTubeMusicPlaylistPreview[]> {
+        if (!this.isEnabled()) {
+            return [];
+        }
+
+        const cacheKey = PLAYLIST_SEARCH_KEY(query);
+        const cached = await this.getCached<YouTubeMusicPlaylistPreview[]>(cacheKey);
+        if (cached) {
+            console.log(`[YouTube Music] Playlist search cache hit for "${query}"`);
+            return cached.slice(0, limit);
+        }
+
+        try {
+            const yt = await this.ensureInitialized();
+            const searchResults = await yt.music.search(query, { type: "playlist" });
+
+            const playlists: YouTubeMusicPlaylistPreview[] = [];
+            const contents = searchResults.contents;
+
+            if (contents) {
+                for (const section of contents) {
+                    if (section.type === "MusicShelfRenderer" || section.type === "MusicShelf") {
+                        const shelf = section as any;
+                        const items = shelf.contents || [];
+
+                        for (const item of items) {
+                            const parsed = this.parsePlaylistFromSearchResult(item);
+                            if (parsed) {
+                                playlists.push(parsed);
+                                if (playlists.length >= limit) break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (playlists.length > 0) {
+                await this.setCache(cacheKey, playlists, SEARCH_CACHE_TTL);
+            }
+
+            console.log(`[YouTube Music] Playlist search for "${query}" found ${playlists.length} results`);
+            return playlists;
+        } catch (error: any) {
+            console.error(`[YouTube Music] Playlist search error for "${query}":`, error.message);
+            return [];
+        }
+    }
+
+    /**
+     * Get popular playlists from YouTube Music charts/explore surfaces.
+     * Keeps featured and community lists separate for UI tabs.
+     */
+    async getExplorePlaylists(limit: number = 30): Promise<YouTubeMusicPlaylistPreview[]> {
+        const sections = await this.getExplorePlaylistSections(limit, limit);
+        const merged = [...sections.featured, ...sections.community];
+
+        if (merged.length > 0) {
+            await this.setCache(EXPLORE_KEY, merged, MATCH_CACHE_TTL);
+        }
+
+        if (sections.featured.length > 0) {
+            return sections.featured.slice(0, limit);
+        }
+        return sections.community.slice(0, limit);
+    }
+
+    async getExplorePlaylistSections(
+        featuredLimit: number = 30,
+        communityLimit: number = 30
+    ): Promise<{ featured: YouTubeMusicPlaylistPreview[]; community: YouTubeMusicPlaylistPreview[] }> {
+        if (!this.isEnabled()) {
+            return { featured: [], community: [] };
+        }
+
+        const [cachedFeatured, cachedCommunity] = await Promise.all([
+            this.getCached<YouTubeMusicPlaylistPreview[]>(EXPLORE_FEATURED_KEY),
+            this.getCached<YouTubeMusicPlaylistPreview[]>(EXPLORE_COMMUNITY_KEY),
+        ]);
+
+        let featured = cachedFeatured || [];
+        let community = cachedCommunity || [];
+
+        const staleFeatured =
+            featured.length > 0 && featured.every((playlist) => playlist.trackCount === 0);
+        if (staleFeatured) {
+            await this.deleteCache(EXPLORE_FEATURED_KEY);
+            featured = [];
+        }
+
+        const staleCommunity =
+            community.length > 0 && community.every((playlist) => playlist.trackCount === 0);
+        if (staleCommunity) {
+            await this.deleteCache(EXPLORE_COMMUNITY_KEY);
+            community = [];
+        }
+
+        try {
+            if (featured.length === 0) {
+                const popular = await this.getPopularPlaylistsFromCharts(
+                    Math.max(featuredLimit, 40)
+                );
+                featured = await this.enrichPlaylistPreviewCounts(popular);
+
+                if (featured.length === 0) {
+                    featured = await this.getFeaturedPlaylistsFromSearch(
+                        Math.max(featuredLimit, 30)
+                    );
+                    featured = await this.enrichPlaylistPreviewCounts(featured);
+                    if (featured.length > 0) {
+                        console.log(
+                            `[YouTube Music] Featured fallback search returned ${featured.length} playlists`
+                        );
+                    }
+                }
+
+                if (featured.length > 0) {
+                    await this.setCache(EXPLORE_FEATURED_KEY, featured, MATCH_CACHE_TTL);
+                    console.log(
+                        `[YouTube Music] Featured source returned ${featured.length} playlists`
+                    );
+                }
+            } else {
+                featured = await this.enrichPlaylistPreviewCounts(featured);
+            }
+
+            if (community.length === 0) {
+                const featuredIds = new Set(featured.map((playlist) => playlist.id));
+                community = await this.getCommunityPlaylistsFromSearch(
+                    Math.max(communityLimit, 40),
+                    featuredIds
+                );
+                community = await this.enrichPlaylistPreviewCounts(community);
+                if (community.length > 0) {
+                    await this.setCache(EXPLORE_COMMUNITY_KEY, community, MATCH_CACHE_TTL);
+                    console.log(
+                        `[YouTube Music] Community discovery returned ${community.length} playlists`
+                    );
+                }
+            } else {
+                community = await this.enrichPlaylistPreviewCounts(community);
+            }
+
+            const featuredIds = new Set(featured.map((playlist) => playlist.id));
+            community = community.filter((playlist) => !featuredIds.has(playlist.id));
+
+            return {
+                featured: featured.slice(0, featuredLimit),
+                community: community.slice(0, communityLimit),
+            };
+        } catch (error: any) {
+            console.error("[YouTube Music] Failed to fetch explore playlist sections:", error.message);
+            return {
+                featured: featured.slice(0, featuredLimit),
+                community: community.slice(0, communityLimit),
+            };
+        }
+    }
+
+    private async getCommunityPlaylistsFromSearch(
+        limit: number,
+        excludeIds: Set<string> = new Set()
+    ): Promise<YouTubeMusicPlaylistPreview[]> {
+        const queries = [
+            "indie playlist",
+            "bedroom pop playlist",
+            "workout mix playlist",
+            "house music playlist",
+            "community playlist",
+            "user playlist mix",
+        ];
+
+        const playlists: YouTubeMusicPlaylistPreview[] = [];
+        const seenIds = new Set<string>(excludeIds);
+
+        for (const query of queries) {
+            const results = await this.searchPlaylists(query, 10).catch(() => []);
+            for (const playlist of results) {
+                if (seenIds.has(playlist.id)) {
+                    continue;
+                }
+                seenIds.add(playlist.id);
+                playlists.push(playlist);
+
+                if (playlists.length >= limit) {
+                    return playlists.slice(0, limit);
+                }
+            }
+        }
+
+        return playlists.slice(0, limit);
+    }
+
+    private async getFeaturedPlaylistsFromSearch(
+        limit: number
+    ): Promise<YouTubeMusicPlaylistPreview[]> {
+        const queries = [
+            "today's top hits playlist",
+            "official playlist youtube music",
+            "top songs playlist",
+            "global hits playlist",
+            "chart toppers playlist",
+            "music charts playlist",
+        ];
+
+        const playlists: YouTubeMusicPlaylistPreview[] = [];
+        const seenIds = new Set<string>();
+
+        for (const query of queries) {
+            const results = await this.searchPlaylists(query, 10).catch(() => []);
+            for (const playlist of results) {
+                if (seenIds.has(playlist.id)) {
+                    continue;
+                }
+                seenIds.add(playlist.id);
+                playlists.push(playlist);
+
+                if (playlists.length >= limit) {
+                    return playlists.slice(0, limit);
+                }
+            }
+        }
+
+        return playlists.slice(0, limit);
+    }
+
+    private async getPopularPlaylistsFromCharts(
+        limit: number
+    ): Promise<YouTubeMusicPlaylistPreview[]> {
+        const yt = await this.ensureInitialized();
+        const sources: any[] = [];
+
+        try {
+            const charts = await (yt as any).actions.execute("/browse", {
+                client: "YTMUSIC",
+                browseId: "FEmusic_charts",
+                parse: true,
+            });
+            if (charts) {
+                sources.push(charts);
+            }
+        } catch (error: any) {
+            console.warn(
+                `[YouTube Music] Direct charts browse failed: ${error.message}`
+            );
+        }
+
+        try {
+            const explore = await (yt as any).music.getExplore();
+            const topButtons = (explore as any)?.top_buttons || [];
+            const chartsButton = topButtons.find((button: any) =>
+                /charts?/i.test(this.extractText(button?.button_text))
+            );
+
+            if (chartsButton?.endpoint?.call) {
+                const exploreCharts = await chartsButton.endpoint.call(
+                    (yt as any).actions,
+                    {
+                        client: "YTMUSIC",
+                        parse: true,
+                    }
+                );
+                if (exploreCharts) {
+                    sources.push(exploreCharts);
+                }
+            }
+        } catch (error: any) {
+            console.warn(
+                `[YouTube Music] Explore charts fallback failed: ${error.message}`
+            );
+        }
+
+        const playlists = this.extractPlaylistPreviewsFromNodes(sources, limit);
+        return playlists;
+    }
+
+    private extractPlaylistPreviewsFromNodes(
+        roots: any[],
+        limit: number
+    ): YouTubeMusicPlaylistPreview[] {
+        const previews: YouTubeMusicPlaylistPreview[] = [];
+        const seenIds = new Set<string>();
+        const visited = new Set<any>();
+        const stack = [...roots];
+
+        while (stack.length > 0 && previews.length < limit) {
+            const node = stack.pop();
+            if (!node || typeof node !== "object" || visited.has(node)) {
+                continue;
+            }
+            visited.add(node);
+
+            const parsed = this.parsePlaylistFromSearchResult(node);
+            if (parsed && !seenIds.has(parsed.id)) {
+                seenIds.add(parsed.id);
+                previews.push(parsed);
+                if (previews.length >= limit) break;
+            }
+
+            for (const value of Object.values(node)) {
+                if (!value) continue;
+                if (Array.isArray(value)) {
+                    for (const entry of value) {
+                        if (entry && typeof entry === "object") {
+                            stack.push(entry);
+                        }
+                    }
+                } else if (typeof value === "object") {
+                    stack.push(value);
+                }
+            }
+        }
+
+        return previews;
+    }
+
+    /**
+     * Parse a playlist from YouTube Music search result item (MusicResponsiveListItem)
+     */
+    private parsePlaylistFromSearchResult(item: any): YouTubeMusicPlaylistPreview | null {
+        try {
+            const rawPlaylistId =
+                this.extractText(item.endpoint?.payload?.playlistId) ||
+                this.extractText(item.endpoint?.payload?.browseId) ||
+                this.extractText(item.navigation_endpoint?.payload?.playlistId) ||
+                this.extractText(item.navigation_endpoint?.payload?.browseId) ||
+                this.extractText(item.id);
+            const playlistId = this.normalizePlaylistId(rawPlaylistId, item);
+            if (!playlistId) return null;
+
+            const title =
+                this.extractText(item.title) ||
+                this.extractText(item.name) ||
+                this.extractText(item.flex_columns?.[0]?.title) ||
+                this.extractText(item.flex_columns?.[0]?.text);
+            if (!title) return null;
+
+            let creator = "YouTube Music";
+            const byAuthor = this.extractText(item.author?.name);
+            const byAuthors = Array.isArray(item.authors)
+                ? item.authors
+                      .map((a: any) => this.extractText(a?.name || a?.text || a))
+                      .filter(Boolean)
+                      .join(", ")
+                : "";
+            const byArtists = Array.isArray(item.artists)
+                ? item.artists
+                      .map((a: any) => this.extractText(a?.name || a?.text || a))
+                      .filter(Boolean)
+                      .join(", ")
+                : "";
+            const byMeta =
+                this.extractCreatorFromMeta(
+                    this.extractText(item.flex_columns?.[1]?.title) ||
+                        this.extractText(item.flex_columns?.[1]?.text) ||
+                        this.extractText(item.subtitle)
+                ) || "";
+
+            creator = byAuthor || byAuthors || byArtists || byMeta || creator;
+
+            let imageUrl =
+                this.extractThumbnailUrl(item.thumbnails || item.thumbnail?.contents) ||
+                this.extractThumbnailUrl(item.thumbnail) ||
+                null;
+
+            let trackCount =
+                this.extractTrackCount(item.item_count) ||
+                this.extractTrackCount(item.song_count) ||
+                this.extractTrackCount(item.subtitle) ||
+                this.extractTrackCount(item.flex_columns?.[1]?.title) ||
+                this.extractTrackCount(item.flex_columns?.[1]?.text) ||
+                this.extractTrackCount(item.second_subtitle);
+
+            if (trackCount === 0 && item.item_type === "playlist") {
+                const inlineCount = this.extractTrackCount(this.extractText(item));
+                if (inlineCount > 0) {
+                    trackCount = inlineCount;
+                }
+            }
+
+            return {
+                id: playlistId,
+                title: title.trim(),
+                description: null,
+                creator: creator.trim(),
+                imageUrl,
+                trackCount,
+            };
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Parse a MusicTwoRowItem (from Explore carousels) as a playlist preview
+     */
+    private parseTwoRowItemAsPlaylist(item: any): YouTubeMusicPlaylistPreview | null {
+        return this.parsePlaylistFromSearchResult(item);
+    }
+
+    private normalizePlaylistId(rawId: string, item?: any): string {
+        const id = (rawId || "").trim();
+        if (!id) return "";
+
+        const stripped = id.startsWith("VL") ? id.substring(2) : id;
+
+        if (/^(PL|OLAK5uy_|RDCLAK5uy_|RDEM|RDMM|UU|LL|FL|LM|MPLYt_)/.test(stripped)) {
+            return stripped;
+        }
+
+        // Avoid returning plain 11-char video IDs as playlists
+        if (/^[a-zA-Z0-9_-]{11}$/.test(stripped)) {
+            const itemType = this.extractText(item?.item_type).toLowerCase();
+            const subtitle = this.extractText(item?.subtitle).toLowerCase();
+            if (
+                itemType.includes("playlist") ||
+                subtitle.includes("playlist") ||
+                !!item?.endpoint?.payload?.playlistId ||
+                !!item?.navigation_endpoint?.payload?.playlistId
+            ) {
+                return stripped;
+            }
+            return "";
+        }
+
+        return stripped;
+    }
+
+    private extractCreatorFromMeta(meta: string): string {
+        if (!meta) return "";
+
+        const parts = meta
+            .split(" • ")
+            .map((p) => p.trim())
+            .filter(Boolean);
+
+        for (const part of parts) {
+            if (/^\d{4}$/.test(part)) continue;
+            if (/^\d[\d,]*\s*(song|songs|track|tracks|video|videos|view|views)$/i.test(part)) {
+                continue;
+            }
+            if (/^(playlist|album|single|ep)$/i.test(part)) continue;
+            if (/^\d+:\d{2}(?::\d{2})?$/.test(part)) continue;
+            return part;
+        }
+
+        return "";
     }
 
     // ============================================

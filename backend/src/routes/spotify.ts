@@ -4,6 +4,7 @@ import { z } from "zod";
 import { spotifyService } from "../services/spotify";
 import { spotifyImportService } from "../services/spotifyImport";
 import { deezerService } from "../services/deezer";
+import { youtubeMusicService } from "../services/youtube-music";
 import { readSessionLog, getSessionLogPath } from "../utils/playlistLogger";
 
 const router = Router();
@@ -101,6 +102,29 @@ router.post("/preview", async (req, res) => {
                 `[Playlist Import] Deezer preview generated: ${preview.summary.total} tracks, ${preview.summary.inLibrary} in library`
             );
             res.json(preview);
+        } else if (youtubeMusicService.parseUrl(url)?.type === "playlist") {
+            // Handle YouTube Music URL
+            const parsed = youtubeMusicService.parseUrl(url);
+            if (!parsed) {
+                return res
+                    .status(400)
+                    .json({ error: "Invalid YouTube Music playlist URL" });
+            }
+
+            const ytPlaylist = await youtubeMusicService.getPlaylist(parsed.id);
+            if (!ytPlaylist) {
+                return res
+                    .status(404)
+                    .json({ error: "YouTube Music playlist not found" });
+            }
+
+            const preview =
+                await spotifyImportService.generatePreviewFromYouTube(ytPlaylist);
+
+            console.log(
+                `[Playlist Import] YouTube Music preview generated: ${preview.summary.total} tracks, ${preview.summary.inLibrary} in library`
+            );
+            res.json(preview);
         } else {
             // Handle Spotify URL
             const preview = await spotifyImportService.generatePreview(url);
@@ -156,6 +180,21 @@ router.post("/import", async (req, res) => {
                     await spotifyImportService.generatePreviewFromDeezer(
                         deezerPlaylist
                     );
+            } else if (youtubeMusicService.parseUrl(effectiveUrl)?.type === "playlist") {
+                const parsed = youtubeMusicService.parseUrl(effectiveUrl);
+                if (!parsed) {
+                    return res
+                        .status(400)
+                        .json({ error: "Invalid YouTube Music playlist URL" });
+                }
+                const ytPlaylist = await youtubeMusicService.getPlaylist(parsed.id);
+                if (!ytPlaylist) {
+                    return res
+                        .status(404)
+                        .json({ error: "YouTube Music playlist not found" });
+                }
+                effectivePreview =
+                    await spotifyImportService.generatePreviewFromYouTube(ytPlaylist);
             } else {
                 effectivePreview =
                     await spotifyImportService.generatePreview(effectiveUrl);

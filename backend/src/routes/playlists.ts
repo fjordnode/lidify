@@ -377,6 +377,9 @@ router.post("/:id/items", async (req, res) => {
             },
         });
 
+        // Touch playlist so Subsonic clients see the change
+        await prisma.playlist.update({ where: { id: req.params.id }, data: { updatedAt: new Date() } });
+
         res.json(item);
     } catch (error) {
         if (error instanceof z.ZodError) {
@@ -415,6 +418,9 @@ router.delete("/:id/items/:trackId", async (req, res) => {
                 },
             },
         });
+
+        // Touch playlist so Subsonic clients see the change
+        await prisma.playlist.update({ where: { id: req.params.id }, data: { updatedAt: new Date() } });
 
         res.json({ message: "Track removed from playlist" });
     } catch (error) {
@@ -459,7 +465,11 @@ router.put("/:id/items/reorder", async (req, res) => {
             })
         );
 
-        await prisma.$transaction(updates);
+        await prisma.$transaction([
+            ...updates,
+            // Touch playlist so Subsonic clients see the change
+            prisma.playlist.update({ where: { id: req.params.id }, data: { updatedAt: new Date() } }),
+        ]);
 
         res.json({ message: "Playlist reordered" });
     } catch (error) {

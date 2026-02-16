@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -21,6 +21,7 @@ import {
     Music,
     Clock,
     AlertCircle,
+    AlertTriangle,
     Volume2,
     X,
     Loader2,
@@ -72,7 +73,7 @@ export default function PlaylistDetailPage() {
     const router = useRouter();
     const queryClient = useQueryClient();
     const { toast } = useToast();
-    const { playTracks, addToQueue, currentTrack, isPlaying, pause, resume, currentSource } =
+    const { playTracks, addToQueue, currentTrack, isPlaying, pause, resume, next, currentSource } =
         useAudio();
     const playlistId = params.id as string;
 
@@ -81,19 +82,39 @@ export default function PlaylistDetailPage() {
         null
     );
     const [retryingTrackId, setRetryingTrackId] = useState<string | null>(null);
-    const [removingTrackId, setRemovingTrackId] = useState<string | null>(null);
     const [isRetryingMissing, setIsRetryingMissing] = useState(false);
     const previewAudioRef = useRef<HTMLAudioElement | null>(null);
 
-    // Clean up preview audio on unmount
+    // Track removal dialog state
+    const [removeTrackDialog, setRemoveTrackDialog] = useState<{
+        trackId: string;
+        trackTitle: string;
+        artistName: string;
+        otherPlaylistCount: number | null; // null = loading
+        deleteFromFilesystem: boolean;
+    } | null>(null);
+
+    // Pending deletions for pending tracks (undo toast pattern — no file on disk)
+    const pendingDeletionsRef = useRef<
+        Map<string, { type: "pending"; timeoutId: NodeJS.Timeout }>
+    >(new Map());
+
+    // Clean up preview audio AND flush pending deletions on unmount
     useEffect(() => {
+        const pendingDeletions = pendingDeletionsRef.current;
         return () => {
             if (previewAudioRef.current) {
                 previewAudioRef.current.pause();
                 previewAudioRef.current = null;
             }
+            // Fire any pending (undo-window) deletions immediately on unmount
+            pendingDeletions.forEach((entry, id) => {
+                clearTimeout(entry.timeoutId);
+                api.removePendingTrack(playlistId, id).catch(() => {});
+            });
+            pendingDeletions.clear();
         };
-    }, []);
+    }, [playlistId]);
 
     // Handle Deezer preview playback
     const handlePlayPreview = async (pendingId: string) => {
@@ -202,21 +223,59 @@ export default function PlaylistDetailPage() {
         }
     };
 
-    // Handle remove pending track
-    const handleRemovePendingTrack = async (pendingId: string) => {
-        setRemovingTrackId(pendingId);
-        try {
-            await api.removePendingTrack(playlistId, pendingId);
-            // Refresh playlist data
-            queryClient.invalidateQueries({
-                queryKey: ["playlist", playlistId],
+    // Handle remove pending track (optimistic with undo)
+    const handleRemovePendingTrack = useCallback((pendingId: string) => {
+        // Snapshot current cache data for rollback
+        const queryKey = ["playlist", playlistId];
+        const previousData = queryClient.getQueryData(queryKey);
+
+        // Optimistically remove from cache (pendingTracks + mergedItems)
+        queryClient.setQueryData(queryKey, (old: any) => {
+            if (!old) return old;
+            return {
+                ...old,
+                pendingTracks: old.pendingTracks?.filter(
+                    (pt: any) => pt.id !== pendingId
+                ),
+                mergedItems: old.mergedItems?.filter(
+                    (item: any) =>
+                        item.type !== "pending" || item.pending?.id !== pendingId
+                ),
+            };
+        });
+
+        const UNDO_DELAY = 5000;
+
+        // Schedule the actual deletion
+        const timeoutId = setTimeout(() => {
+            pendingDeletionsRef.current.delete(pendingId);
+            api.removePendingTrack(playlistId, pendingId).catch((error) => {
+                console.error("Failed to remove pending track:", error);
+                // Rollback on failure
+                queryClient.setQueryData(queryKey, previousData);
+                toast.error("Failed to remove track");
             });
-        } catch (error) {
-            console.error("Failed to remove pending track:", error);
-        } finally {
-            setRemovingTrackId(null);
-        }
-    };
+        }, UNDO_DELAY);
+
+        pendingDeletionsRef.current.set(pendingId, { type: "pending", timeoutId });
+
+        toast.info("Track removed", {
+            duration: UNDO_DELAY,
+            action: {
+                label: "Undo",
+                onClick: () => {
+                    // Cancel the deletion
+                    const entry = pendingDeletionsRef.current.get(pendingId);
+                    if (entry) {
+                        clearTimeout(entry.timeoutId);
+                        pendingDeletionsRef.current.delete(pendingId);
+                    }
+                    // Restore the cached data
+                    queryClient.setQueryData(queryKey, previousData);
+                },
+            },
+        });
+    }, [playlistId, queryClient, toast]);
 
     // Use React Query hook for playlist
     const { data: playlist, isLoading } = usePlaylistQuery(playlistId);
@@ -241,14 +300,62 @@ export default function PlaylistDetailPage() {
         return uniqueCovers;
     }, [playlist]);
 
-    const handleRemoveTrack = async (trackId: string) => {
+    // Open the remove-track confirmation dialog
+    const handleRemoveTrack = useCallback((trackId: string, trackTitle: string, artistName: string) => {
+        // Set dialog state with loading indicator for playlist count
+        setRemoveTrackDialog({
+            trackId,
+            trackTitle,
+            artistName,
+            otherPlaylistCount: null,
+            deleteFromFilesystem: false,
+        });
+
+        // Fetch how many other playlists contain this track
+        api.getTrackPlaylistCount(trackId, playlistId).then((result) => {
+            setRemoveTrackDialog((prev) =>
+                prev && prev.trackId === trackId
+                    ? { ...prev, otherPlaylistCount: result.count }
+                    : prev
+            );
+        }).catch(() => {
+            setRemoveTrackDialog((prev) =>
+                prev && prev.trackId === trackId
+                    ? { ...prev, otherPlaylistCount: 0 }
+                    : prev
+            );
+        });
+    }, [playlistId]);
+
+    // Confirm track removal (and optionally delete from filesystem)
+    const confirmRemoveTrack = useCallback(async () => {
+        if (!removeTrackDialog) return;
+        const { trackId, deleteFromFilesystem } = removeTrackDialog;
+        setRemoveTrackDialog(null);
+
+        // If currently playing this track, skip to next
+        if (currentTrack?.id === trackId) {
+            next();
+        }
+
         try {
-            await api.removeTrackFromPlaylist(playlistId, trackId);
-            // Track disappearing from list is feedback enough
+            if (deleteFromFilesystem) {
+                // Delete from filesystem (cascade removes all PlaylistItem rows)
+                await api.deleteTrack(trackId);
+            } else {
+                // Just remove from this playlist
+                await api.removeTrackFromPlaylist(playlistId, trackId);
+            }
+
+            // Refresh playlist data
+            queryClient.invalidateQueries({
+                queryKey: ["playlist", playlistId],
+            });
         } catch (error) {
             console.error("Failed to remove track:", error);
+            toast.error("Failed to remove track");
         }
-    };
+    }, [removeTrackDialog, playlistId, queryClient, toast, currentTrack, next]);
 
     const handleDeletePlaylist = async () => {
         try {
@@ -652,7 +759,7 @@ export default function PlaylistDetailPage() {
                                         const isCurrentlyPlaying = currentTrack?.id === pendingTrackId;
                                         const isActuallyPlaying = isCurrentlyPlaying && isPlaying;
                                         const isRetrying = retryingTrackId === pending.id;
-                                        const isRemoving = removingTrackId === pending.id;
+                                        // removal is now optimistic – no loading state needed
 
                                         return (
                                             <div
@@ -762,22 +869,17 @@ export default function PlaylistDetailPage() {
                                                         )}
                                                     </button>
 
-                                                    {/* Remove button */}
+                                                     {/* Remove button */}
                                                     {playlist.isOwner && (
                                                         <button
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
                                                                 handleRemovePendingTrack(pending.id);
                                                             }}
-                                                            disabled={isRemoving}
                                                             className="p-1.5 rounded-full opacity-0 group-hover:opacity-100 hover:bg-white/10 text-gray-400 hover:text-red-400 transition-all"
                                                             title="Remove from playlist"
                                                         >
-                                                            {isRemoving ? (
-                                                                <Loader2 className="w-4 h-4 animate-spin" />
-                                                            ) : (
-                                                                <X className="w-4 h-4" />
-                                                            )}
+                                                            <X className="w-4 h-4" />
                                                         </button>
                                                     )}
 
@@ -958,8 +1060,9 @@ export default function PlaylistDetailPage() {
                                                         onClick={(e) => {
                                                             e.stopPropagation();
                                                             handleRemoveTrack(
-                                                                playlistItem
-                                                                    .track.id
+                                                                playlistItem.track.id,
+                                                                playlistItem.track.title,
+                                                                playlistItem.track.album.artist.name
                                                             );
                                                         }}
                                                         title="Remove from Playlist"
@@ -989,7 +1092,99 @@ export default function PlaylistDetailPage() {
                 )}
             </div>
 
-            {/* Confirm Dialog */}
+            {/* Remove Track Confirmation Dialog */}
+            {removeTrackDialog && (
+                <div
+                    className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4"
+                    onClick={() => setRemoveTrackDialog(null)}
+                >
+                    <div
+                        className="bg-[#121212] rounded-xl max-w-md w-full overflow-hidden border border-white/10 shadow-2xl"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Header */}
+                        <div className="flex items-start gap-4 p-6 border-b border-white/10">
+                            <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center flex-shrink-0">
+                                <AlertTriangle className="w-6 h-6 text-red-500" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <h2 className="text-xl font-bold text-white mb-2">
+                                    Remove Track?
+                                </h2>
+                                <p className="text-sm text-gray-400">
+                                    Remove <span className="text-white font-medium">{removeTrackDialog.trackTitle}</span> by{" "}
+                                    <span className="text-white font-medium">{removeTrackDialog.artistName}</span> from this playlist?
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setRemoveTrackDialog(null)}
+                                className="p-1 hover:bg-white/10 rounded-full transition-colors text-gray-400 hover:text-white flex-shrink-0"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Filesystem delete option */}
+                        <div className="px-6 py-4 border-b border-white/10">
+                            <label className="flex items-start gap-3 cursor-pointer group">
+                                <input
+                                    type="checkbox"
+                                    checked={removeTrackDialog.deleteFromFilesystem}
+                                    onChange={(e) =>
+                                        setRemoveTrackDialog((prev) =>
+                                            prev ? { ...prev, deleteFromFilesystem: e.target.checked } : prev
+                                        )
+                                    }
+                                    className="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-red-500 focus:ring-red-500/50 accent-red-500"
+                                />
+                                <div>
+                                    <span className="text-sm text-white font-medium group-hover:text-red-400 transition-colors">
+                                        Also delete from filesystem
+                                    </span>
+                                    <p className="text-xs text-gray-500 mt-0.5">
+                                        Permanently removes the file from disk and all playlists
+                                    </p>
+                                    {removeTrackDialog.deleteFromFilesystem && removeTrackDialog.otherPlaylistCount === null && (
+                                        <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                                            <Loader2 className="w-3 h-3 animate-spin" />
+                                            Checking other playlists...
+                                        </p>
+                                    )}
+                                    {removeTrackDialog.deleteFromFilesystem && removeTrackDialog.otherPlaylistCount !== null && removeTrackDialog.otherPlaylistCount > 0 && (
+                                        <p className="text-xs text-yellow-400 mt-1 flex items-center gap-1">
+                                            <AlertCircle className="w-3 h-3" />
+                                            This track is in {removeTrackDialog.otherPlaylistCount} other playlist{removeTrackDialog.otherPlaylistCount !== 1 ? "s" : ""}
+                                        </p>
+                                    )}
+                                </div>
+                            </label>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex gap-3 p-6 bg-[#0a0a0a]/50">
+                            <button
+                                onClick={() => setRemoveTrackDialog(null)}
+                                className="flex-1 px-4 py-3 bg-white/5 hover:bg-white/10 text-white font-semibold rounded-lg transition-all border border-white/10"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmRemoveTrack}
+                                className={cn(
+                                    "flex-1 px-4 py-3 font-semibold rounded-lg transition-all",
+                                    removeTrackDialog.deleteFromFilesystem
+                                        ? "bg-red-500 hover:bg-red-600 text-white"
+                                        : "bg-brand hover:bg-brand/90 text-black"
+                                )}
+                            >
+                                {removeTrackDialog.deleteFromFilesystem ? "Delete" : "Remove"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Playlist Confirm Dialog */}
             <ConfirmDialog
                 isOpen={showDeleteConfirm}
                 onClose={() => setShowDeleteConfirm(false)}

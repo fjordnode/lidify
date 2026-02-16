@@ -730,6 +730,116 @@ router.get("/recently-added", async (req, res) => {
     }
 });
 
+// GET /library/top-artists?period=week|month|year|all&limit=20
+router.get("/top-artists", async (req, res) => {
+    try {
+        const period = (req.query.period as string) || "month";
+        const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
+        const userId = req.user!.id;
+
+        // Calculate the date cutoff based on period
+        let dateFilter: Date | null = null;
+        const now = new Date();
+        switch (period) {
+            case "week":
+                dateFilter = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                break;
+            case "month":
+                dateFilter = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                break;
+            case "year":
+                dateFilter = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+                break;
+            case "all":
+            default:
+                dateFilter = null;
+                break;
+        }
+
+        // Query plays grouped by artist, counting plays per artist
+        const playsByArtist = await prisma.play.groupBy({
+            by: ["trackId"],
+            where: {
+                userId,
+                ...(dateFilter ? { playedAt: { gte: dateFilter } } : {}),
+            },
+            _count: { id: true },
+        });
+
+        if (playsByArtist.length === 0) {
+            return res.json({ artists: [] });
+        }
+
+        // Get track -> artist mapping for all played tracks
+        const trackIds = playsByArtist.map((p) => p.trackId);
+        const tracks = await prisma.track.findMany({
+            where: { id: { in: trackIds } },
+            select: {
+                id: true,
+                album: {
+                    select: {
+                        artistId: true,
+                    },
+                },
+            },
+        });
+
+        // Aggregate play counts by artist
+        const trackToArtist = new Map(
+            tracks.map((t) => [t.id, t.album.artistId])
+        );
+        const artistPlayCounts = new Map<string, number>();
+        for (const play of playsByArtist) {
+            const artistId = trackToArtist.get(play.trackId);
+            if (artistId) {
+                artistPlayCounts.set(
+                    artistId,
+                    (artistPlayCounts.get(artistId) || 0) + play._count.id
+                );
+            }
+        }
+
+        // Sort by play count, take top N
+        const topArtistIds = Array.from(artistPlayCounts.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, limit);
+
+        if (topArtistIds.length === 0) {
+            return res.json({ artists: [] });
+        }
+
+        // Fetch artist details
+        const artists = await prisma.artist.findMany({
+            where: { id: { in: topArtistIds.map(([id]) => id) } },
+            select: {
+                id: true,
+                name: true,
+                heroUrl: true,
+            },
+        });
+
+        // Build a lookup and preserve the sorted order
+        const artistMap = new Map(artists.map((a) => [a.id, a]));
+        const result = topArtistIds
+            .map(([id, playCount]) => {
+                const artist = artistMap.get(id);
+                if (!artist) return null;
+                return {
+                    id: artist.id,
+                    name: artist.name,
+                    coverArt: artist.heroUrl,
+                    playCount,
+                };
+            })
+            .filter(Boolean);
+
+        res.json({ artists: result });
+    } catch (error) {
+        console.error("Get top artists error:", error);
+        res.status(500).json({ error: "Failed to fetch top artists" });
+    }
+});
+
 // GET /library/artists?query=&limit=&offset=&filter=owned|discovery|all
 router.get("/artists", async (req, res) => {
     try {
@@ -3895,6 +4005,27 @@ router.get("/tracks/:id", async (req, res) => {
     } catch (error) {
         console.error("Get track error:", error);
         res.status(500).json({ error: "Failed to fetch track" });
+    }
+});
+
+// GET /library/tracks/:id/playlist-count
+// Returns how many playlists (other than the specified one) contain this track
+router.get("/tracks/:id/playlist-count", async (req, res) => {
+    try {
+        const { id: trackId } = req.params;
+        const excludePlaylistId = req.query.excludePlaylistId as string | undefined;
+
+        const count = await prisma.playlistItem.count({
+            where: {
+                trackId,
+                ...(excludePlaylistId ? { playlistId: { not: excludePlaylistId } } : {}),
+            },
+        });
+
+        res.json({ count });
+    } catch (error) {
+        console.error("Get track playlist count error:", error);
+        res.status(500).json({ error: "Failed to get playlist count" });
     }
 });
 

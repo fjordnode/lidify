@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireAuthOrToken } from "../middleware/auth";
 import { spotifyService } from "../services/spotify";
 import { deezerService, DeezerPlaylistPreview, DeezerRadioStation } from "../services/deezer";
+import { youtubeMusicService, YouTubeMusicPlaylistPreview } from "../services/youtube-music";
 
 const router = Router();
 
@@ -13,7 +14,7 @@ router.use(requireAuthOrToken);
  */
 interface PlaylistPreview {
     id: string;
-    source: "deezer" | "spotify";
+    source: "deezer" | "spotify" | "youtube";
     type: "playlist" | "radio";
     title: string;
     description: string | null;
@@ -413,8 +414,19 @@ router.post("/playlists/parse", async (req, res) => {
             });
         }
 
-        return res.status(400).json({ 
-            error: "Invalid or unsupported URL. Please provide a Spotify or Deezer playlist URL." 
+        // Try YouTube Music
+        const youtubeParsed = youtubeMusicService.parseUrl(url);
+        if (youtubeParsed && youtubeParsed.type === "playlist") {
+            return res.json({
+                source: "youtube",
+                type: "playlist",
+                id: youtubeParsed.id,
+                url: `https://music.youtube.com/playlist?list=${youtubeParsed.id}`,
+            });
+        }
+
+        return res.status(400).json({
+            error: "Invalid or unsupported URL. Please provide a Spotify, Deezer, or YouTube Music playlist URL."
         });
     } catch (error: any) {
         console.error("Parse URL error:", error);
@@ -565,7 +577,125 @@ router.get("/spotify/playlists/search", async (req, res) => {
 });
 
 // ============================================
-// Combined Search Endpoint (both sources)
+// YouTube Music Browse Endpoints
+// ============================================
+
+/**
+ * Convert YouTube Music playlist to unified format
+ */
+function youtubePlaylistToUnified(playlist: YouTubeMusicPlaylistPreview): PlaylistPreview {
+    return {
+        id: playlist.id,
+        source: "youtube",
+        type: "playlist",
+        title: playlist.title,
+        description: playlist.description,
+        creator: playlist.creator,
+        imageUrl: playlist.imageUrl,
+        trackCount: playlist.trackCount,
+        url: `https://music.youtube.com/playlist?list=${playlist.id}`,
+    };
+}
+
+/**
+ * GET /api/browse/youtube/all
+ * Get YouTube Music explore/trending playlists
+ */
+router.get("/youtube/all", async (req, res) => {
+    try {
+        console.log("[Browse] Fetching YouTube Music explore playlists...");
+
+        const sections = await youtubeMusicService.getExplorePlaylistSections(40, 40);
+        const playlists = [...sections.featured, ...sections.community];
+
+        console.log(
+            `[Browse] YouTube Music: ${sections.featured.length} featured, ${sections.community.length} community playlists`
+        );
+
+        res.json({
+            playlists: playlists.map(youtubePlaylistToUnified),
+            featuredPlaylists: sections.featured.map(youtubePlaylistToUnified),
+            communityPlaylists: sections.community.map(youtubePlaylistToUnified),
+            source: "youtube",
+        });
+    } catch (error: any) {
+        console.error("YouTube Music browse all error:", error);
+        res.status(500).json({ error: error.message || "Failed to fetch YouTube Music content" });
+    }
+});
+
+/**
+ * GET /api/browse/youtube/playlists/:id
+ * Get full details of a YouTube Music playlist
+ */
+router.get("/youtube/playlists/:id", async (req, res) => {
+    try {
+        const { id } = req.params;
+        const playlist = await youtubeMusicService.getPlaylist(id);
+
+        if (!playlist) {
+            return res.status(404).json({ error: "Playlist not found" });
+        }
+
+        res.json({
+            id: playlist.id,
+            title: playlist.title,
+            description: playlist.description,
+            creator: playlist.creator,
+            imageUrl: playlist.imageUrl,
+            trackCount: playlist.trackCount,
+            tracks: playlist.tracks.map(t => ({
+                id: t.videoId,
+                title: t.title,
+                artist: t.artist,
+                artistId: "",
+                album: t.album || "",
+                albumId: "",
+                durationMs: t.duration * 1000,
+                previewUrl: null,
+                coverUrl: t.thumbnail || null,
+            })),
+            isPublic: playlist.isPublic,
+            source: "youtube",
+            url: playlist.url,
+        });
+    } catch (error: any) {
+        console.error("YouTube Music playlist fetch error:", error);
+        res.status(500).json({ error: error.message || "Failed to fetch YouTube Music playlist" });
+    }
+});
+
+/**
+ * GET /api/browse/youtube/playlists/search
+ * Search for playlists on YouTube Music
+ */
+router.get("/youtube/playlists/search", async (req, res) => {
+    try {
+        const query = req.query.q as string;
+        if (!query || query.length < 2) {
+            return res.status(400).json({ error: "Search query must be at least 2 characters" });
+        }
+
+        const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+        console.log(`[Browse] Searching YouTube Music playlists for "${query}"...`);
+
+        const playlists = await youtubeMusicService.searchPlaylists(query, limit);
+        console.log(`[Browse] YouTube Music search "${query}": ${playlists.length} results`);
+
+        res.json({
+            playlists: playlists.map(youtubePlaylistToUnified),
+            total: playlists.length,
+            query,
+            source: "youtube",
+        });
+    } catch (error: any) {
+        console.error("YouTube Music search playlists error:", error);
+        res.status(500).json({ error: error.message || "Failed to search YouTube Music playlists" });
+    }
+});
+
+// ============================================
+// Combined Search Endpoint (all sources)
 // ============================================
 
 /**
@@ -583,8 +713,8 @@ router.get("/search", async (req, res) => {
         const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
         console.log(`[Browse] Combined search for "${query}" (limit: ${limit})...`);
 
-        // Search both sources in parallel
-        const [deezerResults, spotifyResults] = await Promise.all([
+        // Search all sources in parallel
+        const [deezerResults, spotifyResults, youtubeResults] = await Promise.all([
             deezerService.searchPlaylists(query, limit).catch(err => {
                 console.error("Deezer search failed:", err.message);
                 return [];
@@ -593,24 +723,32 @@ router.get("/search", async (req, res) => {
                 console.error("Spotify search failed:", err.message);
                 return [];
             }),
+            youtubeMusicService.searchPlaylists(query, limit).catch(err => {
+                console.error("YouTube Music search failed:", err.message);
+                return [];
+            }),
         ]);
 
-        console.log(`[Browse] Combined search "${query}": Deezer=${deezerResults.length}, Spotify=${spotifyResults.length}`);
+        console.log(`[Browse] Combined search "${query}": Deezer=${deezerResults.length}, Spotify=${spotifyResults.length}, YouTube=${youtubeResults.length}`);
 
         // Convert to unified format
         const deezerPlaylists = deezerResults.map(deezerPlaylistToUnified);
         const spotifyPlaylists = spotifyResults.map(spotifyPlaylistToUnified);
+        const youtubePlaylists = youtubeResults.map(youtubePlaylistToUnified);
 
-        // Interleave results (Deezer, Spotify, Deezer, Spotify, ...)
+        // Interleave results (Deezer, Spotify, YouTube, Deezer, Spotify, YouTube, ...)
         const interleaved: PlaylistPreview[] = [];
-        const maxLen = Math.max(deezerPlaylists.length, spotifyPlaylists.length);
-        
+        const maxLen = Math.max(deezerPlaylists.length, spotifyPlaylists.length, youtubePlaylists.length);
+
         for (let i = 0; i < maxLen; i++) {
             if (i < deezerPlaylists.length) {
                 interleaved.push(deezerPlaylists[i]);
             }
             if (i < spotifyPlaylists.length) {
                 interleaved.push(spotifyPlaylists[i]);
+            }
+            if (i < youtubePlaylists.length) {
+                interleaved.push(youtubePlaylists[i]);
             }
         }
 
@@ -621,6 +759,7 @@ router.get("/search", async (req, res) => {
             sources: {
                 deezer: deezerResults.length,
                 spotify: spotifyResults.length,
+                youtube: youtubeResults.length,
             },
         });
     } catch (error: any) {

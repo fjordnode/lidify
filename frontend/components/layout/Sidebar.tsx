@@ -19,13 +19,19 @@ interface ScanStatus {
     startedAt?: number;
 }
 
-const navigation = [
+interface NavigationItem {
+    name: string;
+    href: string;
+    badge?: string;
+}
+
+const navigation: NavigationItem[] = [
     { name: "Library", href: "/library" },
     { name: "Radio", href: "/radio" },
     { name: "Discovery", href: "/discover" },
     { name: "Podcasts", href: "/podcasts" },
-    { name: "Browse", href: "/browse/playlists", badge: "Beta" },
-] as const;
+    { name: "Browse", href: "/browse/playlists" },
+];
 
 interface Playlist {
     id: string;

@@ -357,7 +357,8 @@ router.get("/getArtist.view", async (req: Request, res: Response) => {
             songCount: album._count.tracks,
             duration: album.tracks.reduce((sum, t) => sum + (t.duration || 0), 0),
             artistId: `ar-${artist.id}`,
-            created: album.createdAt?.toISOString() || "",
+            musicFolderId: 1,
+            created: album.location === "LIBRARY" ? album.createdAt?.toISOString() || "" : undefined,
             played: lastPlayedMap.get(album.id)?.toISOString(),
             playCount: playCountMap.get(album.id) || 0,
         }));
@@ -468,6 +469,7 @@ router.get("/getAlbum.view", async (req: Request, res: Response) => {
                     coverUrl: album.coverUrl,
                     year: album.year,
                     createdAt: album.createdAt,
+                    location: album.location,
                     artist: album.artist,
                 },
             }, {
@@ -492,7 +494,8 @@ router.get("/getAlbum.view", async (req: Request, res: Response) => {
                     songCount: album.tracks.length,
                     duration: album.tracks.reduce((sum, t) => sum + (t.duration || 0), 0),
                     artistId: `ar-${album.artist.id}`,
-                    created: album.createdAt?.toISOString() || "",
+                    musicFolderId: 1,
+                    created: album.location === "LIBRARY" ? album.createdAt?.toISOString() || "" : undefined,
                     played: lastPlayed?.toISOString(),
                     playCount,
                     song: songs,
@@ -574,6 +577,7 @@ router.get("/getSong.view", async (req: Request, res: Response) => {
                         coverUrl: track.album.coverUrl,
                         year: track.album.year,
                         createdAt: track.album.createdAt,
+                        location: track.album.location,
                         artist: track.album.artist,
                     },
                 }, {
@@ -597,9 +601,9 @@ router.get("/getSong.view", async (req: Request, res: Response) => {
 });
 
 /**
- * getAlbumList2.view - Album list (ID3 mode) with sorting options
+ * getAlbumList.view / getAlbumList2.view - Album list with sorting options
  */
-router.get("/getAlbumList2.view", async (req: Request, res: Response) => {
+const albumListHandler = async (req: Request, res: Response) => {
     const format = getResponseFormat(req.query);
     const {
         type = "alphabeticalByName",
@@ -667,7 +671,8 @@ router.get("/getAlbumList2.view", async (req: Request, res: Response) => {
                 songCount: album!._count.tracks,
                 duration: album!.tracks.reduce((sum, t) => sum + (t.duration || 0), 0),
                 artistId: `ar-${album!.artist.id}`,
-                created: album!.createdAt?.toISOString() || "",
+                musicFolderId: 1,
+                created: album!.location === "LIBRARY" ? album!.createdAt?.toISOString() || "" : undefined,
                 played: lastPlayedMap.get(album!.id) ? lastPlayedMap.get(album!.id)!.toISOString() : undefined,
                 playCount: playCountMap.get(album!.id) || 0,
             }));
@@ -721,7 +726,8 @@ router.get("/getAlbumList2.view", async (req: Request, res: Response) => {
                 songCount: album!._count.tracks,
                 duration: album!.tracks.reduce((sum, t) => sum + (t.duration || 0), 0),
                 artistId: `ar-${album!.artist.id}`,
-                created: album!.createdAt?.toISOString() || "",
+                musicFolderId: 1,
+                created: album!.location === "LIBRARY" ? album!.createdAt?.toISOString() || "" : undefined,
                 played: lastPlayedMap.get(album!.id) ? lastPlayedMap.get(album!.id)!.toISOString() : undefined,
                 playCount: playCountMap.get(album!.id) || 0,
             }));
@@ -744,8 +750,26 @@ router.get("/getAlbumList2.view", async (req: Request, res: Response) => {
                 break;
             case "newest":
                 orderBy = { createdAt: "desc" };
-                // Only show LIBRARY albums (exclude playlist-imported albums)
-                where.location = "LIBRARY";
+                // Keep global "recently added" scoped to main library only.
+                // Playlist-only imports should be discoverable via playlist/search endpoints,
+                // but not surfaced in the global recent feed.
+                where = {
+                    AND: [
+                        { location: "LIBRARY" },
+                        {
+                            tracks: {
+                                some: {
+                                    NOT: {
+                                        OR: [
+                                            { filePath: { startsWith: "Playlists/" } },
+                                            { filePath: { startsWith: "soulseek-downloads/Playlists/" } },
+                                        ],
+                                    },
+                                },
+                            },
+                        },
+                    ],
+                };
                 break;
             case "alphabeticalByName":
                 orderBy = { title: "asc" };
@@ -821,7 +845,8 @@ router.get("/getAlbumList2.view", async (req: Request, res: Response) => {
                 songCount: album._count.tracks,
                 duration: album.tracks.reduce((sum, t) => sum + (t.duration || 0), 0),
                 artistId: `ar-${album.artist.id}`,
-                created: album.createdAt?.toISOString() || "",
+                musicFolderId: 1,
+                created: album.location === "LIBRARY" ? album.createdAt?.toISOString() || "" : undefined,
                 played: lastPlay ? lastPlay.toISOString() : undefined,
                 playCount,
             };
@@ -843,7 +868,10 @@ router.get("/getAlbumList2.view", async (req: Request, res: Response) => {
             req.query.callback as string
         );
     }
-});
+};
+
+router.get("/getAlbumList.view", albumListHandler);
+router.get("/getAlbumList2.view", albumListHandler);
 
 /**
  * getRandomSongs.view - Random tracks
@@ -902,6 +930,7 @@ router.get("/getRandomSongs.view", async (req: Request, res: Response) => {
                         coverUrl: track.album!.coverUrl,
                         year: track.album!.year,
                         createdAt: track.album!.createdAt,
+                        location: track.album!.location,
                         artist: track.album!.artist,
                     },
                 }, {
@@ -937,15 +966,13 @@ router.get("/getRandomSongs.view", async (req: Request, res: Response) => {
  */
 router.get("/search3.view", async (req: Request, res: Response) => {
     const format = getResponseFormat(req.query);
-    const {
-        query = "", // Allow empty query for full library sync (required by Symfonium)
-        artistCount = "20",
-        artistOffset = "0",
-        albumCount = "20",
-        albumOffset = "0",
-        songCount = "20",
-        songOffset = "0",
-    } = req.query;
+    const query = (req.query.query as string) ?? ""; // Allow empty query for full library sync
+    const artistCount = req.query.artistCount as string | undefined;
+    const artistOffset = req.query.artistOffset as string | undefined;
+    const albumCount = req.query.albumCount as string | undefined;
+    const albumOffset = req.query.albumOffset as string | undefined;
+    const songCount = req.query.songCount as string | undefined;
+    const songOffset = req.query.songOffset as string | undefined;
 
     try {
         // Handle empty query - Symfonium sends "" (literal quotes) for full library sync
@@ -955,33 +982,117 @@ router.get("/search3.view", async (req: Request, res: Response) => {
             searchTerm = searchTerm.slice(1, -1);
         }
 
-        // Build where clauses - empty search term returns all results
-        // Filter to LIBRARY only to exclude playlist-imported content from library sync
+        // Many clients do full sync with query="" and omit *Count params.
+        // In that case, returning only the Subsonic default (20) causes partial local indexes.
+        const parseCount = (value: string | undefined, fullSyncDefault: number): number => {
+            const parsed = value !== undefined ? parseInt(value, 10) : NaN;
+            if (!Number.isFinite(parsed) || parsed < 0) {
+                return fullSyncDefault;
+            }
+            if (parsed === 0) {
+                return fullSyncDefault;
+            }
+            return parsed;
+        };
+        const parseOffset = (value: string | undefined): number => {
+            const parsed = value !== undefined ? parseInt(value, 10) : NaN;
+            if (!Number.isFinite(parsed) || parsed < 0) {
+                return 0;
+            }
+            return parsed;
+        };
+
+        const isFullSyncQuery = searchTerm.length === 0;
+        const artistTake = parseCount(artistCount, isFullSyncQuery ? 5000 : 20);
+        const albumTake = parseCount(albumCount, isFullSyncQuery ? 5000 : 20);
+        const songTake = parseCount(songCount, isFullSyncQuery ? 50000 : 20);
+        const artistSkip = parseOffset(artistOffset);
+        const albumSkip = parseOffset(albumOffset);
+        const songSkip = parseOffset(songOffset);
+
+        console.log(
+            `[Subsonic] search3.view: query="${searchTerm}" artist=${artistTake}/${artistSkip} album=${albumTake}/${albumSkip} song=${songTake}/${songSkip}`
+        );
+
+        // Build where clauses - empty search term returns all results.
+        // Include tracks/albums/artists that are either in LIBRARY or referenced by this
+        // user's playlists, so Subsonic clients can resolve playlist entries reliably.
+        const playlistVisibilityFilter = {
+            playlistItems: {
+                some: {
+                    playlist: {
+                        userId: req.user!.id,
+                    },
+                },
+            },
+        };
+
+        const artistVisibilityFilter = {
+            albums: {
+                some: {
+                    OR: [
+                        { location: "LIBRARY" as const },
+                        {
+                            tracks: {
+                                some: playlistVisibilityFilter,
+                            },
+                        },
+                    ],
+                },
+            },
+        };
+
+        const albumVisibilityFilter = {
+            OR: [
+                { location: "LIBRARY" as const },
+                {
+                    tracks: {
+                        some: playlistVisibilityFilter,
+                    },
+                },
+            ],
+        };
+
+        const trackVisibilityFilter = {
+            OR: [
+                { album: { location: "LIBRARY" as const } },
+                playlistVisibilityFilter,
+            ],
+        };
+
         const artistWhere = searchTerm
-            ? { 
+            ? {
+                  ...artistVisibilityFilter,
                   name: { contains: searchTerm, mode: "insensitive" as const },
-                  albums: { some: { location: "LIBRARY" } }, // Only artists with LIBRARY albums
               }
-            : { albums: { some: { location: "LIBRARY" } } };
+            : artistVisibilityFilter;
         const albumWhere = searchTerm
             ? {
-                  location: "LIBRARY", // Only LIBRARY albums
-                  OR: [
-                      { title: { contains: searchTerm, mode: "insensitive" as const } },
-                      { artist: { name: { contains: searchTerm, mode: "insensitive" as const } } },
+                  AND: [
+                      albumVisibilityFilter,
+                      {
+                          OR: [
+                              { title: { contains: searchTerm, mode: "insensitive" as const } },
+                              { artist: { name: { contains: searchTerm, mode: "insensitive" as const } } },
+                          ],
+                      },
                   ],
               }
-            : { location: "LIBRARY" };
+            : albumVisibilityFilter;
         const trackWhere = searchTerm
             ? {
-                  album: { location: "LIBRARY" }, // Only tracks from LIBRARY albums
-                  OR: [
-                      { title: { contains: searchTerm, mode: "insensitive" as const } },
-                      { album: { title: { contains: searchTerm, mode: "insensitive" as const } } },
-                      { album: { artist: { name: { contains: searchTerm, mode: "insensitive" as const } } } },
+                  AND: [
+                      trackVisibilityFilter,
+                      {
+                          OR: [
+                              { title: { contains: searchTerm, mode: "insensitive" as const } },
+                              { album: { title: { contains: searchTerm, mode: "insensitive" as const } } },
+                              { album: { artist: { name: { contains: searchTerm, mode: "insensitive" as const } } } },
+                          ],
+                      },
                   ],
               }
-            : { album: { location: "LIBRARY" } };
+            : trackVisibilityFilter;
 
         // Run all searches in parallel for better performance
         const [artists, albums, songs] = await Promise.all([
@@ -996,8 +1107,8 @@ router.get("/search3.view", async (req: Request, res: Response) => {
                     _count: { select: { albums: true } },
                 },
                 orderBy: { name: "asc" },
-                skip: parseInt(artistOffset as string, 10) || 0,
-                take: parseInt(artistCount as string, 10) || 5000, // 0 means all
+                skip: artistSkip,
+                take: artistTake,
             }),
             // Search albums - count=0 means return all (Symfonium behavior)
             prisma.album.findMany({
@@ -1008,8 +1119,8 @@ router.get("/search3.view", async (req: Request, res: Response) => {
                     tracks: { select: { duration: true } },
                 },
                 orderBy: { title: "asc" },
-                skip: parseInt(albumOffset as string, 10) || 0,
-                take: parseInt(albumCount as string, 10) || 5000, // 0 means all
+                skip: albumSkip,
+                take: albumTake,
             }),
             // Search songs - count=0 means return all (Symfonium behavior)
             prisma.track.findMany({
@@ -1022,8 +1133,8 @@ router.get("/search3.view", async (req: Request, res: Response) => {
                     },
                 },
                 orderBy: { title: "asc" },
-                skip: parseInt(songOffset as string, 10) || 0,
-                take: parseInt(songCount as string, 10) || 50000, // 0 means all
+                skip: songSkip,
+                take: songTake,
             }),
         ]);
 
@@ -1112,7 +1223,8 @@ router.get("/search3.view", async (req: Request, res: Response) => {
                             songCount: album._count.tracks,
                             duration: album.tracks.reduce((sum, t) => sum + (t.duration || 0), 0),
                             artistId: `ar-${album.artist.id}`,
-                            created: album.createdAt?.toISOString() || "",
+                            musicFolderId: 1,
+                            created: album.location === "LIBRARY" ? album.createdAt?.toISOString() || "" : undefined,
                             played: lastPlay ? lastPlay.toISOString() : undefined, // Must always include, even if empty
                             playCount,
                         };
@@ -1128,6 +1240,7 @@ router.get("/search3.view", async (req: Request, res: Response) => {
                                     coverUrl: track.album!.coverUrl,
                                     year: track.album!.year,
                                     createdAt: track.album!.createdAt,
+                                    location: track.album!.location,
                                     artist: track.album!.artist,
                                 },
                             }, {
@@ -1762,10 +1875,12 @@ router.get("/getPlaylists.view", async (req: Request, res: Response) => {
                 public: false,
                 owner: req.user!.username,
                 created: pl.createdAt.toISOString(),
-                changed: pl.createdAt.toISOString(), // No updatedAt field, use createdAt
+                changed: pl.updatedAt.toISOString(),
                 coverArt: pl._count.items > 0 ? `pl-${pl.id}` : undefined, // Mosaic generated on demand
             };
         });
+
+        console.log(`[Subsonic] getPlaylists.view: ${playlistList.map(p => `"${p.name}"(${p.songCount})`).join(', ')}`);
 
         sendSubsonicSuccess(
             res,
@@ -1857,6 +1972,7 @@ router.get("/getPlaylist.view", async (req: Request, res: Response) => {
                         coverUrl: item.track.album!.coverUrl,
                         year: item.track.album!.year,
                         createdAt: item.track.album!.createdAt,
+                        location: item.track.album!.location,
                         artist: item.track.album!.artist,
                     },
                 }, {
@@ -1870,6 +1986,18 @@ router.get("/getPlaylist.view", async (req: Request, res: Response) => {
             0
         );
 
+        console.log(`[Subsonic] getPlaylist.view: "${playlist.name}" — items=${playlist.items.length}, filtered=${songs.length}, format=${format}, changed=${playlist.updatedAt.toISOString()}`);
+        if (songs.length > 0) {
+            const sample = songs[0] as any;
+            console.log(`[Subsonic] getPlaylist.view sample entry: id=${sample.id} title="${sample.title}" artist="${sample.artist}" album="${sample.album}" path="${sample.path}" suffix=${sample.suffix} size=${sample.size}`);
+        }
+        // Log entries with potential issues (missing fields)
+        const problematic = (songs as any[]).filter(s => !s.id || !s.title || !s.artist || !s.suffix || !s.size || s.size === 0);
+        if (problematic.length > 0) {
+            console.log(`[Subsonic] getPlaylist.view WARNING: ${problematic.length} entries with missing/zero fields`);
+            console.log(`[Subsonic] First problematic: ${JSON.stringify(problematic[0])}`);
+        }
+
         sendSubsonicSuccess(
             res,
             {
@@ -1881,7 +2009,7 @@ router.get("/getPlaylist.view", async (req: Request, res: Response) => {
                     public: false,
                     owner: req.user!.username,
                     created: playlist.createdAt.toISOString(),
-                    changed: playlist.createdAt.toISOString(), // No updatedAt field
+                    changed: playlist.updatedAt.toISOString(),
                     coverArt: songs.length > 0 ? `pl-${playlist.id}` : undefined,
                     entry: songs,
                 },
@@ -1922,7 +2050,7 @@ router.get("/createPlaylist.view", async (req: Request, res: Response) => {
             // Verify ownership
             const existingPlaylist = await prisma.playlist.findUnique({
                 where: { id: plId },
-                select: { userId: true },
+                select: { userId: true, _count: { select: { pendingTracks: true, items: true } } },
             });
 
             if (!existingPlaylist || existingPlaylist.userId !== req.user!.id) {
@@ -1943,21 +2071,37 @@ router.get("/createPlaylist.view", async (req: Request, res: Response) => {
             }
 
             if (songId && Array.isArray(songId)) {
-                // Clear existing and add new tracks
-                await prisma.playlistItem.deleteMany({
-                    where: { playlistId: plId },
-                });
+                // Guard: don't let a client with stale data wipe a server-managed playlist.
+                // If the playlist has pending tracks (import in progress) or the client is
+                // sending fewer tracks than the server knows about, skip the destructive replace.
+                const hasPending = existingPlaylist._count.pendingTracks > 0;
+                const clientHasFewer = (songId as string[]).length < existingPlaylist._count.items;
 
-                const trackIds = (songId as string[]).map((id) => parseSubsonicId(id).id);
+                if (hasPending || clientHasFewer) {
+                    console.log(
+                        `[Subsonic] createPlaylist: skipping track replacement for playlist ${plId} ` +
+                        `(pending=${existingPlaylist._count.pendingTracks}, server=${existingPlaylist._count.items}, client=${(songId as string[]).length})`
+                    );
+                } else {
+                    // Safe to replace — client has at least as many tracks as server
+                    await prisma.playlistItem.deleteMany({
+                        where: { playlistId: plId },
+                    });
 
-                await prisma.playlistItem.createMany({
-                    data: trackIds.map((trackId, index) => ({
-                        playlistId: plId,
-                        trackId,
-                        sort: index,
-                    })),
-                });
+                    const trackIds = (songId as string[]).map((id) => parseSubsonicId(id).id);
+
+                    await prisma.playlistItem.createMany({
+                        data: trackIds.map((trackId, index) => ({
+                            playlistId: plId,
+                            trackId,
+                            sort: index,
+                        })),
+                    });
+                }
             }
+
+            // Touch playlist so Subsonic clients detect the change
+            await prisma.playlist.update({ where: { id: plId }, data: { updatedAt: new Date() } });
 
             sendSubsonicSuccess(res, {}, format, req.query.callback as string);
         } else if (name) {
@@ -1979,6 +2123,9 @@ router.get("/createPlaylist.view", async (req: Request, res: Response) => {
                         sort: index,
                     })),
                 });
+
+                // Touch playlist so Subsonic clients detect the change
+                await prisma.playlist.update({ where: { id: playlist.id }, data: { updatedAt: new Date() } });
             }
 
             sendSubsonicSuccess(res, {}, format, req.query.callback as string);
@@ -2087,6 +2234,11 @@ router.get("/updatePlaylist.view", async (req: Request, res: Response) => {
                     where: { id: { in: idsToDelete } },
                 });
             }
+        }
+
+        // Touch playlist so Subsonic clients detect the change
+        if (songIdToAdd || songIndexToRemove || name) {
+            await prisma.playlist.update({ where: { id: plId }, data: { updatedAt: new Date() } });
         }
 
         sendSubsonicSuccess(res, {}, format, req.query.callback as string);
@@ -2494,6 +2646,7 @@ router.get("/getTopSongs.view", async (req: Request, res: Response) => {
                         coverUrl: track.album!.coverUrl,
                         year: track.album!.year,
                         createdAt: track.album!.createdAt,
+                        location: track.album!.location,
                         artist: track.album!.artist,
                     },
                 }, {

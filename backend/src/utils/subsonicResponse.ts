@@ -210,6 +210,7 @@ export function formatTrackForSubsonic(track: {
         coverUrl?: string | null;
         year?: number | null;
         createdAt?: Date | null; // Fallback if fileModified not available
+        location?: string;
         artist: {
             id: string;
             name: string;
@@ -221,7 +222,9 @@ export function formatTrackForSubsonic(track: {
 
     // Use fileModified as the 'created' timestamp (best proxy for when track was added)
     // Fall back to album createdAt if not available
-    const created = track.fileModified || track.album.createdAt;
+    const created = track.album.location === "DISCOVER"
+        ? undefined
+        : track.fileModified || track.album.createdAt;
 
     return {
         id: `tr-${track.id}`,
@@ -242,6 +245,7 @@ export function formatTrackForSubsonic(track: {
         path: track.filePath,
         albumId: `al-${track.album.id}`,
         artistId: `ar-${track.album.artist.id}`,
+        musicFolderId: 1,
         type: "music",
         created: created?.toISOString(), // Required for Symfonium "sort by latest added"
         played: playData?.played?.toISOString(),
@@ -277,6 +281,7 @@ export function formatAlbumForSubsonic(album: {
         songCount: album._count?.tracks || album.tracks?.length || 0,
         duration: album.tracks?.reduce((sum, t) => sum + (t.duration || 0), 0) || 0,
         artistId: `ar-${album.artist.id}`,
+        musicFolderId: 1,
     };
 }
 

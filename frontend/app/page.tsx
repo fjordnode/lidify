@@ -11,10 +11,9 @@ import { SectionHeader } from "@/features/home/components/SectionHeader";
 import { ContinueListening } from "@/features/home/components/ContinueListening";
 import { ArtistsGrid } from "@/features/home/components/ArtistsGrid";
 import { MixesGrid } from "@/features/home/components/MixesGrid";
-import { PopularArtistsGrid } from "@/features/home/components/PopularArtistsGrid";
-import { PodcastsGrid } from "@/features/home/components/PodcastsGrid";
 import { FeaturedPlaylistsGrid } from "@/features/home/components/FeaturedPlaylistsGrid";
 import { LibraryRadioStations } from "@/features/home/components/LibraryRadioStations";
+import { MostPlayedArtists } from "@/features/home/components/MostPlayedArtists";
 import { MoodMixer } from "@/components/MoodMixer";
 
 // Helper to read AI recommendations from discover page cache
@@ -115,8 +114,6 @@ export default function HomePage() {
         recentlyAdded,
         recommended,
         mixes,
-        popularArtists,
-        recentPodcasts,
         featuredPlaylists,
         isLoading,
         isRefreshingMixes,
@@ -155,6 +152,9 @@ export default function HomePage() {
                             <ArtistsGrid artists={recentlyAdded} />
                         </section>
                     )}
+
+                    {/* Most Played Artists */}
+                    <MostPlayedArtists />
 
                     {/* Made For You - #3 Priority */}
                     {mixes.length > 0 && (
@@ -232,15 +232,7 @@ export default function HomePage() {
                         </section>
                     )}
 
-                    {/* Popular Artists - #5 Priority */}
-                    {popularArtists.length > 0 && (
-                        <section>
-                            <SectionHeader title="Popular Artists" badge="Last.FM" />
-                            <PopularArtistsGrid artists={popularArtists} />
-                        </section>
-                    )}
-
-                    {/* Featured Playlists - After Popular Artists */}
+                    {/* Featured Playlists */}
                     {(isBrowseLoading || featuredPlaylists.length > 0) && (
                         <section>
                             <SectionHeader title="Featured Playlists" showAllHref="/browse/playlists" badge="Deezer" />
@@ -249,14 +241,6 @@ export default function HomePage() {
                             ) : (
                                 <FeaturedPlaylistsGrid playlists={featuredPlaylists} />
                             )}
-                        </section>
-                    )}
-
-                    {/* Popular Podcasts - #6 Priority */}
-                    {recentPodcasts.length > 0 && (
-                        <section>
-                            <SectionHeader title="Popular Podcasts" showAllHref="/podcasts" />
-                            <PodcastsGrid podcasts={recentPodcasts} />
                         </section>
                     )}
 

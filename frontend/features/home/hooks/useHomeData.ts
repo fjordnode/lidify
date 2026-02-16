@@ -12,17 +12,13 @@ import { toast } from "sonner";
 import type {
     Artist,
     ListenedItem,
-    Podcast,
     Mix,
-    PopularArtist,
 } from "../types";
 import {
     useRecentlyListenedQuery,
     useRecentlyAddedQuery,
     useRecommendationsQuery,
     useMixesQuery,
-    usePopularArtistsQuery,
-    useTopPodcastsQuery,
     useRefreshMixesMutation,
     useBrowseAllQuery,
     queryKeys,
@@ -46,8 +42,6 @@ export interface UseHomeDataReturn {
     recentlyAdded: Artist[];
     recommended: Artist[];
     mixes: Mix[];
-    popularArtists: PopularArtist[];
-    recentPodcasts: Podcast[];
     featuredPlaylists: PlaylistPreview[];
 
     // Loading states
@@ -109,10 +103,6 @@ export function useHomeData(): UseHomeDataReturn {
     const { data: recommendedData, isLoading: isLoadingRecommended } =
         useRecommendationsQuery(10);
     const { data: mixesData, isLoading: isLoadingMixes } = useMixesQuery();
-    const { data: popularData, isLoading: isLoadingPopular } =
-        usePopularArtistsQuery(20);
-    const { data: podcastsData, isLoading: isLoadingPodcasts } =
-        useTopPodcastsQuery(10);
     const { data: browseData, isLoading: isBrowseLoading } =
         useBrowseAllQuery();
 
@@ -142,19 +132,13 @@ export function useHomeData(): UseHomeDataReturn {
         isLoadingListened ||
         isLoadingAdded ||
         isLoadingRecommended ||
-        isLoadingMixes ||
-        isLoadingPopular ||
-        isLoadingPodcasts;
+        isLoadingMixes;
 
     return {
         recentlyListened: items,
         recentlyAdded: recentlyAddedData?.artists || [],
         recommended: recommendedData?.artists || [],
         mixes: Array.isArray(mixesData) ? mixesData : [],
-        popularArtists: popularData?.artists || [],
-        recentPodcasts: Array.isArray(podcastsData)
-            ? podcastsData.slice(0, 10)
-            : [],
         featuredPlaylists: browseData?.playlists || [],
         isLoading,
         isRefreshingMixes,

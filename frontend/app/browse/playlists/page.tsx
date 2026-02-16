@@ -2,14 +2,14 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Loader2, Music2, Link2, X, ChevronRight, Info } from "lucide-react";
+import { Search, Loader2, Music2, Link2, X, ChevronRight } from "lucide-react";
 import { api } from "@/lib/api";
 import { useToast } from "@/lib/toast-context";
 
 // Types
 interface PlaylistPreview {
     id: string;
-    source: "deezer" | "spotify";
+    source: "deezer" | "spotify" | "youtube";
     type: "playlist" | "radio";
     title: string;
     description: string | null;
@@ -45,11 +45,19 @@ const SpotifyIcon = ({ className }: { className?: string }) => (
     </svg>
 );
 
+// YouTube Music icon component
+const YouTubeMusicIcon = ({ className }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor">
+        <path d="M12 0C5.376 0 0 5.376 0 12s5.376 12 12 12 12-5.376 12-12S18.624 0 12 0zm0 19.104c-3.924 0-7.104-3.18-7.104-7.104S8.076 4.896 12 4.896s7.104 3.18 7.104 7.104-3.18 7.104-7.104 7.104zm0-13.332c-3.432 0-6.228 2.796-6.228 6.228S8.568 18.228 12 18.228 18.228 15.432 18.228 12 15.432 5.772 12 5.772zM9.684 15.54V8.46L16.2 12l-6.516 3.54z" />
+    </svg>
+);
+
 // Source type
-type BrowseSource = "deezer" | "spotify";
+type BrowseSource = "deezer" | "spotify" | "youtube";
 
 // Tab type (radios removed - now personal library content at /radio)
 type BrowseTab = "playlists" | "genres";
+type YouTubeTab = "featured" | "community";
 
 // Loading skeleton for cards
 const CardSkeleton = () => (
@@ -67,6 +75,7 @@ export default function BrowsePlaylistsPage() {
     // UI State
     const [activeSource, setActiveSource] = useState<BrowseSource>("deezer");
     const [activeTab, setActiveTab] = useState<BrowseTab>("playlists");
+    const [activeYouTubeTab, setActiveYouTubeTab] = useState<YouTubeTab>("featured");
     const [searchQuery, setSearchQuery] = useState("");
     const [isLoading, setIsLoading] = useState(true);
     const [isSearching, setIsSearching] = useState(false);
@@ -86,7 +95,12 @@ export default function BrowsePlaylistsPage() {
     const [spotifyCategories, setSpotifyCategories] = useState<Category[]>([]);
     const [spotifyLoaded, setSpotifyLoaded] = useState(false);
 
-    // Search results (combined from both sources)
+    // YouTube Music Data State
+    const [youtubeFeaturedPlaylists, setYoutubeFeaturedPlaylists] = useState<PlaylistPreview[]>([]);
+    const [youtubeCommunityPlaylists, setYoutubeCommunityPlaylists] = useState<PlaylistPreview[]>([]);
+    const [youtubeLoaded, setYoutubeLoaded] = useState(false);
+
+    // Search results (combined from all sources)
     const [searchResults, setSearchResults] = useState<PlaylistPreview[]>([]);
 
     // Selected genre/category playlists
@@ -95,7 +109,14 @@ export default function BrowsePlaylistsPage() {
     const [genrePlaylists, setGenrePlaylists] = useState<PlaylistPreview[]>([]);
 
     // Get current playlists based on active source
-    const playlists = activeSource === "deezer" ? deezerPlaylists : spotifyPlaylists;
+    const playlists =
+        activeSource === "deezer"
+            ? deezerPlaylists
+            : activeSource === "spotify"
+            ? spotifyPlaylists
+            : activeYouTubeTab === "featured"
+            ? youtubeFeaturedPlaylists
+            : youtubeCommunityPlaylists;
     const genres = deezerGenres;
     const categories = spotifyCategories;
 
@@ -149,6 +170,32 @@ export default function BrowsePlaylistsPage() {
         }
     }, [spotifyLoaded]);
 
+    // Fetch YouTube Music content
+    const fetchYouTubeContent = useCallback(async () => {
+        if (youtubeLoaded) return;
+
+        setIsLoading(true);
+        setLoadError(null);
+        try {
+            const response = await api.get<{
+                playlists: PlaylistPreview[];
+                featuredPlaylists?: PlaylistPreview[];
+                communityPlaylists?: PlaylistPreview[];
+            }>("/browse/youtube/all");
+
+            setYoutubeFeaturedPlaylists(response.featuredPlaylists || []);
+            setYoutubeCommunityPlaylists(response.communityPlaylists || []);
+            setYoutubeLoaded(true);
+        } catch (error) {
+            console.error("Failed to fetch YouTube Music content:", error);
+            setLoadError(
+                "Couldn't load YouTube Music playlists. Check your connection and try again."
+            );
+        } finally {
+            setIsLoading(false);
+        }
+    }, [youtubeLoaded]);
+
     // Load Deezer on mount (default source)
     useEffect(() => {
         fetchDeezerContent();
@@ -161,10 +208,18 @@ export default function BrowsePlaylistsPage() {
         }
     }, [activeSource, spotifyLoaded, fetchSpotifyContent]);
 
+    // Load YouTube Music when switching to it
+    useEffect(() => {
+        if (activeSource === "youtube" && !youtubeLoaded) {
+            fetchYouTubeContent();
+        }
+    }, [activeSource, youtubeLoaded, fetchYouTubeContent]);
+
     // Handle source change
     const handleSourceChange = (source: BrowseSource) => {
         setActiveSource(source);
         setActiveTab("playlists");
+        setActiveYouTubeTab("featured");
         setSelectedGenre(null);
         setSelectedCategory(null);
         setGenrePlaylists([]);
@@ -192,7 +247,7 @@ export default function BrowsePlaylistsPage() {
             // Use combined search endpoint (both Deezer and Spotify)
             const response = await api.get<{
                 playlists: PlaylistPreview[];
-                sources: { deezer: number; spotify: number };
+                sources: { deezer: number; spotify: number; youtube: number };
             }>(
                 `/browse/search?q=${encodeURIComponent(searchQuery)}&limit=50`
             );
@@ -240,11 +295,10 @@ export default function BrowsePlaylistsPage() {
 
     // Handle playlist click - navigate to detail page
     const handleItemClick = (item: PlaylistPreview) => {
-        // For Spotify playlists, use the spotify source in the URL
-        if (item.source === "spotify") {
-            router.push(`/browse/playlists/${item.id}?source=spotify`);
-        } else {
+        if (item.source === "deezer") {
             router.push(`/browse/playlists/${item.id}`);
+        } else {
+            router.push(`/browse/playlists/${item.id}?source=${item.source}`);
         }
     };
 
@@ -323,16 +377,20 @@ export default function BrowsePlaylistsPage() {
                 {/* Source badge for search results */}
                 {showSourceBadge && (
                     <div className={`absolute top-2 left-2 px-2 py-1 rounded-full text-[10px] font-semibold flex items-center gap-1 ${
-                        item.source === "spotify" 
-                            ? "bg-spotify/90 text-white" 
+                        item.source === "spotify"
+                            ? "bg-spotify/90 text-white"
+                            : item.source === "youtube"
+                            ? "bg-[#FF0000]/90 text-white"
                             : "bg-[#AD47FF]/90 text-white"
                     }`}>
                         {item.source === "spotify" ? (
                             <SpotifyIcon className="w-3 h-3" />
+                        ) : item.source === "youtube" ? (
+                            <YouTubeMusicIcon className="w-3 h-3" />
                         ) : (
                             <DeezerIcon className="w-3 h-3" />
                         )}
-                        <span className="uppercase">{item.source}</span>
+                        <span className="uppercase">{item.source === "youtube" ? "YouTube" : item.source}</span>
                     </div>
                 )}
                 {/* Import button on hover */}
@@ -409,8 +467,10 @@ export default function BrowsePlaylistsPage() {
             <div className="absolute inset-0 pointer-events-none">
                 <div
                     className={`absolute inset-0 bg-gradient-to-b ${
-                        activeSource === "spotify" 
-                            ? "from-spotify/15 via-[#191414]/10" 
+                        activeSource === "spotify"
+                            ? "from-spotify/15 via-[#191414]/10"
+                            : activeSource === "youtube"
+                            ? "from-[#FF0000]/15 via-[#1a0000]/10"
                             : "from-brand/15 via-purple-900/10"
                     } to-transparent`}
                     style={{ height: "35vh" }}
@@ -419,6 +479,8 @@ export default function BrowsePlaylistsPage() {
                     className={`absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,var(--tw-gradient-stops))] ${
                         activeSource === "spotify"
                             ? "from-spotify/8"
+                            : activeSource === "youtube"
+                            ? "from-[#FF0000]/8"
                             : "from-brand/8"
                     } via-transparent to-transparent`}
                     style={{ height: "25vh" }}
@@ -431,18 +493,17 @@ export default function BrowsePlaylistsPage() {
                     <div className="flex items-center gap-3 mb-1">
                         {activeSource === "spotify" ? (
                             <SpotifyIcon className="w-8 h-8 text-spotify" />
+                        ) : activeSource === "youtube" ? (
+                            <YouTubeMusicIcon className="w-8 h-8 text-[#FF0000]" />
                         ) : (
                             <DeezerIcon className="w-8 h-8 text-[#AD47FF]" />
                         )}
                         <h1 className="text-3xl font-bold text-white">
                             Browse
                         </h1>
-                        <span className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide rounded bg-brand/20 text-brand border border-brand/30">
-                            Beta
-                        </span>
                     </div>
                     <p className="text-sm text-gray-400">
-                        Discover and import playlists from {activeSource === "spotify" ? "Spotify" : "Deezer"}
+                        Discover and import playlists from {activeSource === "spotify" ? "Spotify" : activeSource === "youtube" ? "YouTube Music" : "Deezer"}
                     </p>
                 </div>
 
@@ -470,16 +531,17 @@ export default function BrowsePlaylistsPage() {
                         <SpotifyIcon className="w-4 h-4" />
                         Spotify
                     </button>
-                </div>
-
-                {/* Beta Notice */}
-                <div className="mb-6 flex items-start gap-3 px-4 py-3 rounded-lg bg-brand/10 border border-brand/20">
-                    <Info className="w-5 h-5 text-brand shrink-0 mt-0.5" />
-                    <p className="text-sm text-gray-300">
-                        <span className="font-medium text-brand">Beta feature:</span>{" "}
-                        Importing from Spotify and Deezer relies on matching tracks through Soulseek and your configured indexers.
-                        Results may vary depending on track availability and metadata quality.
-                    </p>
+                    <button
+                        onClick={() => handleSourceChange("youtube")}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                            activeSource === "youtube"
+                                ? "bg-[#FF0000] text-white"
+                                : "bg-white/10 text-gray-400 hover:text-white hover:bg-white/20"
+                        }`}
+                    >
+                        <YouTubeMusicIcon className="w-4 h-4" />
+                        YouTube
+                    </button>
                 </div>
 
                 {/* Search Bar & Import URL */}
@@ -519,26 +581,53 @@ export default function BrowsePlaylistsPage() {
                 {/* Tabs */}
                 {!selectedGenre && !selectedCategory && !hasSearched && (
                     <div className="flex items-center gap-2 mb-6">
-                        <button
-                            onClick={() => setActiveTab("playlists")}
-                            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                                activeTab === "playlists"
-                                    ? "bg-white text-black"
-                                    : "bg-white/10 text-white hover:bg-white/20"
-                            }`}
-                        >
-                            Playlists
-                        </button>
-                        <button
-                            onClick={() => setActiveTab("genres")}
-                            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                                activeTab === "genres"
-                                    ? activeSource === "spotify" ? "bg-spotify text-white" : "bg-[#AD47FF] text-white"
-                                    : "bg-white/10 text-white hover:bg-white/20"
-                            }`}
-                        >
-                            {activeSource === "spotify" ? "Categories" : "Genres"}
-                        </button>
+                        {activeSource === "youtube" ? (
+                            <>
+                                <button
+                                    onClick={() => setActiveYouTubeTab("featured")}
+                                    className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                                        activeYouTubeTab === "featured"
+                                            ? "bg-[#FF0000] text-white"
+                                            : "bg-white/10 text-white hover:bg-white/20"
+                                    }`}
+                                >
+                                    Featured
+                                </button>
+                                <button
+                                    onClick={() => setActiveYouTubeTab("community")}
+                                    className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                                        activeYouTubeTab === "community"
+                                            ? "bg-[#FF0000] text-white"
+                                            : "bg-white/10 text-white hover:bg-white/20"
+                                    }`}
+                                >
+                                    Community
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <button
+                                    onClick={() => setActiveTab("playlists")}
+                                    className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                                        activeTab === "playlists"
+                                            ? "bg-white text-black"
+                                            : "bg-white/10 text-white hover:bg-white/20"
+                                    }`}
+                                >
+                                    Playlists
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab("genres")}
+                                    className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                                        activeTab === "genres"
+                                            ? activeSource === "spotify" ? "bg-spotify text-white" : "bg-[#AD47FF] text-white"
+                                            : "bg-white/10 text-white hover:bg-white/20"
+                                    }`}
+                                >
+                                    {activeSource === "spotify" ? "Categories" : "Genres"}
+                                </button>
+                            </>
+                        )}
                     </div>
                 )}
 
@@ -583,7 +672,7 @@ export default function BrowsePlaylistsPage() {
                             {loadError}
                         </p>
                         <button
-                            onClick={() => activeSource === "deezer" ? fetchDeezerContent() : fetchSpotifyContent()}
+                            onClick={() => activeSource === "deezer" ? fetchDeezerContent() : activeSource === "spotify" ? fetchSpotifyContent() : fetchYouTubeContent()}
                             className="px-6 py-2.5 rounded-full bg-white text-black text-sm font-medium hover:scale-105 transition-transform"
                         >
                             Try again
@@ -654,13 +743,25 @@ export default function BrowsePlaylistsPage() {
                             {activeTab === "playlists" && (
                                 <>
                                     <h2 className="text-xl font-bold text-white mb-4">
-                                        {activeSource === "spotify" ? "Featured Playlists" : "Featured Playlists"}
+                                        {activeSource === "youtube"
+                                            ? activeYouTubeTab === "featured"
+                                                ? "Featured on YouTube Music"
+                                                : "Community on YouTube Music"
+                                            : "Featured Playlists"}
                                     </h2>
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-6">
-                                        {playlists.map((item, idx) =>
-                                            renderCard(item, idx, "featured")
-                                        )}
-                                    </div>
+                                    {playlists.length === 0 ? (
+                                        <p className="text-sm text-gray-400">
+                                            {activeSource === "youtube" && activeYouTubeTab === "community"
+                                                ? "No community playlists available right now."
+                                                : "No playlists available right now."}
+                                        </p>
+                                    ) : (
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-6">
+                                            {playlists.map((item, idx) =>
+                                                renderCard(item, idx, "featured")
+                                            )}
+                                        </div>
+                                    )}
                                     {playlists.length >= 20 && (
                                         <p className="text-center text-sm text-gray-500 mt-8">
                                             Showing {playlists.length} playlists
@@ -742,6 +843,12 @@ export default function BrowsePlaylistsPage() {
                                     <DeezerIcon className="w-4 h-4 text-[#AD47FF]" />
                                     <span className="text-xs font-medium text-[#AD47FF]">
                                         Deezer
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-2 px-3 py-1.5 bg-[#FF0000]/10 rounded-full">
+                                    <YouTubeMusicIcon className="w-4 h-4 text-[#FF0000]" />
+                                    <span className="text-xs font-medium text-[#FF0000]">
+                                        YouTube
                                     </span>
                                 </div>
                                 <span className="text-xs text-white/30 ml-auto">

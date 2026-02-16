@@ -408,6 +408,17 @@ class ApiClient {
         );
     }
 
+    async getTopArtists(period: string = "month", limit: number = 20) {
+        return this.request<{
+            artists: {
+                id: string;
+                name: string;
+                coverArt: string | null;
+                playCount: number;
+            }[];
+        }>(`/library/top-artists?period=${period}&limit=${limit}`);
+    }
+
     async scanLibrary() {
         return this.request<{
             message: string;
@@ -497,6 +508,11 @@ class ApiClient {
         return this.request<{ message: string }>(`/library/tracks/${trackId}`, {
             method: "DELETE",
         });
+    }
+
+    async getTrackPlaylistCount(trackId: string, excludePlaylistId?: string) {
+        const params = excludePlaylistId ? `?excludePlaylistId=${excludePlaylistId}` : "";
+        return this.request<{ count: number }>(`/library/tracks/${trackId}/playlist-count${params}`);
     }
 
     async deleteAlbum(albumId: string) {

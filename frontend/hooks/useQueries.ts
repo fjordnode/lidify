@@ -62,6 +62,9 @@ export const queryKeys = {
     // Popular artists
     popularArtists: (limit?: number) => ["popular-artists", limit] as const,
 
+    // Top played artists
+    topArtists: (period: string, limit?: number) => ["library", "top-artists", period, limit] as const,
+
     // Audiobooks
     audiobooks: () => ["audiobooks"] as const,
     audiobook: (id: string) => ["audiobook", id] as const,
@@ -293,6 +296,24 @@ export function useRecentlyAddedQuery(limit: number = 10) {
         queryKey: queryKeys.recentlyAdded(limit),
         queryFn: () => api.getRecentlyAdded(limit),
         staleTime: 2 * 60 * 1000, // 2 minutes
+    });
+}
+
+/**
+ * Hook to fetch most played artists for a given time period.
+ *
+ * @param period - Time window: "week", "month", "year", or "all"
+ * @param limit - Number of artists to fetch (default: 20)
+ * @returns Query result with top artists sorted by play count
+ *
+ * @example
+ * const { data } = useTopArtistsQuery("month", 20);
+ */
+export function useTopArtistsQuery(period: string = "month", limit: number = 20) {
+    return useQuery({
+        queryKey: queryKeys.topArtists(period, limit),
+        queryFn: () => api.getTopArtists(period, limit),
+        staleTime: 5 * 60 * 1000, // 5 minutes
     });
 }
 

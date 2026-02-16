@@ -856,7 +856,7 @@ class SpotifyImportService {
             imageUrl: string | null;
             trackCount: number;
         },
-        source: "Spotify" | "Deezer"
+        source: "Spotify" | "Deezer" | "YouTube Music"
     ): Promise<ImportPreview> {
         // Track-only preview: avoid MusicBrainz/Lidarr. We only need to know what's already
         // in the library vs what needs Soulseek downloads.
@@ -961,6 +961,58 @@ class SpotifyImportService {
                 trackCount: deezerPlaylist.trackCount || spotifyTracks.length,
             },
             "Deezer"
+        );
+    }
+
+    /**
+     * Generate a preview from a YouTube Music playlist
+     * Converts YouTube Music tracks to Spotify format and processes them
+     */
+    async generatePreviewFromYouTube(
+        youtubePlaylist: {
+            id: string;
+            title: string;
+            description: string | null;
+            creator: string;
+            imageUrl: string | null;
+            trackCount: number;
+            tracks: Array<{
+                videoId: string;
+                title: string;
+                artist: string;
+                album?: string;
+                duration: number;
+                thumbnail?: string;
+            }>;
+        }
+    ): Promise<ImportPreview> {
+        const spotifyTracks: SpotifyTrack[] = youtubePlaylist.tracks.map(
+            (track, index) => ({
+                spotifyId: track.videoId,
+                title: track.title,
+                artist: track.artist,
+                artistId: "",
+                album: track.album || "Unknown Album",
+                albumId: "",
+                isrc: null,
+                durationMs: track.duration * 1000,
+                trackNumber: index + 1,
+                previewUrl: null,
+                coverUrl: track.thumbnail || youtubePlaylist.imageUrl || null,
+            })
+        );
+
+        return this.buildPreviewFromTracklist(
+            spotifyTracks,
+            {
+                id: youtubePlaylist.id,
+                name: youtubePlaylist.title,
+                description: youtubePlaylist.description || null,
+                owner: youtubePlaylist.creator || "YouTube Music",
+                imageUrl: youtubePlaylist.imageUrl || null,
+                trackCount: youtubePlaylist.trackCount || spotifyTracks.length,
+            },
+            "YouTube Music"
         );
     }
 
@@ -1830,6 +1882,11 @@ class SpotifyImportService {
         job.tracksMatched += added;
         job.updatedAt = new Date();
 
+        // Touch playlist so Subsonic clients detect the change
+        if (added > 0 && job.createdPlaylistId) {
+            await prisma.playlist.update({ where: { id: job.createdPlaylistId }, data: { updatedAt: new Date() } });
+        }
+
         console.log(
             `[Spotify Import] Refresh job ${jobId}: added ${added} newly downloaded tracks`
         );
@@ -1912,6 +1969,11 @@ class SpotifyImportService {
                 },
             });
             pendingRemoved += deleteRes.count;
+        }
+
+        // Touch playlist so Subsonic clients detect the change
+        if (added > 0) {
+            await prisma.playlist.update({ where: { id: playlistId }, data: { updatedAt: new Date() } });
         }
 
         return { added, pendingRemoved };
@@ -2214,6 +2276,14 @@ class SpotifyImportService {
         if (matchedPendingTrackIds.length > 0) {
             await prisma.playlistPendingTrack.deleteMany({
                 where: { id: { in: matchedPendingTrackIds } },
+            });
+        }
+
+        // Touch updatedAt on all playlists that gained tracks so Subsonic clients detect the change
+        if (playlistsWithAdditions.size > 0) {
+            await prisma.playlist.updateMany({
+                where: { id: { in: [...playlistsWithAdditions] } },
+                data: { updatedAt: new Date() },
             });
         }
 

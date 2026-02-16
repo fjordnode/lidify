@@ -33,6 +33,13 @@ const SpotifyIcon = ({ className }: { className?: string }) => (
     </svg>
 );
 
+// YouTube Music icon component
+const YouTubeMusicIcon = ({ className }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor">
+        <path d="M12 0C5.376 0 0 5.376 0 12s5.376 12 12 12 12-5.376 12-12S18.624 0 12 0zm0 19.104c-3.924 0-7.104-3.18-7.104-7.104S8.076 4.896 12 4.896s7.104 3.18 7.104 7.104-3.18 7.104-7.104 7.104zm0-13.332c-3.432 0-6.228 2.796-6.228 6.228S8.568 18.228 12 18.228 18.228 15.432 18.228 12 15.432 5.772 12 5.772zM9.684 15.54V8.46L16.2 12l-6.516 3.54z" />
+    </svg>
+);
+
 // Types for browse playlist (normalized format from backend)
 interface BrowseTrack {
     id: string;              // deezerId or spotifyId (normalized by backend)
@@ -56,12 +63,12 @@ interface BrowsePlaylistFull {
     trackCount: number;
     tracks: BrowseTrack[];
     isPublic: boolean;
-    source: "deezer" | "spotify";
+    source: "deezer" | "spotify" | "youtube";
     url: string;
 }
 
 // Convert browse track to main player Track format
-const convertToTrack = (track: BrowseTrack, source: "deezer" | "spotify"): Track => ({
+const convertToTrack = (track: BrowseTrack, source: "deezer" | "spotify" | "youtube"): Track => ({
     id: `${source}-${track.id}`,
     title: track.title,
     artist: { name: track.artist },
@@ -79,7 +86,7 @@ export default function BrowsePlaylistDetailPage() {
     const searchParams = useSearchParams();
     const { toast } = useToast();
     const playlistId = params.id as string;
-    const source = (searchParams.get("source") as "deezer" | "spotify") || "deezer";
+    const source = (searchParams.get("source") as "deezer" | "spotify" | "youtube") || "deezer";
 
     // Main player hooks
     const { playTracks, currentTrack, isPlaying, pause, resume } = useAudio();
@@ -100,13 +107,16 @@ export default function BrowsePlaylistDetailPage() {
                 // Use source-specific endpoint
                 const endpoint = source === "spotify"
                     ? `/browse/spotify/playlists/${playlistId}`
+                    : source === "youtube"
+                    ? `/browse/youtube/playlists/${playlistId}`
                     : `/browse/playlists/${playlistId}`;
-                
+
                 const data = await api.get<BrowsePlaylistFull>(endpoint);
                 setPlaylist(data);
 
                 // Pre-fetch YouTube matches for first 20 tracks to speed up playback
-                if (data.tracks && data.tracks.length > 0) {
+                // Skip for YouTube source - tracks already have videoIds
+                if (source !== "youtube" && data.tracks && data.tracks.length > 0) {
                     const tracksToPreFetch = data.tracks.slice(0, 20).map((t) => ({
                         artist: t.artist,
                         title: t.title,
@@ -286,11 +296,13 @@ export default function BrowsePlaylistDetailPage() {
                         <div className="flex items-center gap-2 mb-1">
                             {playlist.source === "spotify" ? (
                                 <SpotifyIcon className="w-4 h-4 text-spotify" />
+                            ) : playlist.source === "youtube" ? (
+                                <YouTubeMusicIcon className="w-4 h-4 text-[#FF0000]" />
                             ) : (
                                 <DeezerIcon className="w-4 h-4 text-[#EF4444]" />
                             )}
                             <p className="text-xs font-medium text-white/90">
-                                {playlist.source === "spotify" ? "Spotify" : "Deezer"} Playlist
+                                {playlist.source === "spotify" ? "Spotify" : playlist.source === "youtube" ? "YouTube Music" : "Deezer"} Playlist
                             </p>
                         </div>
                         <h1 className="text-2xl md:text-4xl lg:text-5xl font-bold text-white leading-tight line-clamp-2 mb-2">
@@ -378,7 +390,7 @@ export default function BrowsePlaylistDetailPage() {
                     >
                         <ExternalLink className="w-4 h-4" />
                         <span className="hidden sm:inline">
-                            Open in {playlist.source === "spotify" ? "Spotify" : "Deezer"}
+                            Open in {playlist.source === "spotify" ? "Spotify" : playlist.source === "youtube" ? "YouTube Music" : "Deezer"}
                         </span>
                     </a>
                 </div>
@@ -475,7 +487,7 @@ export default function BrowsePlaylistDetailPage() {
 
                                         {/* Album (hidden on mobile) */}
                                         <p className="hidden md:flex items-center text-sm text-gray-400 truncate">
-                                            {track.album}
+                                            {track.album || "\u2014"}
                                         </p>
 
                                         {/* Duration */}

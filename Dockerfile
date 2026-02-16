@@ -3,7 +3,7 @@
 # Contains: Backend, Frontend, PostgreSQL, Redis, Audio Analyzer (Essentia AI)
 # Usage: docker run -d -p 3030:3030 -v /path/to/music:/music lidify/lidify
 
-FROM node:20-slim
+FROM node:22-slim
 
 # Add PostgreSQL 16 repository (Debian Bookworm only has PG15 by default)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -358,9 +358,9 @@ RUN sed -i 's/\r$//' /app/start.sh && chmod +x /app/start.sh
 # Expose ports
 EXPOSE 3030
 
-# Health check using Node.js (no wget)
+# Health check using curl (more robust than node - avoids V8 snapshot issues)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD ["node", "/app/healthcheck.js"]
+    CMD ["curl", "-f", "-s", "-o", "/dev/null", "http://localhost:3030/"]
 
 # Volumes
 VOLUME ["/music", "/data"]

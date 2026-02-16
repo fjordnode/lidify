@@ -6,6 +6,7 @@ import { podcastCacheService } from "../services/podcastCache";
 import { generatePodcastToken } from "../utils/podcastToken";
 import axios from "axios";
 import fs from "fs";
+import { redisClient } from "../utils/redis";
 
 const router = Router();
 
@@ -131,8 +132,20 @@ router.get("/discover/top", requireAuthOrToken, async (req, res) => {
     try {
         const { limit = "20" } = req.query;
         const podcastLimit = Math.min(parseInt(limit as string, 10), 50);
+        const cacheKey = `podcasts:discover:top:${podcastLimit}`;
 
-        console.log(`\n[TOP PODCASTS] Request (limit: ${podcastLimit})`);
+        // Check Redis cache first (6 hour TTL)
+        try {
+            const cached = await redisClient.get(cacheKey);
+            if (cached) {
+                console.log(`[TOP PODCASTS] Cache HIT (limit: ${podcastLimit})`);
+                return res.json(JSON.parse(cached));
+            }
+        } catch (err) {
+            console.warn("[TOP PODCASTS] Redis read error:", err);
+        }
+
+        console.log(`\n[TOP PODCASTS] Cache MISS - fetching from iTunes (limit: ${podcastLimit})`);
 
         // Simple iTunes search - same as the working search bar!
         const itunesResponse = await axios.get(
@@ -161,6 +174,14 @@ router.get("/discover/top", requireAuthOrToken, async (req, res) => {
         }));
 
         console.log(`   Found ${podcasts.length} podcasts`);
+
+        // Cache for 6 hours
+        try {
+            await redisClient.setEx(cacheKey, 21600, JSON.stringify(podcasts));
+        } catch (err) {
+            console.warn("[TOP PODCASTS] Redis write error:", err);
+        }
+
         res.json(podcasts);
     } catch (error: any) {
         console.error("Error fetching top podcasts:", error);
