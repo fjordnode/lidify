@@ -100,6 +100,11 @@ MAX_TRACK_TIMEOUT = int(os.getenv("MAX_TRACK_TIMEOUT", "600"))
 # Number of parallel analysis workers (default: 2)
 # ML analysis is resource-intensive; increase only if you have CPU/RAM headroom
 NUM_WORKERS = int(os.getenv("NUM_WORKERS", "2"))
+# Shut down the (lazy) worker pool after this many consecutive idle cycles to
+# free RAM. Each idle cycle takes ~SLEEP_INTERVAL seconds (default 5), so the
+# default 5 cycles = ~25s of idleness before teardown. With NUM_WORKERS TF
+# model copies in memory, teardown saves ~1 GB per worker.
+IDLE_SHUTDOWN_CYCLES = int(os.getenv("IDLE_SHUTDOWN_CYCLES", "5"))
 ESSENTIA_VERSION = "2.1b6-enhanced-v2"
 
 # Retry configuration
@@ -966,6 +971,7 @@ class AnalysisWorker:
         self.running = False
         self.executor = None
         self.consecutive_empty = 0
+        self._idle_cycles = 0
         self.batch_count = 0  # Track batches for periodic cleanup
 
     def _cleanup_stale_processing(self):
@@ -1091,12 +1097,14 @@ class AnalysisWorker:
         logger.info("Checking for failed tracks to retry...")
         self._retry_failed_tracks()
 
-        # Create process pool with initializer
-        # Each worker process loads its own TensorFlow models
-        self.executor = ProcessPoolExecutor(
-            max_workers=NUM_WORKERS, initializer=_init_worker_process
+        # Lazy executor - only created when there's work to do. Counters are
+        # initialized in __init__; reset here for safety if run() is re-entered.
+        self.executor = None
+        self._idle_cycles = 0
+        logger.info(
+            f"Worker pool will start on-demand with {NUM_WORKERS} workers "
+            f"(idle shutdown after {IDLE_SHUTDOWN_CYCLES} cycles)"
         )
-        logger.info(f"Started {NUM_WORKERS} worker processes")
 
         try:
             while self.running:
@@ -1105,6 +1113,14 @@ class AnalysisWorker:
 
                     if not has_work:
                         self.consecutive_empty += 1
+                        self._idle_cycles += 1
+
+                        # Shut down idle workers to free RAM
+                        if self._idle_cycles >= IDLE_SHUTDOWN_CYCLES and self.executor:
+                            logger.info("No pending work, shutting down worker pool to free memory")
+                            self.executor.shutdown(wait=True)
+                            self.executor = None
+                            self._idle_cycles = 0
 
                         # After 10 consecutive empty batches, do cleanup and retry
                         if self.consecutive_empty >= 10:
@@ -1116,6 +1132,7 @@ class AnalysisWorker:
                             self.consecutive_empty = 0
                     else:
                         self.consecutive_empty = 0
+                        self._idle_cycles = 0
                         self.batch_count += 1
 
                         # Run periodic cleanup every 50 batches to catch stuck tracks
@@ -1192,6 +1209,12 @@ class AnalysisWorker:
             )
 
             tracks = cursor.fetchall()
+            # Commit the read-only SELECT so the connection doesn't sit in
+            # "idle in transaction" state during ML inference (which can take
+            # tens of seconds). psycopg2 with autocommit=False opens an
+            # implicit txn on every execute(); without this commit, the
+            # connection holds the txn until the next loop iteration.
+            self.db.commit()
 
             if not tracks:
                 # No pending tracks, sleep and retry
@@ -1256,6 +1279,14 @@ class AnalysisWorker:
             return
         finally:
             cursor.close()
+
+        # Ensure worker pool is running (lazy initialization)
+        if self.executor is None:
+            logger.info(f"Starting {NUM_WORKERS} worker processes for analysis...")
+            self.executor = ProcessPoolExecutor(
+                max_workers=NUM_WORKERS, initializer=_init_worker_process
+            )
+            logger.info(f"Worker pool started with {NUM_WORKERS} processes")
 
         # Submit all tracks to the process pool
         start_time = time.time()
