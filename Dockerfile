@@ -100,11 +100,24 @@ RUN npx prisma generate
 
 # Copy backend source
 COPY backend/src ./src
+COPY backend/tsconfig.json ./
 COPY backend/docker-entrypoint.sh ./
 COPY backend/healthcheck.js ./healthcheck-backend.js
 
 # Create log directory (cache will be in /data volume)
 RUN mkdir -p /app/backend/logs
+
+# Compile TypeScript to JavaScript so the runtime uses node dist/index.js
+# instead of npx tsx src/index.ts. tsx loads the TS compiler and source maps
+# into V8, costing ~1 GB of resident heap. Compiling avoids that entirely.
+#
+# tsc exits non-zero due to a handful of pre-existing type errors (tracked in
+# project memory; see CLAUDE.md). Since `noEmitOnError` is not set, tsc still
+# emits valid JS for every file. We swallow the exit code with `|| true` and
+# then explicitly verify dist/index.js was produced — that way the build still
+# fails loudly if something goes catastrophically wrong (missing tsconfig,
+# tsc binary missing, etc).
+RUN (npx tsc || true) && test -f dist/index.js
 
 # ============================================
 # FRONTEND BUILD
@@ -174,7 +187,7 @@ stderr_logfile_maxbytes=0
 priority=20
 
 [program:backend]
-command=/bin/bash -c "sleep 5 && cd /app/backend && npx tsx src/index.ts"
+command=/bin/bash -c "sleep 5 && cd /app/backend && node dist/index.js"
 autostart=true
 autorestart=true
 stdout_logfile=/dev/stdout
@@ -182,7 +195,7 @@ stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 directory=/app/backend
-environment=SOULSEEK_DEBUG="%(ENV_SOULSEEK_DEBUG)s"
+environment=NODE_ENV="production",SOULSEEK_DEBUG="%(ENV_SOULSEEK_DEBUG)s"
 priority=30
 
 [program:frontend]
