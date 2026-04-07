@@ -141,9 +141,22 @@ docker exec lidify psql -U lidify -d lidify -c \
 
 ## Operations Quick Commands
 
+**IMPORTANT: two compose files exist, in different directories.** The prod
+compose at `/mnt/cache/appdata/compose/lidify/docker-compose.yml` defines the
+single monolithic `lidify` container. The dev compose at
+`/mnt/cache/appdata/compose/lidify/repo/docker-compose.yml` defines a multi-
+service dev stack (postgres, redis, lidarr, qbittorrent, sabnzbd, etc.).
+**Never run `docker compose up` from `repo/` against the prod system** — it
+will start the entire dev stack alongside prod, with port conflicts and
+rogue containers.
+
 ```bash
-# Build and deploy
+# Build (from repo/, where the Dockerfile lives)
+cd /mnt/cache/appdata/compose/lidify/repo
 docker build -t lidify-remote:latest .
+
+# Deploy (from the PARENT dir, where the PROD compose lives)
+cd /mnt/cache/appdata/compose/lidify
 docker compose up -d --force-recreate
 
 # Logs
