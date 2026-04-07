@@ -636,7 +636,10 @@ async function processAIArtists(
         })
     );
 
-    return results.filter((r): r is RecommendedAlbum => r !== null);
+    // Use NonNullable predicate so the narrow map-result type flows through
+    // instead of trying to assert the wider RecommendedAlbum shape (which has
+    // artistMbid as optional — incompatible with the required string here).
+    return results.filter((r): r is NonNullable<typeof r> => r !== null);
 }
 
 /**

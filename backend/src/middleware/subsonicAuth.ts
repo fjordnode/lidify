@@ -208,8 +208,10 @@ export const subsonicRateLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: (req) => {
-        // Rate limit by IP + username to prevent distributed attacks on single account
-        const ip = ipKeyGenerator(req);
+        // Rate limit by IP + username to prevent distributed attacks on single account.
+        // ipKeyGenerator takes an IP string and normalizes IPv6 subnets — passing the
+        // Request object bypassed type-checking and would break IPv6 masking.
+        const ip = ipKeyGenerator(req.ip || "");
         const username = (req.query.u as string) || "";
         return `subsonic:${ip}:${username}`;
     },

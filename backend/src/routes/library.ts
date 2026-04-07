@@ -338,12 +338,15 @@ router.post("/clean-orphans", requireAdmin, async (req, res) => {
         let lastId: string | null = null;
 
         while (true) {
-            const tracks = await prisma.track.findMany({
-                select: { id: true, filePath: true },
-                orderBy: { id: "asc" },
-                take: batchSize,
-                ...(lastId ? { skip: 1, cursor: { id: lastId } } : {}),
-            });
+            // Explicit annotation breaks a TS7022 inference cycle triggered by
+            // Prisma's complex conditional types interacting with the spread below.
+            const tracks: { id: string; filePath: string }[] =
+                await prisma.track.findMany({
+                    select: { id: true, filePath: true },
+                    orderBy: { id: "asc" },
+                    take: batchSize,
+                    ...(lastId ? { skip: 1, cursor: { id: lastId } } : {}),
+                });
 
             if (tracks.length === 0) break;
 
@@ -1240,15 +1243,19 @@ router.get("/artists/:id", async (req, res) => {
         const idParam = req.params.id;
         const includeExternal = req.query.includeExternal === "true";
 
-        const artistInclude = {
+        // Prisma.validator enforces ArtistInclude shape AND preserves narrow literal
+        // types so the AlbumLocation enum inference works correctly. Using a plain
+        // object literal would widen `location: "LIBRARY"` to `string`, rejecting
+        // the include and collapsing the query result to the bare Artist type.
+        const artistInclude = Prisma.validator<Prisma.ArtistInclude>()({
             albums: {
                 where: {
                     location: "LIBRARY", // Only show LIBRARY albums, not DISCOVER/playlist albums
                 },
-                orderBy: [{ year: "desc" as const }, { title: "asc" as const }],
+                orderBy: [{ year: "desc" }, { title: "asc" }],
                 include: {
                     tracks: {
-                        orderBy: [{ discNo: "asc" as const }, { trackNo: "asc" as const }],
+                        orderBy: [{ discNo: "asc" }, { trackNo: "asc" }],
                         take: 10, // Top tracks
                         include: {
                             album: {
@@ -1265,7 +1272,8 @@ router.get("/artists/:id", async (req, res) => {
             ownedAlbums: true,
             // Note: similarFrom (FK-based) is no longer used for display
             // We now use similarArtistsJson which is fetched by default
-        };
+        });
+        type ArtistWithRelations = Prisma.ArtistGetPayload<{ include: typeof artistInclude }>;
 
         // Try finding by ID first
         let artist = await prisma.artist.findUnique({
@@ -1629,9 +1637,9 @@ router.get("/artists/:id", async (req, res) => {
         }
 
         // Extract top tracks from library first
-        const allTracks = artist.albums.flatMap((a: any) => a.tracks);
+        const allTracks = artist.albums.flatMap((a) => a.tracks);
         let topTracks = allTracks
-            .sort((a: any, b: any) => ((b as any).playCount || 0) - ((a as any).playCount || 0))
+            .sort((a, b) => ((b as any).playCount || 0) - ((a as any).playCount || 0))
             .slice(0, 10);
 
         // Get user play counts for all tracks
@@ -1739,9 +1747,11 @@ router.get("/artists/:id", async (req, res) => {
                         // Track exists in library - include user play count
                         combinedTracks.push({
                             ...matchedTrack,
+                            // Track schema has no global playCount field; preserve prior
+                            // runtime behavior (undefined) when Last.fm data is missing.
                             playCount: lfmTrack.playcount
                                 ? parseInt(lfmTrack.playcount)
-                                : matchedTrack.playCount,
+                                : undefined,
                             listeners: lfmTrack.listeners
                                 ? parseInt(lfmTrack.listeners)
                                 : 0,
@@ -4667,7 +4677,8 @@ router.get("/radio", async (req, res) => {
                 break;
 
             case "mood":
-                const moodValue = (value?.toLowerCase() || "happy");
+                // Match the cast pattern used by other cases (genre, decade)
+                const moodValue = ((value as string) || "").toLowerCase() || "happy";
 
                 const moodBuckets = await prisma.moodBucket.findMany({
                     where: { mood: moodValue, score: { gte: 0.5 } },

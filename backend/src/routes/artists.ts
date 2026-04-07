@@ -828,7 +828,7 @@ router.get("/discover/:nameOrMbid", async (req, res) => {
             playcount: parseInt(lastFmInfo?.stats?.playcount || "0"),
             url: lastFmInfo?.url || null,
             albums: albums.map((album) => ({ ...album, owned: false })), // Mark all as not owned
-            topTracks: topTracks.map((track) => ({
+            topTracks: topTracks.map((track: any) => ({
                 id: `lastfm-${mbid || artistName}-${track.name}`,
                 title: track.name,
                 playCount: parseInt(track.playcount || "0"),
