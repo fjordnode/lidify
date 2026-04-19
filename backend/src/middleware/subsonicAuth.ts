@@ -12,7 +12,7 @@
  */
 
 import { Request, Response, NextFunction } from "express";
-import { createHash } from "crypto";
+import { createHash, timingSafeEqual } from "crypto";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { prisma } from "../utils/db";
 import bcrypt from "bcrypt";
@@ -49,6 +49,7 @@ export async function requireSubsonicAuth(
     const password = req.query.p as string;
     const token = req.query.t as string;
     const salt = req.query.s as string;
+    const apiKey = req.query.apiKey as string;
     const version = req.query.v as string;
     const client = req.query.c as string;
 
@@ -87,34 +88,11 @@ export async function requireSubsonicAuth(
     }
 
     // Must have either password or token+salt
-    if (!password && !(token && salt)) {
+    if (!password && !apiKey && !(token && salt)) {
         sendSubsonicError(
             res,
             SubsonicErrorCode.MISSING_PARAMETER,
-            "Required parameter 'p' (password) or 't'+'s' (token+salt) is missing",
-            format,
-            callback
-        );
-        return;
-    }
-
-    // Look up the user
-    const user = await prisma.user.findUnique({
-        where: { username },
-        select: {
-            id: true,
-            username: true,
-            role: true,
-            passwordHash: true,
-            subsonicPassword: true,
-        },
-    });
-
-    if (!user) {
-        sendSubsonicError(
-            res,
-            SubsonicErrorCode.WRONG_CREDENTIALS,
-            "Wrong username or password",
+            "Required parameter 'p' (password), 'apiKey', or 't'+'s' (token+salt) is missing",
             format,
             callback
         );
@@ -122,25 +100,94 @@ export async function requireSubsonicAuth(
     }
 
     let authenticated = false;
+    let authUser: { id: string; username: string; role: string } | null = null;
 
     // Method 1: Token authentication (MD5(password + salt))
     if (!authenticated && token && salt) {
-        // First, check against subsonicPassword if set
-        // This is the standard Subsonic auth flow: t=md5(password+salt)&s=salt
-        if (user.subsonicPassword) {
+        const user = await prisma.user.findUnique({
+            where: { username },
+            select: {
+                id: true,
+                username: true,
+                role: true,
+                subsonicPassword: true,
+            },
+        });
+
+        if (user?.subsonicPassword) {
             const decryptedPassword = decrypt(user.subsonicPassword);
             const expectedToken = createHash("md5")
                 .update(decryptedPassword + salt)
                 .digest("hex");
 
-            if (token.toLowerCase() === expectedToken.toLowerCase()) {
-                req.user = { id: user.id, username: user.username, role: user.role };
+            if (
+                token.length === expectedToken.length &&
+                timingSafeEqual(
+                    Buffer.from(token.toLowerCase(), "utf8"),
+                    Buffer.from(expectedToken.toLowerCase(), "utf8")
+                )
+            ) {
+                authUser = { id: user.id, username: user.username, role: user.role };
                 authenticated = true;
+            }
+        }
+
+        if (!authenticated && user) {
+            const apiKeys = await prisma.apiKey.findMany({
+                where: { userId: user.id },
+                select: { id: true, key: true },
+            });
+
+            for (const keyRecord of apiKeys) {
+                const expectedToken = createHash("md5")
+                    .update(keyRecord.key + salt)
+                    .digest("hex");
+
+                if (
+                    token.length === expectedToken.length &&
+                    timingSafeEqual(
+                        Buffer.from(token.toLowerCase(), "utf8"),
+                        Buffer.from(expectedToken.toLowerCase(), "utf8")
+                    )
+                ) {
+                    authUser = { id: user.id, username: user.username, role: user.role };
+                    authenticated = true;
+                    prisma.apiKey.update({
+                        where: { id: keyRecord.id },
+                        data: { lastUsed: new Date() },
+                    }).catch(() => {});
+                    break;
+                }
             }
         }
     }
 
-    // Method 2: Plain password authentication
+    // Method 2: OpenSubsonic API key authentication
+    if (!authenticated && apiKey) {
+        const keyRecord = await prisma.apiKey.findUnique({
+            where: { key: apiKey },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        username: true,
+                        role: true,
+                    },
+                },
+            },
+        });
+
+        if (keyRecord?.user.username === username) {
+            authUser = keyRecord.user;
+            authenticated = true;
+            prisma.apiKey.update({
+                where: { id: keyRecord.id },
+                data: { lastUsed: new Date() },
+            }).catch(() => {});
+        }
+    }
+
+    // Method 3: Plain password authentication
     if (!authenticated && password) {
         let plainPassword = password;
 
@@ -160,16 +207,34 @@ export async function requireSubsonicAuth(
             }
         }
 
-        // Verify against bcrypt hash
+        const user = await prisma.user.findUnique({
+            where: { username },
+            select: {
+                id: true,
+                username: true,
+                role: true,
+                passwordHash: true,
+            },
+        });
+
+        // Verify against bcrypt hash, even for unknown users, to avoid username timing leaks.
         try {
-            const passwordValid = await bcrypt.compare(plainPassword, user.passwordHash);
+            const dummyHash =
+                "$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
+            const passwordValid = user
+                ? await bcrypt.compare(plainPassword, user.passwordHash)
+                : await bcrypt.compare(plainPassword, dummyHash);
             if (passwordValid) {
-                req.user = { id: user.id, username: user.username, role: user.role };
+                authUser = { id: user!.id, username: user!.username, role: user!.role };
                 authenticated = true;
             }
         } catch (error) {
             console.error("[SubsonicAuth] Password verification error:", error);
         }
+    }
+
+    if (authenticated && authUser) {
+        req.user = authUser;
     }
 
     if (!authenticated) {

@@ -682,15 +682,38 @@ router.get("/recently-added", async (req, res) => {
     try {
         const { limit = "10" } = req.query;
         const limitNum = parseInt(limit as string, 10);
+        const settings = await prisma.systemSettings.findFirst({
+            select: { downloadPath: true },
+        });
+        const downloadPathPrefix = path.basename(
+            settings?.downloadPath || "/soulseek-downloads"
+        );
+        const excludedTrackPathPrefixes = [
+            "Playlists/",
+            downloadPathPrefix ? `${downloadPathPrefix}/` : "",
+        ].filter(Boolean);
+        const excludedTrackPathFilters = excludedTrackPathPrefixes.map(
+            (prefix) => ({
+                filePath: { startsWith: prefix },
+            })
+        );
 
         // Query Artists directly by lastSynced (matches Library view behavior)
-        // Filter to only artists with LIBRARY albums that have tracks
+        // Filter to only artists with real library tracks.
+        // Playlist-only imports and nested download mirrors should not appear in the
+        // owned-library "recently added" feed.
         const recentArtists = await prisma.artist.findMany({
             where: {
                 albums: {
                     some: {
                         location: "LIBRARY",
-                        tracks: { some: {} },
+                        tracks: {
+                            some: {
+                                NOT: {
+                                    OR: excludedTrackPathFilters,
+                                },
+                            },
+                        },
                     },
                 },
             },
@@ -711,7 +734,13 @@ router.get("/recently-added", async (req, res) => {
             where: {
                 artistId: { in: artistIds },
                 location: "LIBRARY",
-                tracks: { some: {} },
+                tracks: {
+                    some: {
+                        NOT: {
+                            OR: excludedTrackPathFilters,
+                        },
+                    },
+                },
             },
             _count: { id: true },
         });

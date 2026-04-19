@@ -199,7 +199,7 @@ stderr_logfile_maxbytes=0
 priority=10
 
 [program:redis]
-command=/usr/bin/redis-server --dir /data/redis --appendonly yes
+command=/bin/bash -c "exec gosu 1000:100 /usr/bin/redis-server --dir /data/redis --appendonly yes"
 autostart=true
 autorestart=true
 stdout_logfile=/dev/stdout
@@ -209,7 +209,7 @@ stderr_logfile_maxbytes=0
 priority=20
 
 [program:backend]
-command=/bin/bash -c "sleep 5 && cd /app/backend && node dist/index.js"
+command=/bin/bash -c "sleep 5 && cd /app/backend && exec gosu 1000:100 node dist/index.js"
 autostart=true
 autorestart=true
 stdout_logfile=/dev/stdout
@@ -221,7 +221,7 @@ environment=NODE_ENV="production",SOULSEEK_DEBUG="%(ENV_SOULSEEK_DEBUG)s"
 priority=30
 
 [program:frontend]
-command=/bin/bash -c "sleep 10 && cd /app/frontend && npm start"
+command=/bin/bash -c "sleep 10 && cd /app/frontend && exec gosu 1000:100 npm start"
 autostart=true
 autorestart=true
 stdout_logfile=/dev/stdout
@@ -232,7 +232,7 @@ environment=NODE_ENV="production",BACKEND_URL="http://localhost:3006",PORT="3030
 priority=40
 
 [program:audio-analyzer]
-command=/bin/bash -c "sleep 15 && cd /app/audio-analyzer && python3 analyzer.py"
+command=/bin/bash -c "sleep 15 && cd /app/audio-analyzer && exec gosu 1000:100 python3 analyzer.py"
 autostart=true
 autorestart=true
 stdout_logfile=/dev/stdout
@@ -349,6 +349,8 @@ gosu postgres $PG_BIN/pg_ctl -D /data/postgres -w stop
 
 # Create persistent cache directories in /data volume
 mkdir -p /data/cache/covers /data/cache/transcodes /data/secrets
+chown -R 1000:100 /data/cache /data/redis 2>/dev/null || true
+chmod -R ug+rwX /data/cache /data/redis 2>/dev/null || true
 
 # Load or generate persistent secrets
 if [ -f /data/secrets/session_secret ]; then

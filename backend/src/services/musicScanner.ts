@@ -62,6 +62,7 @@ export class MusicScannerService {
     // When true: marks albums as DISCOVER (hidden from library), skips OwnedAlbum, skips lastSynced
     // Used for Soulseek/playlist downloads that should only appear in playlists
     private playlistOnlyMode: boolean;
+    private excludedRelativePrefixes: string[] = [];
 
     constructor(
         progressCallback?: (progress: ScanProgress) => void,
@@ -90,8 +91,43 @@ export class MusicScannerService {
 
         console.log(`Starting library scan: ${musicPath}`);
 
+        const settings = await prisma.systemSettings.findFirst();
+        const downloadPath = settings?.downloadPath || "/soulseek-downloads";
+
+        const excludedDirs: string[] = [];
+        this.excludedRelativePrefixes = [];
+
+        // When the same download directory is mounted both at /soulseek-downloads and nested
+        // inside the main library (e.g. /music/soulseek-downloads), a normal library scan can
+        // accidentally ingest download-only files as owned library content. Exclude that nested
+        // mirror from full library scans and keep a defensive prefix guard below.
+        if (!this.playlistOnlyMode) {
+            const nestedDownloadDir = path.join(
+                musicPath,
+                path.basename(downloadPath)
+            );
+            const normalizedMusicPath = path.resolve(musicPath);
+            const normalizedNestedDownloadDir = path.resolve(nestedDownloadDir);
+
+            if (
+                normalizedNestedDownloadDir !== normalizedMusicPath &&
+                fs.existsSync(nestedDownloadDir)
+            ) {
+                excludedDirs.push(nestedDownloadDir);
+                const relativePrefix = path
+                    .relative(musicPath, nestedDownloadDir)
+                    .replace(/\\/g, "/");
+                if (relativePrefix && relativePrefix !== ".") {
+                    this.excludedRelativePrefixes.push(`${relativePrefix}/`);
+                }
+                console.log(
+                    `[Scanner] Excluding nested download mirror from library scan: ${nestedDownloadDir}`
+                );
+            }
+        }
+
         // Step 1: Find all audio files
-        const audioFiles = await this.findAudioFiles(musicPath);
+        const audioFiles = await this.findAudioFiles(musicPath, excludedDirs);
         console.log(`Found ${audioFiles.length} audio files`);
 
         // Step 2: Get existing tracks from database
@@ -179,9 +215,6 @@ export class MusicScannerService {
             // Step 4: Remove tracks for files that no longer exist
             // IMPORTANT: Check BOTH musicPath AND downloadPath before deleting
             // Tracks can exist in either location
-            const settings = await prisma.systemSettings.findFirst();
-            const downloadPath = settings?.downloadPath || "/soulseek-downloads";
-
             const scannedPaths = new Set(
                 audioFiles.map((f) => path.relative(musicPath, f))
             );
@@ -255,6 +288,16 @@ export class MusicScannerService {
         );
 
         return result;
+    }
+
+    private isExcludedLibrarySubpath(relativePath: string): boolean {
+        if (this.excludedRelativePrefixes.length === 0) {
+            return false;
+        }
+        const normalizedPath = relativePath.replace(/\\/g, "/");
+        return this.excludedRelativePrefixes.some((prefix) =>
+            normalizedPath.startsWith(prefix)
+        );
     }
 
     /**
@@ -550,10 +593,20 @@ export class MusicScannerService {
     /**
      * Recursively find all audio files in a directory
      */
-    private async findAudioFiles(dirPath: string): Promise<string[]> {
+    private async findAudioFiles(
+        dirPath: string,
+        excludedDirs: string[] = []
+    ): Promise<string[]> {
         const files: string[] = [];
+        const excluded = new Set(
+            excludedDirs.map((dir) => path.resolve(dir))
+        );
 
         async function walk(dir: string) {
+            if (excluded.has(path.resolve(dir))) {
+                return;
+            }
+
             const entries = await fs.promises.readdir(dir, {
                 withFileTypes: true,
             });
@@ -828,7 +881,10 @@ export class MusicScannerService {
             allowDiscoveryAlbumFallback
         );
         const isDiscoveryAlbum = isDiscoveryByPath || isDiscoveryByJob;
-        const shouldBeHiddenFromLibrary = isDiscoveryAlbum || this.playlistOnlyMode;
+        const shouldBeHiddenFromLibrary =
+            isDiscoveryAlbum ||
+            this.playlistOnlyMode ||
+            this.isExcludedLibrarySubpath(relativePath);
 
         if (!album) {
             // Try to find by release group MBID if available

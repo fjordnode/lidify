@@ -33,6 +33,15 @@ import {
 
 const router = Router();
 
+// Normalize paths: some clients omit the .view suffix.
+router.use((req: Request, _res: Response, next) => {
+    if (!req.path.endsWith(".view")) {
+        const query = req.url.includes("?") ? req.url.substring(req.url.indexOf("?")) : "";
+        req.url = `${req.path}.view${query}`;
+    }
+    next();
+});
+
 // Log all Subsonic API requests for debugging
 router.use((req: Request, res: Response, next) => {
     const endpoint = req.path;
@@ -45,7 +54,89 @@ router.use((req: Request, res: Response, next) => {
 });
 
 // Apply Subsonic authentication to all routes
+router.get("/tokenInfo.view", async (req: Request, res: Response) => {
+    const format = getResponseFormat(req.query);
+    const apiKey = req.query.apiKey as string | undefined;
+
+    if (!apiKey) {
+        return sendSubsonicError(
+            res,
+            SubsonicErrorCode.MISSING_PARAMETER,
+            "Required parameter 'apiKey' is missing",
+            format,
+            req.query.callback as string
+        );
+    }
+
+    const keyRecord = await prisma.apiKey.findUnique({
+        where: { key: apiKey },
+        select: {
+            id: true,
+            user: {
+                select: {
+                    username: true,
+                },
+            },
+        },
+    });
+
+    if (!keyRecord) {
+        return sendSubsonicError(
+            res,
+            SubsonicErrorCode.WRONG_CREDENTIALS,
+            "Wrong username or password",
+            format,
+            req.query.callback as string
+        );
+    }
+
+    prisma.apiKey.update({
+        where: { id: keyRecord.id },
+        data: { lastUsed: new Date() },
+    }).catch(() => {});
+
+    return sendSubsonicSuccess(
+        res,
+        {
+            tokenInfo: {
+                username: keyRecord.user.username,
+            },
+        },
+        format,
+        req.query.callback as string
+    );
+});
+
 router.use(requireSubsonicAuth);
+
+function parseRepeatedQueryParam(raw: unknown): string[] {
+    if (Array.isArray(raw)) {
+        return raw.filter(Boolean) as string[];
+    }
+    return raw ? [raw as string] : [];
+}
+
+function normalizeTrackIds(rawIds: string[]): string[] {
+    return rawIds.map((id) => parseSubsonicId(id).id);
+}
+
+function getQueueTrackIds(queue: unknown): string[] {
+    if (!Array.isArray(queue)) {
+        return [];
+    }
+
+    return queue
+        .map((item) => {
+            if (typeof item === "string") {
+                return item;
+            }
+            if (item && typeof item === "object" && "id" in item && typeof item.id === "string") {
+                return item.id;
+            }
+            return null;
+        })
+        .filter((id): id is string => Boolean(id));
+}
 
 async function resolveTrackPath(trackFilePath: string): Promise<string | null> {
     const normalizedFilePath = trackFilePath.replace(/\\/g, "/");
@@ -121,6 +212,8 @@ router.get("/getOpenSubsonicExtensions.view", (req: Request, res: Response) => {
                 { name: "transcodeOffset", versions: [1] },
                 { name: "songPlayedDate", versions: [1] },
                 { name: "albumPlayedDate", versions: [1] },
+                { name: "apiKeyAuthentication", versions: [1] },
+                { name: "indexBasedQueue", versions: [1] },
             ],
         },
         format,
@@ -778,13 +871,19 @@ const albumListHandler = async (req: Request, res: Response) => {
                 orderBy = { artist: { name: "asc" } };
                 break;
             case "starred":
-                // Would need favorites data - return empty for now
-                return sendSubsonicSuccess(
-                    res,
-                    { albumList2: { album: [] } },
-                    format,
-                    req.query.callback as string
-                );
+                where = {
+                    location: "LIBRARY",
+                    tracks: {
+                        some: {
+                            likedBy: {
+                                some: {
+                                    userId: req.user!.id,
+                                },
+                            },
+                        },
+                    },
+                };
+                break;
             case "byYear":
                 if (fromYear && toYear) {
                     where.year = {
@@ -2423,25 +2522,248 @@ router.get("/getUser.view", async (req: Request, res: Response) => {
 
 // These endpoints exist for compatibility but don't have full implementations
 
-router.get("/getStarred.view", (req: Request, res: Response) => {
+router.get("/getStarred.view", async (req: Request, res: Response) => {
     const format = getResponseFormat(req.query);
-    sendSubsonicSuccess(res, { starred: {} }, format, req.query.callback as string);
+
+    try {
+        const likedTracks = await prisma.likedTrack.findMany({
+            where: { userId: req.user!.id },
+            include: {
+                track: {
+                    include: {
+                        album: {
+                            include: {
+                                artist: { select: { id: true, name: true } },
+                            },
+                        },
+                    },
+                },
+            },
+            orderBy: { likedAt: "desc" },
+        });
+
+        const songs = likedTracks.map((liked) => ({
+            ...formatTrackForSubsonic(liked.track),
+            starred: liked.likedAt.toISOString(),
+        }));
+
+        sendSubsonicSuccess(
+            res,
+            {
+                starred: songs.length > 0 ? { song: songs } : {},
+            },
+            format,
+            req.query.callback as string
+        );
+    } catch (error) {
+        console.error("[Subsonic] getStarred error:", error);
+        sendSubsonicError(
+            res,
+            SubsonicErrorCode.GENERIC,
+            "Failed to fetch starred tracks",
+            format,
+            req.query.callback as string
+        );
+    }
 });
 
-router.get("/getStarred2.view", (req: Request, res: Response) => {
+router.get("/getStarred2.view", async (req: Request, res: Response) => {
     const format = getResponseFormat(req.query);
-    sendSubsonicSuccess(res, { starred2: {} }, format, req.query.callback as string);
+
+    try {
+        const likedTracks = await prisma.likedTrack.findMany({
+            where: { userId: req.user!.id },
+            include: {
+                track: {
+                    include: {
+                        album: {
+                            include: {
+                                artist: { select: { id: true, name: true } },
+                            },
+                        },
+                    },
+                },
+            },
+            orderBy: { likedAt: "desc" },
+        });
+
+        const songs = likedTracks.map((liked) => ({
+            ...formatTrackForSubsonic(liked.track),
+            starred: liked.likedAt.toISOString(),
+        }));
+
+        sendSubsonicSuccess(
+            res,
+            {
+                starred2: songs.length > 0 ? { song: songs } : {},
+            },
+            format,
+            req.query.callback as string
+        );
+    } catch (error) {
+        console.error("[Subsonic] getStarred2 error:", error);
+        sendSubsonicError(
+            res,
+            SubsonicErrorCode.GENERIC,
+            "Failed to fetch starred tracks",
+            format,
+            req.query.callback as string
+        );
+    }
 });
 
-router.get("/star.view", (req: Request, res: Response) => {
+router.get("/star.view", async (req: Request, res: Response) => {
     const format = getResponseFormat(req.query);
-    // TODO: Implement starring (add to favorites playlist)
-    sendSubsonicSuccess(res, {}, format, req.query.callback as string);
+
+    try {
+        const trackIds = new Set(normalizeTrackIds(parseRepeatedQueryParam(req.query.id)));
+        const albumIds = parseRepeatedQueryParam(req.query.albumId).map((id) => parseSubsonicId(id).id);
+        const artistIds = parseRepeatedQueryParam(req.query.artistId).map((id) => parseSubsonicId(id).id);
+
+        if (albumIds.length > 0 || artistIds.length > 0) {
+            const scopedTracks = await prisma.track.findMany({
+                where: {
+                    OR: [
+                        ...(albumIds.length > 0 ? [{ albumId: { in: albumIds } }] : []),
+                        ...(artistIds.length > 0 ? [{ album: { artistId: { in: artistIds } } }] : []),
+                    ],
+                },
+                select: { id: true },
+            });
+
+            for (const track of scopedTracks) {
+                trackIds.add(track.id);
+            }
+        }
+
+        for (const trackId of trackIds) {
+            await prisma.likedTrack.upsert({
+                where: { userId_trackId: { userId: req.user!.id, trackId } },
+                create: { userId: req.user!.id, trackId },
+                update: {},
+            }).catch(() => {});
+        }
+
+        sendSubsonicSuccess(res, {}, format, req.query.callback as string);
+    } catch (error) {
+        console.error("[Subsonic] star error:", error);
+        sendSubsonicError(
+            res,
+            SubsonicErrorCode.GENERIC,
+            "Failed to star media",
+            format,
+            req.query.callback as string
+        );
+    }
 });
 
-router.get("/unstar.view", (req: Request, res: Response) => {
+router.get("/unstar.view", async (req: Request, res: Response) => {
     const format = getResponseFormat(req.query);
-    sendSubsonicSuccess(res, {}, format, req.query.callback as string);
+
+    try {
+        const trackIds = new Set(normalizeTrackIds(parseRepeatedQueryParam(req.query.id)));
+        const albumIds = parseRepeatedQueryParam(req.query.albumId).map((id) => parseSubsonicId(id).id);
+        const artistIds = parseRepeatedQueryParam(req.query.artistId).map((id) => parseSubsonicId(id).id);
+
+        if (albumIds.length > 0 || artistIds.length > 0) {
+            const scopedTracks = await prisma.track.findMany({
+                where: {
+                    OR: [
+                        ...(albumIds.length > 0 ? [{ albumId: { in: albumIds } }] : []),
+                        ...(artistIds.length > 0 ? [{ album: { artistId: { in: artistIds } } }] : []),
+                    ],
+                },
+                select: { id: true },
+            });
+
+            for (const track of scopedTracks) {
+                trackIds.add(track.id);
+            }
+        }
+
+        if (trackIds.size > 0) {
+            await prisma.likedTrack.deleteMany({
+                where: {
+                    userId: req.user!.id,
+                    trackId: { in: [...trackIds] },
+                },
+            });
+        }
+
+        sendSubsonicSuccess(res, {}, format, req.query.callback as string);
+    } catch (error) {
+        console.error("[Subsonic] unstar error:", error);
+        sendSubsonicError(
+            res,
+            SubsonicErrorCode.GENERIC,
+            "Failed to unstar media",
+            format,
+            req.query.callback as string
+        );
+    }
+});
+
+router.get("/setRating.view", async (req: Request, res: Response) => {
+    const format = getResponseFormat(req.query);
+    const { id, rating } = req.query;
+
+    if (!id) {
+        return sendSubsonicError(
+            res,
+            SubsonicErrorCode.MISSING_PARAMETER,
+            "Required parameter 'id' is missing",
+            format,
+            req.query.callback as string
+        );
+    }
+
+    if (rating === undefined) {
+        return sendSubsonicError(
+            res,
+            SubsonicErrorCode.MISSING_PARAMETER,
+            "Required parameter 'rating' is missing",
+            format,
+            req.query.callback as string
+        );
+    }
+
+    try {
+        const parsedRating = parseInt(rating as string, 10);
+        const trackId = parseSubsonicId(id as string).id;
+
+        if (!Number.isInteger(parsedRating) || parsedRating < 0 || parsedRating > 5) {
+            return sendSubsonicError(
+                res,
+                SubsonicErrorCode.GENERIC,
+                "rating must be an integer between 0 and 5",
+                format,
+                req.query.callback as string
+            );
+        }
+
+        if (parsedRating === 0) {
+            await prisma.likedTrack.deleteMany({
+                where: { userId: req.user!.id, trackId },
+            });
+        } else {
+            await prisma.likedTrack.upsert({
+                where: { userId_trackId: { userId: req.user!.id, trackId } },
+                create: { userId: req.user!.id, trackId },
+                update: {},
+            }).catch(() => {});
+        }
+
+        sendSubsonicSuccess(res, {}, format, req.query.callback as string);
+    } catch (error) {
+        console.error("[Subsonic] setRating error:", error);
+        sendSubsonicError(
+            res,
+            SubsonicErrorCode.GENERIC,
+            "Failed to set rating",
+            format,
+            req.query.callback as string
+        );
+    }
 });
 
 router.get("/getGenres.view", (req: Request, res: Response) => {
@@ -2587,6 +2909,262 @@ router.get("/getArtistInfo2.view", async (req: Request, res: Response) => {
 router.get("/getBookmarks.view", (req: Request, res: Response) => {
     const format = getResponseFormat(req.query);
     sendSubsonicSuccess(res, { bookmarks: {} }, format, req.query.callback as string);
+});
+
+router.get("/getPlayQueue.view", async (req: Request, res: Response) => {
+    const format = getResponseFormat(req.query);
+
+    try {
+        const state = await prisma.playbackState.findUnique({
+            where: { userId: req.user!.id },
+        });
+
+        const queueTrackIds = getQueueTrackIds(state?.queue).map((id) => parseSubsonicId(id).id);
+        const tracks = queueTrackIds.length > 0
+            ? await prisma.track.findMany({
+                where: { id: { in: queueTrackIds } },
+                include: {
+                    album: {
+                        include: {
+                            artist: { select: { id: true, name: true } },
+                        },
+                    },
+                },
+            })
+            : [];
+
+        const trackMap = new Map(tracks.map((track) => [track.id, track]));
+        const entry = queueTrackIds
+            .map((id) => trackMap.get(id))
+            .filter((track): track is NonNullable<typeof track> => Boolean(track))
+            .map((track) => formatTrackForSubsonic(track));
+
+        const currentTrackId = state?.trackId
+            || (queueTrackIds.length > 0 ? queueTrackIds[Math.min(state?.currentIndex ?? 0, queueTrackIds.length - 1)] : undefined);
+
+        sendSubsonicSuccess(
+            res,
+            {
+                playQueue: {
+                    current: currentTrackId ? `tr-${currentTrackId}` : undefined,
+                    position: 0,
+                    username: req.user!.username,
+                    changed: state?.updatedAt?.toISOString() || new Date().toISOString(),
+                    changedBy: (req.query.c as string | undefined) || "Lidify",
+                    entry,
+                },
+            },
+            format,
+            req.query.callback as string
+        );
+    } catch (error) {
+        console.error("[Subsonic] getPlayQueue error:", error);
+        sendSubsonicError(
+            res,
+            SubsonicErrorCode.GENERIC,
+            "Failed to fetch play queue",
+            format,
+            req.query.callback as string
+        );
+    }
+});
+
+router.get("/getPlayQueueByIndex.view", async (req: Request, res: Response) => {
+    const format = getResponseFormat(req.query);
+
+    try {
+        const state = await prisma.playbackState.findUnique({
+            where: { userId: req.user!.id },
+        });
+
+        const queueTrackIds = getQueueTrackIds(state?.queue).map((id) => parseSubsonicId(id).id);
+        const tracks = queueTrackIds.length > 0
+            ? await prisma.track.findMany({
+                where: { id: { in: queueTrackIds } },
+                include: {
+                    album: {
+                        include: {
+                            artist: { select: { id: true, name: true } },
+                        },
+                    },
+                },
+            })
+            : [];
+
+        const trackMap = new Map(tracks.map((track) => [track.id, track]));
+        const entry = queueTrackIds
+            .map((id) => trackMap.get(id))
+            .filter((track): track is NonNullable<typeof track> => Boolean(track))
+            .map((track) => formatTrackForSubsonic(track));
+
+        sendSubsonicSuccess(
+            res,
+            {
+                playQueueByIndex: {
+                    currentIndex: queueTrackIds.length > 0
+                        ? Math.min(Math.max(state?.currentIndex ?? 0, 0), queueTrackIds.length - 1)
+                        : 0,
+                    position: 0,
+                    username: req.user!.username,
+                    changed: state?.updatedAt?.toISOString() || new Date().toISOString(),
+                    changedBy: (req.query.c as string | undefined) || "Lidify",
+                    entry,
+                },
+            },
+            format,
+            req.query.callback as string
+        );
+    } catch (error) {
+        console.error("[Subsonic] getPlayQueueByIndex error:", error);
+        sendSubsonicError(
+            res,
+            SubsonicErrorCode.GENERIC,
+            "Failed to fetch play queue",
+            format,
+            req.query.callback as string
+        );
+    }
+});
+
+router.get("/savePlayQueue.view", async (req: Request, res: Response) => {
+    const format = getResponseFormat(req.query);
+
+    try {
+        const rawIds = parseRepeatedQueryParam(req.query.id);
+        const queueTrackIds = normalizeTrackIds(rawIds);
+        const current = req.query.current as string | undefined;
+        const currentTrackId = current ? parseSubsonicId(current).id : null;
+
+        if (queueTrackIds.length > 0 && currentTrackId && !queueTrackIds.includes(currentTrackId)) {
+            return sendSubsonicError(
+                res,
+                SubsonicErrorCode.MISSING_PARAMETER,
+                "Parameter 'current' must be included in 'id'",
+                format,
+                req.query.callback as string
+            );
+        }
+
+        const currentIndex = currentTrackId && queueTrackIds.includes(currentTrackId)
+            ? queueTrackIds.indexOf(currentTrackId)
+            : 0;
+
+        await prisma.playbackState.upsert({
+            where: { userId: req.user!.id },
+            update: {
+                playbackType: "track",
+                trackId: currentTrackId,
+                audiobookId: null,
+                podcastId: null,
+                queue: queueTrackIds,
+                currentIndex,
+                isShuffle: false,
+            },
+            create: {
+                userId: req.user!.id,
+                playbackType: "track",
+                trackId: currentTrackId,
+                audiobookId: null,
+                podcastId: null,
+                queue: queueTrackIds,
+                currentIndex,
+                isShuffle: false,
+            },
+        });
+
+        sendSubsonicSuccess(res, {}, format, req.query.callback as string);
+    } catch (error) {
+        console.error("[Subsonic] savePlayQueue error:", error);
+        sendSubsonicError(
+            res,
+            SubsonicErrorCode.GENERIC,
+            "Failed to save play queue",
+            format,
+            req.query.callback as string
+        );
+    }
+});
+
+router.get("/savePlayQueueByIndex.view", async (req: Request, res: Response) => {
+    const format = getResponseFormat(req.query);
+
+    try {
+        const rawIds = parseRepeatedQueryParam(req.query.id);
+        const queueTrackIds = normalizeTrackIds(rawIds);
+
+        if (queueTrackIds.length > 0 && req.query.currentIndex === undefined) {
+            return sendSubsonicError(
+                res,
+                SubsonicErrorCode.MISSING_PARAMETER,
+                "Required parameter 'currentIndex' is missing",
+                format,
+                req.query.callback as string
+            );
+        }
+
+        if (queueTrackIds.length === 0 && req.query.currentIndex !== undefined) {
+            return sendSubsonicError(
+                res,
+                SubsonicErrorCode.MISSING_PARAMETER,
+                "Parameter 'currentIndex' must not be set when 'id' is missing",
+                format,
+                req.query.callback as string
+            );
+        }
+
+        const parsedIndex = parseInt((req.query.currentIndex as string | undefined) || "0", 10);
+        if (
+            queueTrackIds.length > 0 &&
+            (!Number.isInteger(parsedIndex) || parsedIndex < 0 || parsedIndex >= queueTrackIds.length)
+        ) {
+            return sendSubsonicError(
+                res,
+                SubsonicErrorCode.MISSING_PARAMETER,
+                "Parameter 'currentIndex' must be between 0 and queue length - 1",
+                format,
+                req.query.callback as string
+            );
+        }
+
+        const currentIndex = Number.isInteger(parsedIndex) && parsedIndex >= 0 && parsedIndex < queueTrackIds.length
+            ? parsedIndex
+            : 0;
+        const currentTrackId = queueTrackIds.length > 0 ? queueTrackIds[currentIndex] : null;
+
+        await prisma.playbackState.upsert({
+            where: { userId: req.user!.id },
+            update: {
+                playbackType: "track",
+                trackId: currentTrackId,
+                audiobookId: null,
+                podcastId: null,
+                queue: queueTrackIds,
+                currentIndex,
+                isShuffle: false,
+            },
+            create: {
+                userId: req.user!.id,
+                playbackType: "track",
+                trackId: currentTrackId,
+                audiobookId: null,
+                podcastId: null,
+                queue: queueTrackIds,
+                currentIndex,
+                isShuffle: false,
+            },
+        });
+
+        sendSubsonicSuccess(res, {}, format, req.query.callback as string);
+    } catch (error) {
+        console.error("[Subsonic] savePlayQueueByIndex error:", error);
+        sendSubsonicError(
+            res,
+            SubsonicErrorCode.GENERIC,
+            "Failed to save play queue",
+            format,
+            req.query.callback as string
+        );
+    }
 });
 
 /**
