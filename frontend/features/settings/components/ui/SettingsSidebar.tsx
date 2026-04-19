@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 
 export interface SidebarItem {
     id: string;

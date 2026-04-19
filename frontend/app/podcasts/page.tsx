@@ -250,7 +250,7 @@ export default function PodcastsPage() {
         }
     };
 
-    const handleSubscribe = async (result: SearchResult) => {
+    const _handleSubscribe = async (result: SearchResult) => {
         try {
             toast.info(`Subscribing to ${result.name || result.title}...`);
 

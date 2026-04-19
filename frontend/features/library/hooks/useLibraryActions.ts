@@ -37,7 +37,7 @@ export function useLibraryActions() {
                 return;
             }
 
-            const tracksWithAlbum = firstAlbum.tracks.map((track: any) => ({
+            const tracksWithAlbum = firstAlbum.tracks.map((track: Record<string, unknown>) => ({
                 ...track,
                 album: {
                     id: firstAlbum.id,
@@ -63,7 +63,7 @@ export function useLibraryActions() {
                 return;
             }
 
-            const tracksWithAlbum = album.tracks.map((track: any) => ({
+            const tracksWithAlbum = album.tracks.map((track: Record<string, unknown>) => ({
                 ...track,
                 album: {
                     id: album.id,

@@ -1,6 +1,6 @@
 "use client";
 
-/* eslint-disable react-hooks/preserve-manual-memoization -- Complex control forwarding requires manual memoization */
+ 
 
 import {
     createContext,
@@ -116,6 +116,33 @@ const RemoteAwareAudioControlsContext = createContext<
 export function RemoteAwareAudioControlsProvider({ children }: { children: ReactNode }) {
     const controls = useAudioControls();
     const remote = useRemotePlayback();
+    const {
+        pause: localPause,
+        resume: localResume,
+        play: localPlay,
+        next: localNext,
+        previous: localPrevious,
+        seek: localSeek,
+        setVolume: localSetVolume,
+        skipForward: localSkipForward,
+        skipBackward: localSkipBackward,
+        playTrack: localPlayTrack,
+        playTracks: localPlayTracks,
+        setPlayerMode,
+        returnToPreviousMode,
+        toggleMute,
+        toggleShuffle,
+        toggleRepeat,
+        updateCurrentTime,
+        addToQueue,
+        removeFromQueue,
+        clearQueue,
+        setUpcoming,
+        playAudiobook,
+        playPodcast,
+        startVibeMode,
+        stopVibeMode,
+    } = controls;
 
     // Use getter functions to avoid stale closures - these always return current values
     const {
@@ -153,7 +180,7 @@ export function RemoteAwareAudioControlsProvider({ children }: { children: React
         (
             command: "play" | "pause" | "next" | "prev" | "seek" | "volume",
             localAction: () => void,
-            payload?: any
+            payload?: Record<string, unknown>
         ) => {
             // Get current values from refs via getters (avoids stale closures)
             const currentControlMode = getControlMode();
@@ -185,37 +212,37 @@ export function RemoteAwareAudioControlsProvider({ children }: { children: React
 
     // Wrapped playback controls
     const pause = useCallback(() => {
-        executeOrForward("pause", controls.pause);
-    }, [executeOrForward, controls.pause]);
+        executeOrForward("pause", localPause);
+    }, [executeOrForward, localPause]);
 
     const resume = useCallback(() => {
-        executeOrForward("play", controls.resume);
-    }, [executeOrForward, controls.resume]);
+        executeOrForward("play", localResume);
+    }, [executeOrForward, localResume]);
 
     const play = useCallback(() => {
-        executeOrForward("play", controls.play);
-    }, [executeOrForward, controls.play]);
+        executeOrForward("play", localPlay);
+    }, [executeOrForward, localPlay]);
 
     const next = useCallback(() => {
-        executeOrForward("next", controls.next);
-    }, [executeOrForward, controls.next]);
+        executeOrForward("next", localNext);
+    }, [executeOrForward, localNext]);
 
     const previous = useCallback(() => {
-        executeOrForward("prev", controls.previous);
-    }, [executeOrForward, controls.previous]);
+        executeOrForward("prev", localPrevious);
+    }, [executeOrForward, localPrevious]);
 
     const seek = useCallback(
         (time: number) => {
-            executeOrForward("seek", () => controls.seek(time), { time });
+            executeOrForward("seek", () => localSeek(time), { time });
         },
-        [executeOrForward, controls.seek]
+        [executeOrForward, localSeek]
     );
 
     const setVolume = useCallback(
         (volume: number) => {
-            executeOrForward("volume", () => controls.setVolume(volume), { volume });
+            executeOrForward("volume", () => localSetVolume(volume), { volume });
         },
-        [executeOrForward, controls.setVolume]
+        [executeOrForward, localSetVolume]
     );
 
     const skipForward = useCallback(
@@ -226,15 +253,15 @@ export function RemoteAwareAudioControlsProvider({ children }: { children: React
 
             if (currentControlMode === "local") {
                 ensureLocalDeviceActive("skipForward");
-                controls.skipForward(seconds);
+                localSkipForward(seconds);
             } else if (currentControlTargetId) {
                 // For skip, we send a relative seek command
                 sendCommand(currentControlTargetId, "seek", { relative: seconds });
             } else {
-                controls.skipForward(seconds);
+                localSkipForward(seconds);
             }
         },
-        [getControlMode, getControlTargetId, sendCommand, controls.skipForward, ensureLocalDeviceActive]
+        [getControlMode, getControlTargetId, sendCommand, localSkipForward, ensureLocalDeviceActive]
     );
 
     const skipBackward = useCallback(
@@ -245,14 +272,14 @@ export function RemoteAwareAudioControlsProvider({ children }: { children: React
 
             if (currentControlMode === "local") {
                 ensureLocalDeviceActive("skipBackward");
-                controls.skipBackward(seconds);
+                localSkipBackward(seconds);
             } else if (currentControlTargetId) {
                 sendCommand(currentControlTargetId, "seek", { relative: -seconds });
             } else {
-                controls.skipBackward(seconds);
+                localSkipBackward(seconds);
             }
         },
-        [getControlMode, getControlTargetId, sendCommand, controls.skipBackward, ensureLocalDeviceActive]
+        [getControlMode, getControlTargetId, sendCommand, localSkipBackward, ensureLocalDeviceActive]
     );
 
     // For playTrack - when controlling remotely, send the track to play
@@ -264,15 +291,15 @@ export function RemoteAwareAudioControlsProvider({ children }: { children: React
 
             if (currentControlMode === "local") {
                 ensureLocalDeviceActive("playTrack");
-                controls.playTrack(track);
+                localPlayTrack(track);
             } else if (currentControlTargetId) {
                 // Send playTrack command to remote device
                 sendCommand(currentControlTargetId, "playTrack", { track });
             } else {
-                controls.playTrack(track);
+                localPlayTrack(track);
             }
         },
-        [getControlMode, getControlTargetId, sendCommand, controls.playTrack, ensureLocalDeviceActive]
+        [getControlMode, getControlTargetId, sendCommand, localPlayTrack, ensureLocalDeviceActive]
     );
 
     // For playTracks - when controlling remotely, send the queue
@@ -292,31 +319,15 @@ export function RemoteAwareAudioControlsProvider({ children }: { children: React
 
             if (currentControlMode === "local") {
                 ensureLocalDeviceActive("playTracks");
-                controls.playTracks(tracks, startIndex, isVibeQueue);
+                localPlayTracks(tracks, startIndex, isVibeQueue);
             } else if (currentControlTargetId) {
                 sendCommand(currentControlTargetId, "setQueue", { tracks, startIndex });
             } else {
-                controls.playTracks(tracks, startIndex, isVibeQueue);
+                localPlayTracks(tracks, startIndex, isVibeQueue);
             }
         },
-        [getControlMode, getControlTargetId, sendCommand, controls.playTracks, ensureLocalDeviceActive]
+        [getControlMode, getControlTargetId, sendCommand, localPlayTracks, ensureLocalDeviceActive]
     );
-
-    // These controls are always local (UI state, not playback)
-    const setPlayerMode = controls.setPlayerMode;
-    const returnToPreviousMode = controls.returnToPreviousMode;
-    const toggleMute = controls.toggleMute;
-    const toggleShuffle = controls.toggleShuffle;
-    const toggleRepeat = controls.toggleRepeat;
-    const updateCurrentTime = controls.updateCurrentTime;
-    const addToQueue = controls.addToQueue;
-    const removeFromQueue = controls.removeFromQueue;
-    const clearQueue = controls.clearQueue;
-    const setUpcoming = controls.setUpcoming;
-    const playAudiobook = controls.playAudiobook;
-    const playPodcast = controls.playPodcast;
-    const startVibeMode = controls.startVibeMode;
-    const stopVibeMode = controls.stopVibeMode;
 
     const value = useMemo(
         () => ({

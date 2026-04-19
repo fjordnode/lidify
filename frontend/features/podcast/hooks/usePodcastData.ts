@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { usePodcastQuery } from "@/hooks/useQueries";
 import { useAuth } from "@/lib/auth-context";

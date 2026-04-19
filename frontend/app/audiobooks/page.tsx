@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -45,7 +44,7 @@ type SortType = "title" | "author" | "recent" | "series";
 
 export default function AudiobooksPage() {
     const router = useRouter();
-    const { isAuthenticated } = useAuth();
+    useAuth();
     const { toast } = useToast();
     const { currentAudiobook, pause } = useAudio();
 
@@ -83,9 +82,10 @@ export default function AudiobooksPage() {
         (!audiobooksData ||
             !("configured" in audiobooksData) ||
             audiobooksData.configured !== false);
-    const audiobooks: Audiobook[] = Array.isArray(audiobooksData)
-        ? audiobooksData
-        : [];
+    const audiobooks: Audiobook[] = useMemo(
+        () => (Array.isArray(audiobooksData) ? audiobooksData : []),
+        [audiobooksData]
+    );
 
     // Clear player state if Audiobookshelf is disabled
     useEffect(() => {

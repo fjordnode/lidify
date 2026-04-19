@@ -54,7 +54,7 @@ export default function OnboardingPage() {
                     // User exists but hasn't completed onboarding - skip to step 2
                     setStep(2);
                 }
-            } catch (error) {
+            } catch (_error) {
                 // Not logged in, stay on step 1
             } finally {
                 setInitialLoading(false);

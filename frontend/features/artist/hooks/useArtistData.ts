@@ -1,16 +1,14 @@
 /* eslint-disable react-hooks/preserve-manual-memoization -- Complex album sorting requires manual memoization */
-import { useParams, useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { useParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/hooks/useQueries";
 import { api } from "@/lib/api";
 import { useDownloadContext } from "@/lib/download-context";
-import { Artist, Album, ArtistSource } from "../types";
+import { ArtistSource } from "../types";
 import { useMemo, useEffect, useRef } from "react";
 
 export function useArtistData() {
     const params = useParams();
-    const router = useRouter();
     // Decode the ID in case it's still URL-encoded (e.g., special characters like ø, fullwidth chars)
     const rawId = params.id as string;
     let id = rawId;
@@ -31,7 +29,6 @@ export function useArtistData() {
     const {
         data: artist,
         isLoading,
-        error,
         isError,
         refetch,
     } = useQuery({
@@ -52,7 +49,7 @@ export function useArtistData() {
                 try {
                     console.log(`[useArtistData] Trying library for: ${id}`);
                     return await api.getArtist(id);
-                } catch (error) {
+                } catch (_error) {
                     // Library lookup failed, try discovery (might be an MBID)
                     console.log(`[useArtistData] Library failed, trying discovery for: ${id}`);
                     return await api.getArtistDiscovery(id);

@@ -8,7 +8,6 @@ import { useIsMobile, useIsTablet } from "@/hooks/useMediaQuery";
 interface HorizontalCarouselProps {
     children: ReactNode;
     className?: string;
-    itemClassName?: string;
     showArrows?: boolean;
     gap?: "sm" | "md" | "lg";
 }
@@ -16,7 +15,6 @@ interface HorizontalCarouselProps {
 export function HorizontalCarousel({
     children,
     className,
-    itemClassName,
     showArrows = true,
     gap = "md",
 }: HorizontalCarouselProps) {

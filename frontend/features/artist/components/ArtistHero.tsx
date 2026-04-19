@@ -4,6 +4,7 @@ import { Music } from "lucide-react";
 import Image from "next/image";
 import { MetadataEditor } from "@/components/MetadataEditor";
 import { Artist, ArtistSource, Album } from "../types";
+import type { ColorPalette } from "@/hooks/useImageColor";
 import { ReactNode } from "react";
 
 interface ArtistHeroProps {
@@ -11,7 +12,7 @@ interface ArtistHeroProps {
     source: ArtistSource;
     albums: Album[];
     heroImage: string | null;
-    colors: any;
+    colors: ColorPalette | null;
     onReload: () => void;
     children?: ReactNode;
 }

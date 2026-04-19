@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 
 export interface ColorPalette {
     vibrant: string;
@@ -294,19 +294,34 @@ function getInitialColors(imageUrl: string | null | undefined): ColorPalette | n
     return null;
 }
 
+function shouldExtractColors(
+    imageUrl: string | null | undefined,
+    initialColors: ColorPalette | null
+): boolean {
+    return Boolean(
+        imageUrl &&
+            !initialColors &&
+            !imageUrl.includes("placeholder") &&
+            !imageUrl.startsWith("/placeholder")
+    );
+}
+
 export function useImageColor(imageUrl: string | null | undefined) {
     const [colors, setColors] = useState<ColorPalette | null>(() => getInitialColors(imageUrl));
-    const [isLoading, setIsLoading] = useState(false);
-    const prevImageUrlRef = useRef(imageUrl);
-    
-    // Handle URL changes synchronously
-    // eslint-disable-next-line react-hooks/rules-of-hooks, react-hooks/refs -- Intentional ref tracking pattern
-    if (imageUrl !== prevImageUrlRef.current) {
-        prevImageUrlRef.current = imageUrl;
+    const [isLoading, setIsLoading] = useState(() =>
+        shouldExtractColors(imageUrl, getInitialColors(imageUrl))
+    );
+    const [prevImageUrl, setPrevImageUrl] = useState(imageUrl);
+
+    // Handle URL changes synchronously (React-approved setState during render)
+    if (imageUrl !== prevImageUrl) {
+        setPrevImageUrl(imageUrl);
         const initialColors = getInitialColors(imageUrl);
         if (initialColors !== colors) {
             setColors(initialColors);
         }
+        // Pre-set loading state for URLs that will need extraction
+        setIsLoading(shouldExtractColors(imageUrl, initialColors));
     }
 
     useEffect(() => {
@@ -327,8 +342,6 @@ export function useImageColor(imageUrl: string | null | undefined) {
             return;
         }
 
-        setIsLoading(true);
-
         // Extract colors client-side using canvas
         const cacheKey = `color_cache_${imageUrl}`;
         extractColorsFromImage(imageUrl)
@@ -339,7 +352,7 @@ export function useImageColor(imageUrl: string | null | undefined) {
                 // Cache the result in localStorage
                 try {
                     localStorage.setItem(cacheKey, JSON.stringify(palette));
-                } catch (error) {
+                } catch (_error) {
                     // Ignore cache write errors
                 }
             })
@@ -360,10 +373,11 @@ export function useImageColor(imageUrl: string | null | undefined) {
                 // Remove any cached failures so it can retry later
                 try {
                     localStorage.removeItem(cacheKey);
-                } catch (e) {
+                } catch (_e) {
                     // Ignore
                 }
             });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- colors is the output of this effect, not a dependency
     }, [imageUrl]);
 
     return { colors, isLoading };

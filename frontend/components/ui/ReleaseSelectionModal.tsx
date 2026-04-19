@@ -46,6 +46,7 @@ export function ReleaseSelectionModal({
         if (isOpen && albumMbid) {
             fetchReleases();
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchReleases depends on isOpen/albumMbid which are listed
     }, [isOpen, albumMbid]);
 
     const fetchReleases = async () => {
@@ -60,9 +61,10 @@ export function ReleaseSelectionModal({
             );
             setReleases(result.releases);
             setLidarrAlbumId(result.lidarrAlbumId);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error("Failed to fetch releases:", err);
-            setError(err.message || "Failed to search for releases");
+            const message = err instanceof Error ? err.message : "Failed to search for releases";
+            setError(message);
         } finally {
             setLoading(false);
         }
@@ -95,10 +97,11 @@ export function ReleaseSelectionModal({
             });
 
             onClose();
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error("Failed to grab release:", err);
+            const message = err instanceof Error ? err.message : undefined;
             toast.error("Failed to start download", {
-                description: err.message,
+                description: message,
             });
         } finally {
             setGrabbing(null);

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 
 export type JobType = "scan" | "discover";
@@ -24,12 +24,11 @@ export function useJobStatus(
     const [jobStatus, setJobStatus] = useState<JobStatus | null>(null);
     const [isPolling, setIsPolling] = useState(!!jobId);
     const pollInterval = options?.pollInterval || 5000;
-    const prevJobIdRef = useRef(jobId);
-    
-    // Start polling when jobId changes from null to a value
-    // eslint-disable-next-line react-hooks/rules-of-hooks, react-hooks/refs -- Intentional ref tracking pattern
-    if (jobId !== prevJobIdRef.current) {
-        prevJobIdRef.current = jobId;
+    const [prevJobId, setPrevJobId] = useState(jobId);
+
+    // Start polling when jobId changes from null to a value (React-approved setState during render)
+    if (jobId !== prevJobId) {
+        setPrevJobId(jobId);
         if (jobId && !isPolling) {
             setIsPolling(true);
         }
@@ -79,13 +78,16 @@ export function useJobStatus(
     useEffect(() => {
         if (!isPolling || !jobId) return;
 
-        // Check immediately
-        checkStatus();
+        // Check shortly after mount (deferred to avoid synchronous setState in effect)
+        const timeout = setTimeout(checkStatus, 0);
 
         // Then poll at interval
         const interval = setInterval(checkStatus, pollInterval);
 
-        return () => clearInterval(interval);
+        return () => {
+            clearTimeout(timeout);
+            clearInterval(interval);
+        };
     }, [isPolling, jobId, checkStatus, pollInterval]);
 
     return {

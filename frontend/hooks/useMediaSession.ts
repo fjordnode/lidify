@@ -232,7 +232,7 @@ export function useMediaSession() {
                     seek(details.seekTime);
                 }
             });
-        } catch (error) {
+        } catch (_error) {
             // Seek actions not supported on this platform
         }
 
@@ -253,7 +253,7 @@ export function useMediaSession() {
                         null
                     );
                     navigator.mediaSession.setActionHandler("seekto", null);
-                } catch (error) {
+                } catch (_error) {
                     // Ignore cleanup errors
                 }
             }

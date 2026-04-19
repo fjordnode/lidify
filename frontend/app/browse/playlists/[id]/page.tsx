@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import Image from "next/image";
 import {
     ArrowLeft,
     Play,
@@ -147,7 +148,7 @@ export default function BrowsePlaylistDetailPage() {
 
         // If clicking currently playing track, toggle play/pause
         if (currentTrack?.id === trackId) {
-            isPlaying ? pause() : resume();
+            if (isPlaying) { pause(); } else { resume(); }
             return;
         }
 
@@ -171,10 +172,10 @@ export default function BrowsePlaylistDetailPage() {
         setIsSaving(true);
         try {
             // First get preview data
-            const preview = await api.post<any>("/spotify/preview", { url: playlist.url });
+            const preview = await api.post<{ tracks: unknown[] }>("/spotify/preview", { url: playlist.url });
             
             // Then start import with skipDownload=true
-            const response = await api.post<{ jobId: string; status: string }>(
+            await api.post<{ jobId: string; status: string }>(
                 "/spotify/import",
                 {
                     spotifyPlaylistId: playlist.id,
@@ -277,12 +278,14 @@ export default function BrowsePlaylistDetailPage() {
             <div className="relative bg-gradient-to-b from-brand/20 via-[#1a1a1a] to-transparent pt-16 pb-10 px-4 md:px-8">
                 <div className="flex items-end gap-6">
                     {/* Cover Art */}
-                    <div className="w-[140px] h-[140px] md:w-[192px] md:h-[192px] bg-[#282828] rounded shadow-2xl shrink-0 overflow-hidden">
+                    <div className="relative w-[140px] h-[140px] md:w-[192px] md:h-[192px] bg-[#282828] rounded shadow-2xl shrink-0 overflow-hidden">
                         {playlist.imageUrl ? (
-                            <img
+                            <Image
                                 src={playlist.imageUrl}
                                 alt={playlist.title}
-                                className="w-full h-full object-cover"
+                                fill
+                                unoptimized
+                                className="object-cover"
                             />
                         ) : (
                             <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-brand/30 to-brand/10">
@@ -455,12 +458,14 @@ export default function BrowsePlaylistDetailPage() {
 
                                         {/* Title + Artist */}
                                         <div className="flex items-center gap-3 min-w-0">
-                                            <div className="w-10 h-10 bg-[#282828] rounded shrink-0 overflow-hidden">
+                                            <div className="relative w-10 h-10 bg-[#282828] rounded shrink-0 overflow-hidden">
                                                 {track.coverUrl ? (
-                                                    <img
+                                                    <Image
                                                         src={track.coverUrl}
                                                         alt={track.title}
-                                                        className="w-full h-full object-cover"
+                                                        fill
+                                                        unoptimized
+                                                        className="object-cover"
                                                     />
                                                 ) : (
                                                     <div className="w-full h-full flex items-center justify-center">

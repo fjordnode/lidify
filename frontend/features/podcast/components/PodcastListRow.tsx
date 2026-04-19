@@ -59,7 +59,7 @@ export function PodcastListRow({
         setAutoDownload(checked);
         try {
             await onUpdateSettings(podcast.id, { autoDownload: checked });
-        } catch (error) {
+        } catch (_error) {
             setAutoDownload(previousValue);
         }
     };
@@ -83,7 +83,7 @@ export function PodcastListRow({
                 settings.autoDownload = true;
             }
             await onUpdateSettings(podcast.id, settings);
-        } catch (error) {
+        } catch (_error) {
             setAutoRemoveAds(previousAdRemove);
             setAutoDownload(previousAutoDownload);
         }

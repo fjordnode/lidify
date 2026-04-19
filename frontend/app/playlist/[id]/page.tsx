@@ -19,10 +19,8 @@ import {
     ListPlus,
     ListMusic,
     Music,
-    Clock,
     AlertCircle,
     AlertTriangle,
-    Volume2,
     X,
     Loader2,
     Download,
@@ -73,7 +71,7 @@ export default function PlaylistDetailPage() {
     const router = useRouter();
     const queryClient = useQueryClient();
     const { toast } = useToast();
-    const { playTracks, addToQueue, currentTrack, isPlaying, pause, resume, next, currentSource } =
+    const { playTracks, addToQueue, currentTrack, isPlaying, pause, resume, next } =
         useAudio();
     const playlistId = params.id as string;
 
@@ -117,7 +115,7 @@ export default function PlaylistDetailPage() {
     }, [playlistId]);
 
     // Handle Deezer preview playback
-    const handlePlayPreview = async (pendingId: string) => {
+    const _handlePlayPreview = async (pendingId: string) => {
         // If already playing this preview, stop it
         if (playingPreviewId === pendingId && previewAudioRef.current) {
             previewAudioRef.current.pause();
@@ -230,15 +228,17 @@ export default function PlaylistDetailPage() {
         const previousData = queryClient.getQueryData(queryKey);
 
         // Optimistically remove from cache (pendingTracks + mergedItems)
-        queryClient.setQueryData(queryKey, (old: any) => {
+        queryClient.setQueryData(queryKey, (old: Record<string, unknown> | undefined) => {
             if (!old) return old;
+            const pendingTracks = old.pendingTracks as Array<{ id: string }> | undefined;
+            const mergedItems = old.mergedItems as Array<{ type: string; pending?: { id: string } }> | undefined;
             return {
                 ...old,
-                pendingTracks: old.pendingTracks?.filter(
-                    (pt: any) => pt.id !== pendingId
+                pendingTracks: pendingTracks?.filter(
+                    (pt) => pt.id !== pendingId
                 ),
-                mergedItems: old.mergedItems?.filter(
-                    (item: any) =>
+                mergedItems: mergedItems?.filter(
+                    (item) =>
                         item.type !== "pending" || item.pending?.id !== pendingId
                 ),
             };
@@ -802,12 +802,14 @@ export default function PlaylistDetailPage() {
 
                                                 {/* Title + Artist - RED for YouTube streaming */}
                                                 <div className="flex items-center gap-3 min-w-0">
-                                                    <div className="w-10 h-10 bg-[#282828] rounded shrink-0 overflow-hidden flex items-center justify-center">
+                                                    <div className="relative w-10 h-10 bg-[#282828] rounded shrink-0 overflow-hidden flex items-center justify-center">
                                                         {pending.albumArt ? (
-                                                            <img
+                                                            <Image
                                                                 src={pending.albumArt}
                                                                 alt={pending.title}
-                                                                className="w-full h-full object-cover"
+                                                                fill
+                                                                unoptimized
+                                                                className="object-cover"
                                                             />
                                                         ) : (
                                                             <Music className="w-5 h-5 text-gray-600" />
@@ -941,10 +943,10 @@ export default function PlaylistDetailPage() {
 
                                             {/* Title + Artist - RED for YouTube, YELLOW for local */}
                                             <div className="flex items-center gap-3 min-w-0">
-                                                <div className="w-10 h-10 bg-[#282828] rounded shrink-0 overflow-hidden">
+                                                <div className="relative w-10 h-10 bg-[#282828] rounded shrink-0 overflow-hidden">
                                                     {playlistItem.track.album
                                                         ?.coverArt ? (
-                                                        <img
+                                                        <Image
                                                             src={api.getCoverArtUrl(
                                                                 playlistItem
                                                                     .track.album
@@ -955,7 +957,9 @@ export default function PlaylistDetailPage() {
                                                                 playlistItem
                                                                     .track.title
                                                             }
-                                                            className="w-full h-full object-cover"
+                                                            fill
+                                                            unoptimized
+                                                            className="object-cover"
                                                         />
                                                     ) : (
                                                         <div className="w-full h-full flex items-center justify-center">

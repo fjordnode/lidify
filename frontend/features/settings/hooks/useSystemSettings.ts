@@ -57,8 +57,8 @@ export function useSystemSettings() {
             ]);
 
             // Sanitize null values to empty strings for controlled inputs
-            const sanitizeSettings = (settings: any): SystemSettings => {
-                const sanitized: any = {};
+            const sanitizeSettings = (settings: Record<string, unknown>): SystemSettings => {
+                const sanitized: Record<string, unknown> = {};
                 for (const key in settings) {
                     const value = settings[key];
                     // Convert null to empty string for string fields
@@ -68,7 +68,7 @@ export function useSystemSettings() {
                         sanitized[key] = value;
                     }
                 }
-                return sanitized;
+                return sanitized as unknown as SystemSettings;
             };
 
             const combinedSettings = {
@@ -86,7 +86,7 @@ export function useSystemSettings() {
         }
     };
 
-    const saveSystemSettings = async (settingsToSave: SystemSettings, showToast = false) => {
+    const saveSystemSettings = async (settingsToSave: SystemSettings, _showToast = false) => {
         try {
             setIsSaving(true);
 
@@ -186,9 +186,10 @@ export function useSystemSettings() {
             }
 
             return { success: true, version: result?.version };
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error(`Failed to test ${service}:`, error);
-            return { success: false, error: error.message || `Failed to connect` };
+            const message = error instanceof Error ? error.message : "Failed to connect";
+            return { success: false, error: message };
         }
     };
 

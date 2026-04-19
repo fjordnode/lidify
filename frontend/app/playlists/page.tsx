@@ -184,8 +184,8 @@ function PlaylistCard({
 }
 
 export default function PlaylistsPage() {
-    const router = useRouter();
-    const { isAuthenticated } = useAuth();
+    useRouter();
+    useAuth();
     const { playTracks } = useAudio();
     const queryClient = useQueryClient();
 
@@ -213,7 +213,7 @@ export default function PlaylistsPage() {
         try {
             const playlist = await api.getPlaylist(playlistId);
             if (playlist?.items && playlist.items.length > 0) {
-                const tracks = playlist.items.map((item: any) => ({
+                const tracks = playlist.items.map((item: { track: { id: string; title: string; filePath: string; artist?: { name: string; id?: string }; album?: { title: string; coverArt?: string; id?: string; artist?: { name: string; id?: string } }; duration: number } }) => ({
                     id: item.track.id,
                     title: item.track.title,
                     filePath: item.track.filePath,

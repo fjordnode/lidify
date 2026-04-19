@@ -3,10 +3,11 @@ import { PlayableCard } from '@/components/ui/PlayableCard';
 import { Disc3 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { SimilarAlbum } from '../types';
+import type { ColorPalette } from '@/hooks/useImageColor';
 
 interface SimilarAlbumsProps {
   similarAlbums: SimilarAlbum[];
-  colors: any;
+  colors: ColorPalette | null;
   onNavigate: (albumId: string) => void;
 }
 

@@ -29,7 +29,7 @@ export function TopBar() {
     const [scanStatus, setScanStatus] = useState<ScanStatus>({ active: false });
     const [lastScanTime, setLastScanTime] = useState<number>(0);
     const scanStartedLocallyRef = useRef<number>(0); // Track when user clicked scan
-    const { toast } = useToast();
+    useToast();
     const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const queryClient = useQueryClient();

@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { SettingsSection, SettingsRow } from "../ui";
+import { SettingsSection } from "../ui";
 import { api } from "@/lib/api";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { CheckCircle, Loader2, AlertCircle, User, Activity, Tag } from "lucide-react";
+import { toast } from "sonner";
 
 interface GenreTaggingStatus {
     running: boolean;
@@ -150,8 +151,48 @@ export function LibrarySection() {
         setSyncing(true);
         setEnrichmentError(null);
         try {
-            await api.post("/podcasts/sync-covers", {});
+            // 1. Scan for new files
+            const scanResult = await api.scanLibrary();
+
+            // 2. Poll scan status until complete
+            let scanDone = false;
+            let added = 0;
+            let updated = 0;
+            while (!scanDone) {
+                await new Promise((r) => setTimeout(r, 1500));
+                try {
+                    const status = await api.getScanStatus(scanResult.jobId);
+                    if (status.status === "completed") {
+                        scanDone = true;
+                        added = status.result?.tracksAdded ?? 0;
+                        updated = status.result?.tracksUpdated ?? 0;
+                    } else if (status.status === "failed") {
+                        scanDone = true;
+                    }
+                } catch {
+                    scanDone = true;
+                }
+            }
+
+            // 3. Kick off background tasks (covers + enrichment)
+            api.post("/podcasts/sync-covers", {}).catch(() => {});
             await api.startLibraryEnrichment();
+
+            // 4. Show appropriate feedback based on scan results
+            if (added > 0) {
+                toast.success(`Found ${added} new track${added !== 1 ? "s" : ""}`, {
+                    description: updated > 0
+                        ? `${updated} existing track${updated !== 1 ? "s" : ""} also updated`
+                        : "Enrichment running in background",
+                });
+            } else if (updated > 0) {
+                toast.info(`Updated ${updated} track${updated !== 1 ? "s" : ""}`, {
+                    description: "Metadata changes detected",
+                });
+            } else {
+                toast.info("Library is up to date");
+            }
+
             refreshNotifications();
             refetchProgress();
         } catch (err) {
@@ -250,9 +291,9 @@ export function LibrarySection() {
             await api.post("/admin/tag-genres", { force: forceRetag });
             // Start polling
             await fetchStatus();
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error("Failed to start genre tagging:", err);
-            setError(err?.message || "Failed to start genre tagging");
+            setError(err instanceof Error ? err.message : "Failed to start genre tagging");
         } finally {
             setIsStarting(false);
         }

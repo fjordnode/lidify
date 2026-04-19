@@ -112,7 +112,7 @@ export function useArtistQuery(id: string | undefined) {
             if (isDatabaseId) {
                 try {
                     return await api.getArtist(id);
-                } catch (error) {
+                } catch (_error) {
                     // Library lookup failed, try discovery (might be an MBID)
                     return await api.getArtistDiscovery(id);
                 }
@@ -189,7 +189,7 @@ export function useAlbumQuery(id: string | undefined) {
             // Try library first
             try {
                 return await api.getAlbum(id);
-            } catch (error) {
+            } catch (_error) {
                 // Fallback to discovery
                 return await api.getAlbumDiscovery(id);
             }
@@ -328,9 +328,6 @@ const DISCOVER_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 type DiscoveryMode = "safe" | "adjacent" | "adventurous" | "mix";
 type DiscoveryTimeframe = "7d" | "28d" | "90d" | "all";
 
-const getDiscoverCacheKey = (mode: DiscoveryMode, timeframe: DiscoveryTimeframe) =>
-    `lidify_discover_${mode}_${timeframe}`;
-
 interface DiscoverCacheData {
     recommendations: Array<{
         artistName: string;
@@ -352,31 +349,6 @@ interface DiscoverCacheData {
     mode: DiscoveryMode;
     timeframe: DiscoveryTimeframe;
     generatedAt: string;
-}
-
-function getDiscoverCache(mode: DiscoveryMode = "mix", timeframe: DiscoveryTimeframe = "28d"): DiscoverCacheData | null {
-    if (typeof window === "undefined") return null;
-    try {
-        const cached = localStorage.getItem(getDiscoverCacheKey(mode, timeframe));
-        if (!cached) return null;
-        const { data, timestamp } = JSON.parse(cached);
-        if (Date.now() - timestamp > DISCOVER_CACHE_TTL_MS) {
-            localStorage.removeItem(getDiscoverCacheKey(mode, timeframe));
-            return null;
-        }
-        return data;
-    } catch {
-        return null;
-    }
-}
-
-function setDiscoverCache(mode: DiscoveryMode, timeframe: DiscoveryTimeframe, data: DiscoverCacheData) {
-    if (typeof window === "undefined") return;
-    try {
-        localStorage.setItem(getDiscoverCacheKey(mode, timeframe), JSON.stringify({ data, timestamp: Date.now() }));
-    } catch {
-        // Ignore storage errors
-    }
 }
 
 /**

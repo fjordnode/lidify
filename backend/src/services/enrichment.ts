@@ -499,14 +499,15 @@ export class EnrichmentService {
             );
         }
 
-        // Update OwnedAlbum table if MBID changed
+        // Update OwnedAlbum table if MBID changed — only for LIBRARY albums
+        // DISCOVER albums (playlist-only downloads) should not create ownership records
         if (data.rgMbid) {
             const album = await prisma.album.findUnique({
                 where: { id: albumId },
-                select: { artistId: true },
+                select: { artistId: true, location: true },
             });
 
-            if (album) {
+            if (album && album.location === "LIBRARY") {
                 await prisma.ownedAlbum.upsert({
                     where: {
                         artistId_rgMbid: {

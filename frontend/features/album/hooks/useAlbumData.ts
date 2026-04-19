@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "@/hooks/useQueries";
 import { api } from "@/lib/api";
 import { useDownloadContext } from "@/lib/download-context";
-import type { Album, AlbumSource } from "../types";
+import type { AlbumSource } from "../types";
 import { useMemo, useEffect, useRef } from "react";
 
 export function useAlbumData(albumId?: string) {
@@ -26,7 +26,7 @@ export function useAlbumData(albumId?: string) {
             if (!id) throw new Error("Album ID is required");
             try {
                 return await api.getAlbum(id);
-            } catch (error) {
+            } catch (_error) {
                 return await api.getAlbumDiscovery(id);
             }
         },

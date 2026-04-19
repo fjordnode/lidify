@@ -73,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 ) {
                     router.push("/");
                 }
-            } catch (error) {
+            } catch (_error) {
                 setIsAuthenticated(false);
                 setUser(null);
 
@@ -134,8 +134,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             } else {
                 router.push("/");
             }
-        } catch (error: any) {
-            console.error("[AUTH] Login failed:", error.message);
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : "Unknown error";
+            console.error("[AUTH] Login failed:", message);
             // Re-throw the error so the login page can handle it
             throw error;
         }

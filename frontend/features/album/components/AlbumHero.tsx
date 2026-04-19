@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { MetadataEditor } from "@/components/MetadataEditor";
 import { Album, AlbumSource } from "../types";
+import type { ColorPalette } from "@/hooks/useImageColor";
 import { ReactNode, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
@@ -12,7 +13,7 @@ interface AlbumHeroProps {
     album: Album;
     source: AlbumSource;
     coverUrl: string | null;
-    colors: any;
+    colors: ColorPalette | null;
     onReload: () => void;
     children?: ReactNode;
 }

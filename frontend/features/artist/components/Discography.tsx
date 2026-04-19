@@ -4,10 +4,11 @@ import { PlayableCard } from "@/components/ui/PlayableCard";
 import { Disc3 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Album } from "../types";
+import type { ColorPalette } from "@/hooks/useImageColor";
 
 interface DiscographyProps {
     albums: Album[];
-    colors: any;
+    colors: ColorPalette | null;
     onPlayAlbum: (albumId: string, albumTitle: string) => Promise<void>;
 }
 

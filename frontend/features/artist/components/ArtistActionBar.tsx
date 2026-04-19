@@ -3,6 +3,7 @@ import { cn } from "@/utils/cn";
 import type { Artist } from "../types";
 import type { Album } from "../types";
 import type { ArtistSource } from "../types";
+import type { ColorPalette } from "@/hooks/useImageColor";
 import { AISimilarArtists } from "./AISimilarArtists";
 
 // Brand color for JS contexts (matches Tailwind brand color)
@@ -12,7 +13,7 @@ interface ArtistActionBarProps {
     artist: Artist;
     albums: Album[];
     source: ArtistSource;
-    colors: any;
+    colors: ColorPalette | null;
     onPlayAll: () => void;
     onShuffle: () => void;
     onDownloadAll: () => void;
@@ -27,7 +28,6 @@ export function ArtistActionBar({
     artist,
     albums,
     source,
-    colors,
     onPlayAll,
     onShuffle,
     onDownloadAll,

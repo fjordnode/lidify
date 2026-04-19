@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -61,6 +62,7 @@ export default function SeriesDetailPage() {
 
     useEffect(() => {
         loadSeries();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadSeries depends on seriesName/isAuthenticated which are listed
     }, [seriesName, isAuthenticated]);
 
     const loadSeries = async () => {
@@ -70,7 +72,7 @@ export default function SeriesDetailPage() {
         try {
             const data = await api.getAudiobookSeries(seriesName);
             setBooks(Array.isArray(data) ? data : []);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Failed to load series:", error);
             toast.error("Failed to load series");
         } finally {
@@ -120,13 +122,15 @@ export default function SeriesDetailPage() {
                 <div className="max-w-7xl mx-auto px-8 py-12">
                     <div className="flex flex-col md:flex-row gap-8 items-start">
                         {/* Series Cover */}
-                        <div className="w-64 h-64 flex-shrink-0 rounded-lg overflow-hidden shadow-2xl bg-[#181818]">
+                        <div className="relative w-64 h-64 flex-shrink-0 rounded-lg overflow-hidden shadow-2xl bg-[#181818]">
                             {firstBook.coverUrl &&
                             getCoverUrl(firstBook.coverUrl, 500) ? (
-                                <img
+                                <Image
                                     src={getCoverUrl(firstBook.coverUrl, 500)!}
                                     alt={seriesName}
-                                    className="w-full h-full object-cover"
+                                    fill
+                                    unoptimized
+                                    className="object-cover"
                                 />
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center">
@@ -218,10 +222,10 @@ export default function SeriesDetailPage() {
 
                                     {/* Book Cover (small) */}
                                     <Link href={`/audiobooks/${book.id}`}>
-                                        <div className="w-12 h-12 rounded overflow-hidden bg-[#181818] flex-shrink-0 cursor-pointer">
+                                        <div className="relative w-12 h-12 rounded overflow-hidden bg-[#181818] flex-shrink-0 cursor-pointer">
                                             {book.coverUrl &&
                                             getCoverUrl(book.coverUrl, 100) ? (
-                                                <img
+                                                <Image
                                                     src={
                                                         getCoverUrl(
                                                             book.coverUrl,
@@ -229,7 +233,9 @@ export default function SeriesDetailPage() {
                                                         )!
                                                     }
                                                     alt={book.title}
-                                                    className="w-full h-full object-cover"
+                                                    fill
+                                                    unoptimized
+                                                    className="object-cover"
                                                 />
                                             ) : (
                                                 <div className="w-full h-full flex items-center justify-center">
@@ -288,7 +294,7 @@ export default function SeriesDetailPage() {
                                         }
                                         onClick={() => {
                                             if (isCurrentBook) {
-                                                isPlaying ? pause() : resume();
+                                                if (isPlaying) { pause(); } else { resume(); }
                                             } else {
                                                 playAudiobook(book);
                                             }

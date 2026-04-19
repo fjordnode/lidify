@@ -43,9 +43,9 @@ export function SubsonicSection() {
             setHasPassword(true);
             setPassword("");
             setIsEditing(false);
-        } catch (err: any) {
+        } catch (err: unknown) {
             setStatus("error");
-            setMessage(err?.message || "Failed");
+            setMessage(err instanceof Error ? err.message : "Failed");
         }
         setSaving(false);
     };

@@ -16,31 +16,33 @@ const router = Router();
  * Downloads and caches all podcast/episode covers locally
  */
 router.post("/sync-covers", requireAuth, async (req, res) => {
+    const userId = req.user!.id;
+
+    // Return immediately, run sync in background
+    res.json({ success: true, message: "Cover sync started in background" });
+
     try {
         const { notificationService } = await import("../services/notificationService");
-        console.log(" Starting podcast cover sync...");
+        console.log(" Starting podcast cover sync (background)...");
 
         const podcastResult = await podcastCacheService.syncAllCovers();
         const episodeResult = await podcastCacheService.syncEpisodeCovers();
 
-        // Send notification to user
         await notificationService.notifySystem(
-            req.user!.id,
+            userId,
             "Podcast Covers Synced",
             `Synced ${podcastResult.synced || 0} podcast covers and ${episodeResult.synced || 0} episode covers`
         );
-
-        res.json({
-            success: true,
-            podcasts: podcastResult,
-            episodes: episodeResult,
-        });
     } catch (error: any) {
         console.error("Podcast cover sync failed:", error);
-        res.status(500).json({
-            error: "Sync failed",
-            message: error.message,
-        });
+        try {
+            const { notificationService } = await import("../services/notificationService");
+            await notificationService.notifySystem(
+                userId,
+                "Podcast Cover Sync Failed",
+                error.message
+            );
+        } catch {}
     }
 });
 

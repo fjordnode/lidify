@@ -2,8 +2,14 @@
 
 import { Card } from "@/components/ui/Card";
 
+interface Chapter {
+  id: string;
+  title: string;
+  start: number;
+}
+
 interface ChapterListProps {
-  chapters: any[];
+  chapters: Chapter[];
   onSeekToChapter: (startTime: number) => void;
   formatTime: (seconds: number) => string;
 }
@@ -23,7 +29,7 @@ export function ChapterList({
       <h2 className="text-2xl md:text-3xl font-bold mb-6">Chapters</h2>
       <Card className="p-6">
         <div className="space-y-2">
-          {chapters.map((chapter: any, index: number) => (
+          {chapters.map((chapter: Chapter, index: number) => (
             <button
               key={chapter.id}
               onClick={() => onSeekToChapter(chapter.start)}

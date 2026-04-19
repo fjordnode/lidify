@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Search as SearchIcon } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useIsTV } from "@/lib/tv-utils";
 
 interface TVSearchInputProps {
@@ -12,7 +11,6 @@ interface TVSearchInputProps {
 
 export function TVSearchInput({ initialQuery = "", onSearch }: TVSearchInputProps) {
     const isTV = useIsTV();
-    const router = useRouter();
     const inputRef = useRef<HTMLInputElement>(null);
     const [query, setQuery] = useState(initialQuery);
     const [isFocused, setIsFocused] = useState(false);

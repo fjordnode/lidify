@@ -41,9 +41,10 @@ export function usePodcastActions(podcastId: string) {
                     queryClient.invalidateQueries({ queryKey: queryKeys.podcasts() });
                     router.push(`/podcasts/${response.podcast.id}`);
                 }
-            } catch (error: any) {
+            } catch (error: unknown) {
                 console.error("Subscribe error:", error);
-                alert(error.message || "Failed to subscribe to podcast");
+                const message = error instanceof Error ? error.message : "Failed to subscribe to podcast";
+                alert(message);
             } finally {
                 setIsSubscribing(false);
             }

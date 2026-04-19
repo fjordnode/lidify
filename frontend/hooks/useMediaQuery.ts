@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 
 // Helper to get initial media query match (SSR-safe)
 function getInitialMatch(query: string): boolean {
@@ -8,12 +8,11 @@ function getInitialMatch(query: string): boolean {
 
 export function useMediaQuery(query: string): boolean {
     const [matches, setMatches] = useState(() => getInitialMatch(query));
-    const prevQueryRef = useRef(query);
-    
-    // Handle query changes synchronously
-    // eslint-disable-next-line react-hooks/rules-of-hooks, react-hooks/refs -- Intentional ref tracking pattern
-    if (query !== prevQueryRef.current) {
-        prevQueryRef.current = query;
+    const [prevQuery, setPrevQuery] = useState(query);
+
+    // Handle query changes synchronously (React-approved setState during render)
+    if (query !== prevQuery) {
+        setPrevQuery(query);
         const newMatch = getInitialMatch(query);
         if (newMatch !== matches) {
             setMatches(newMatch);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Download, Loader2, Music, Disc, X, Trash2, Sparkles, Mic } from "lucide-react";
+import { Download, Loader2, Music, Disc, X, Sparkles } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/utils/cn";
 import { GradientSpinner } from "../ui/GradientSpinner";

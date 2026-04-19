@@ -8,13 +8,9 @@ import { useSettingsData } from "@/features/settings/hooks/useSettingsData";
 import { useSystemSettings } from "@/features/settings/hooks/useSystemSettings";
 import { GradientSpinner } from "@/components/ui/GradientSpinner";
 import { InlineStatus, useInlineStatus } from "@/components/ui/InlineStatus";
-import { 
-    SettingsLayout, 
-    SettingsSection, 
-    SettingsRow, 
-    SettingsToggle, 
-    SettingsSelect,
-    SidebarItem 
+import {
+    SettingsLayout,
+    SidebarItem
 } from "@/features/settings/components/ui";
 
 // Section components
@@ -51,7 +47,7 @@ const sidebarItems: SidebarItem[] = [
 
 export default function SettingsPage() {
     const { isAuthenticated, isLoading: authLoading, user } = useAuth();
-    const searchParams = useSearchParams();
+    useSearchParams();
     const [isSaving, setIsSaving] = useState(false);
     const [showRestartModal, setShowRestartModal] = useState(false);
     const [testingServices, setTestingServices] = useState<Record<string, boolean>>({});

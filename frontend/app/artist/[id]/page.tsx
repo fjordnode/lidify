@@ -55,7 +55,7 @@ export default function ArtistPage() {
   const { colors } = useImageColor(heroImage || rawImageUrl);
 
   // Play album handler
-  async function handlePlayAlbum(albumId: string, albumTitle: string) {
+  async function handlePlayAlbum(albumId: string, _albumTitle: string) {
     try {
       const albumData = await api.getAlbum(albumId);
       if (albumData.tracks && albumData.tracks.length > 0) {

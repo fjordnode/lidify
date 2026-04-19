@@ -57,8 +57,6 @@ export function DownloadNotifications() {
             // Get window and element dimensions
             const windowWidth = window.innerWidth;
             const windowHeight = window.innerHeight;
-            const elementWidth = containerRef.current?.offsetWidth || 384;
-            const elementHeight = containerRef.current?.offsetHeight || 400;
 
             // Starting position in viewport (bottom-24 = 96px from bottom, right-4 = 16px from right)
             const startRight = 16; // right-4 in Tailwind
@@ -99,12 +97,11 @@ export function DownloadNotifications() {
         downloadStatus.recentDownloads.length > 0;
 
     // Track previous shouldShow to detect rising edge (false -> true)
-    const prevShouldShowRef = useRef(shouldShow);
-    
-    // Auto-open on rising edge, auto-close when nothing to show
-    // eslint-disable-next-line react-hooks/rules-of-hooks, react-hooks/refs -- Intentional ref tracking pattern
-    if (shouldShow !== prevShouldShowRef.current) {
-        prevShouldShowRef.current = shouldShow;
+    const [prevShouldShow, setPrevShouldShow] = useState(shouldShow);
+
+    // Auto-open on rising edge, auto-close when nothing to show (React-approved setState during render)
+    if (shouldShow !== prevShouldShow) {
+        setPrevShouldShow(shouldShow);
         if (shouldShow && !isOpen) {
             setIsOpen(true);
             setDismissed(false);
@@ -444,7 +441,7 @@ function DownloadJobItem({
 // Compact version for mobile
 function DownloadJobItemCompact({
     job,
-    onDelete,
+    onDelete: _onDelete,
 }: {
     job: DownloadJob;
     onDelete?: (id: string) => void;

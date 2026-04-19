@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { getCachedImageUrl } from "@/utils/imageCache";
 
 /**
@@ -7,12 +7,11 @@ import { getCachedImageUrl } from "@/utils/imageCache";
  */
 export function useCachedImage(url: string | null): string | null {
     const [cachedUrl, setCachedUrl] = useState<string | null>(url);
-    const prevUrlRef = useRef(url);
-    
-    // Reset cached URL when source URL changes (sync, before effect)
-    // eslint-disable-next-line react-hooks/rules-of-hooks, react-hooks/refs -- Intentional ref tracking pattern
-    if (url !== prevUrlRef.current) {
-        prevUrlRef.current = url;
+    const [prevUrl, setPrevUrl] = useState(url);
+
+    // Reset cached URL when source URL changes (React-approved setState during render)
+    if (url !== prevUrl) {
+        setPrevUrl(url);
         if (url === null && cachedUrl !== null) {
             setCachedUrl(null);
         }

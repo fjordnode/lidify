@@ -12,8 +12,6 @@ import {
     Volume2,
     Wifi,
     WifiOff,
-    Play,
-    Pause,
     Pencil,
     X,
     Cast,
@@ -45,13 +43,8 @@ export function DeviceSelector({ className, compact = false }: DeviceSelectorPro
         devices,
         currentDeviceId,
         currentDeviceName,
-        activePlayerId,
-        isActivePlayer,
         controlMode,
         controlTargetId,
-        sendCommand,
-        transferPlayback,
-        becomeActivePlayer,
         goLocalMode,
         controlDevice,
         refreshDevices,
@@ -125,8 +118,6 @@ export function DeviceSelector({ className, compact = false }: DeviceSelectorPro
 
     // Find current device and other devices
     const otherDevices = devices.filter(d => d.deviceId !== currentDeviceId);
-    const playingDevice = devices.find(d => d.isPlaying && d.deviceId !== currentDeviceId);
-    
     // Is this device currently being controlled (in remote mode)?
     const isControllingRemote = controlMode === "remote" && controlTargetId !== null;
     // Which device are we controlling?
@@ -152,12 +143,6 @@ export function DeviceSelector({ className, compact = false }: DeviceSelectorPro
         // This doesn't transfer playback, just sets up remote control mode
         controlDevice(device.deviceId);
         setIsOpen(false);
-    };
-
-    // Handle play/pause on remote device
-    const handleRemotePlayPause = (device: RemoteDevice, e: React.MouseEvent) => {
-        e.stopPropagation();
-        sendCommand(device.deviceId, device.isPlaying ? "pause" : "play");
     };
 
     return (

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Play, Pause, Check, ArrowUpDown, MoreVertical, Sparkles, Download, Loader2, Cloud, Trash2 } from "lucide-react";
+import { Play, Pause, Check, ArrowUpDown, MoreVertical, Sparkles, Download, Loader2, Trash2 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { queryKeys } from "@/hooks/useQueries";
 import { Podcast, Episode } from "../types";
@@ -69,14 +69,15 @@ export function EpisodeList({
                 // Stop polling after 10 minutes
                 setTimeout(() => clearInterval(pollInterval), 600000);
             }
-        } catch (error: any) {
-            if (error.message?.includes("not available")) {
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : "";
+            if (message.includes("not available")) {
                 toast.error("Ad removal not available", {
                     description: "Whishper service not running or not configured",
                 });
             } else {
                 toast.error("Failed to start ad removal", {
-                    description: error.message,
+                    description: message || undefined,
                 });
             }
         } finally {
@@ -109,9 +110,10 @@ export function EpisodeList({
                 // Poll for completion and update UI
                 setTimeout(invalidatePodcast, 2000);
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : undefined;
             toast.error("Failed to download", {
-                description: error.message,
+                description: message,
             });
         }
     };
@@ -123,9 +125,10 @@ export function EpisodeList({
             await api.deleteDownloadedEpisode(episode.id);
             toast.success("Download deleted");
             invalidatePodcast();
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : undefined;
             toast.error("Failed to delete download", {
-                description: error.message,
+                description: message,
             });
         }
     };

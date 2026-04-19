@@ -127,7 +127,7 @@ export function AudioPlaybackProvider({ children }: { children: ReactNode }) {
         } catch (error) {
             console.error("[AudioPlayback] Failed to restore state:", error);
         }
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional hydration from localStorage
+         
         setIsHydrated(true);
     }, []);
 

@@ -117,6 +117,29 @@ STALE_PROCESSING_MINUTES = int(
 ANALYSIS_QUEUE = "audio:analysis:queue"
 ANALYSIS_PROCESSING = "audio:analysis:processing"
 
+EFFNET_MODEL_FILES = {
+    "bs64": "discogs-effnet-bs64-1.pb",
+    "bs1": "discogs-effnet-bs1-1.pb",
+}
+KNOWN_INCOMPATIBLE_EFFNET_MODEL_VARIANTS = {
+    "bs1": "current essentia-tensorflow TensorflowPredictEffnetDiscogs runtime fails with a reshape error",
+}
+EFFNET_MODEL_VARIANT = os.getenv("EFFNET_MODEL_VARIANT", "bs64").strip().lower()
+if EFFNET_MODEL_VARIANT not in EFFNET_MODEL_FILES:
+    logger.warning(
+        f"Unsupported EFFNET_MODEL_VARIANT={EFFNET_MODEL_VARIANT!r}; falling back to 'bs64'"
+    )
+    EFFNET_MODEL_VARIANT = "bs64"
+elif EFFNET_MODEL_VARIANT in KNOWN_INCOMPATIBLE_EFFNET_MODEL_VARIANTS:
+    logger.warning(
+        "EFFNET_MODEL_VARIANT=%r is not usable with this runtime (%s); falling back to 'bs64'"
+        % (
+            EFFNET_MODEL_VARIANT,
+            KNOWN_INCOMPATIBLE_EFFNET_MODEL_VARIANTS[EFFNET_MODEL_VARIANT],
+        )
+    )
+    EFFNET_MODEL_VARIANT = "bs64"
+
 # Model paths (pre-packaged in Docker image)
 MODEL_DIR = "/app/models"
 
@@ -124,7 +147,7 @@ MODEL_DIR = "/app/models"
 # These are more accurate than the older MusiCNN models
 MODELS = {
     # Base Discogs EfficientNet embedding model
-    "effnet": os.path.join(MODEL_DIR, "discogs-effnet-bs64-1.pb"),
+    "effnet": os.path.join(MODEL_DIR, EFFNET_MODEL_FILES[EFFNET_MODEL_VARIANT]),
     # Mood classification heads (Discogs EfficientNet architecture)
     "mood_happy": os.path.join(MODEL_DIR, "mood_happy-discogs-effnet-1.pb"),
     "mood_sad": os.path.join(MODEL_DIR, "mood_sad-discogs-effnet-1.pb"),
@@ -233,17 +256,21 @@ class AudioAnalyzer:
         try:
             from essentia.standard import TensorflowPredict2D
 
-            logger.info("Loading Discogs EfficientNet models...")
+            logger.info(
+                f"Loading Discogs EfficientNet models (variant={EFFNET_MODEL_VARIANT})..."
+            )
 
             # First, load the base EfficientNet embedding model
-            if os.path.exists(MODELS["effnet"]):
+            if self._is_usable_model_file(MODELS["effnet"]):
                 self.effnet_model = TensorflowPredictEffnetDiscogs(
                     graphFilename=MODELS["effnet"],
                     output="PartitionedCall:1",  # Embedding layer output
                 )
                 logger.info("Loaded base Discogs EfficientNet model for embeddings")
             else:
-                logger.error(f"Base EfficientNet model not found: {MODELS['effnet']}")
+                logger.error(
+                    f"Base EfficientNet model missing or empty: {MODELS['effnet']}"
+                )
                 return
 
             # Load classification head models
@@ -260,7 +287,7 @@ class AudioAnalyzer:
             }
 
             for model_name, model_path in heads_to_load.items():
-                if os.path.exists(model_path):
+                if self._is_usable_model_file(model_path):
                     try:
                         self.prediction_models[model_name] = TensorflowPredict2D(
                             graphFilename=model_path, output="model/Softmax"
@@ -269,7 +296,9 @@ class AudioAnalyzer:
                     except Exception as e:
                         logger.warning(f"Failed to load {model_name}: {e}")
                 else:
-                    logger.warning(f"Model not found: {model_path}")
+                    logger.warning(f"Model missing or empty: {model_path}")
+
+            self._log_model_inventory(heads_to_load)
 
             # Enable enhanced mode if we have the key mood models
             required = ["mood_happy", "mood_sad", "mood_relaxed", "mood_aggressive"]
@@ -291,6 +320,31 @@ class AudioAnalyzer:
             logger.error(f"Failed to load ML models: {e}")
             traceback.print_exc()
             self.enhanced_mode = False
+
+    def _is_usable_model_file(self, model_path: str) -> bool:
+        """Treat empty model files as missing so Enhanced mode degrades cleanly."""
+        try:
+            return os.path.isfile(model_path) and os.path.getsize(model_path) > 0
+        except OSError:
+            return False
+
+    def _log_model_inventory(self, heads_to_load: Dict[str, str]):
+        """Log model filenames and sizes so startup confirms the packaged assets."""
+        all_models = {"effnet": MODELS["effnet"], **heads_to_load}
+        for model_name, model_path in all_models.items():
+            if self._is_usable_model_file(model_path):
+                size_bytes = os.path.getsize(model_path)
+                logger.info(
+                    f"Model file ready: {model_name} ({os.path.basename(model_path)}, {self._format_model_size(size_bytes)})"
+                )
+            else:
+                logger.warning(f"Model file unavailable: {model_name} ({model_path})")
+
+    def _format_model_size(self, size_bytes: int) -> str:
+        """Format model file sizes for startup logs."""
+        if size_bytes >= 1024 * 1024:
+            return f"{size_bytes / (1024 * 1024):.1f} MB"
+        return f"{size_bytes / 1024:.1f} KB"
 
     def load_audio(self, file_path: str, sample_rate: int = 16000) -> Optional[Any]:
         """Load audio file as mono signal"""

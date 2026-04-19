@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { Play, Pause, Book } from "lucide-react";
 
 interface PlayControlsProps {
-  audiobook: any;
+  audiobook: { title: string; duration: number; progress?: { currentTime: number; progress: number; isFinished?: boolean } | null };
   isThisBookPlaying: boolean;
   isPlaying: boolean;
   currentTime: number;

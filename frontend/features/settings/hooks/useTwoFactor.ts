@@ -92,7 +92,7 @@ export function useTwoFactor() {
             setTwoFactorEnabled(false);
             setDisableTwoFactorPassword("");
             setDisableTwoFactorToken("");
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Failed to disable 2FA:", error);
             throw error; // Let caller handle display
         } finally {

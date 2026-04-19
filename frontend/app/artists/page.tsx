@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { Music } from "lucide-react";
@@ -9,7 +10,7 @@ import { GradientSpinner } from "@/components/ui/GradientSpinner";
 
 export default function ArtistsPage() {
     const { isAuthenticated } = useAuth();
-    const [artists, setArtists] = useState<any[]>([]);
+    const [artists, setArtists] = useState<{ id: string; name: string; coverArt?: string; albumCount?: number }[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
@@ -68,15 +69,17 @@ export default function ArtistsPage() {
                     {artists.map((artist) => (
                         <Link key={artist.id} href={`/artist/${artist.id}`}>
                             <div className="bg-gradient-to-br from-[#121212] to-[#121212] hover:from-[#181818] hover:to-[#1a1a1a] transition-all duration-300 p-4 rounded-lg group cursor-pointer border border-white/5 hover:border-white/10 hover:scale-105 hover:shadow-2xl">
-                                <div className="aspect-square bg-[#181818] rounded-full mb-4 flex items-center justify-center overflow-hidden shadow-lg">
+                                <div className="relative aspect-square bg-[#181818] rounded-full mb-4 flex items-center justify-center overflow-hidden shadow-lg">
                                     {artist.coverArt ? (
-                                        <img
+                                        <Image
                                             src={api.getCoverArtUrl(
                                                 artist.coverArt,
                                                 300
                                             )}
                                             alt={artist.name}
-                                            className="w-full h-full object-cover group-hover:scale-110 transition-all"
+                                            fill
+                                            unoptimized
+                                            className="object-cover group-hover:scale-110 transition-all"
                                         />
                                     ) : (
                                         <Music className="w-12 h-12 text-gray-600" />

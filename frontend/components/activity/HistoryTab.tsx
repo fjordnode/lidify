@@ -81,17 +81,6 @@ export function HistoryTab() {
         }
     };
 
-    const formatTime = (dateStr: string) => {
-        const date = new Date(dateStr);
-        const now = new Date();
-        const diff = now.getTime() - date.getTime();
-        
-        if (diff < 60000) return "Just now";
-        if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-        if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-        return date.toLocaleDateString();
-    };
-
     const completed = history.filter((h) => h.status === "completed");
     const failed = history.filter((h) => h.status === "failed" || h.status === "exhausted");
 

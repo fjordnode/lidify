@@ -342,7 +342,7 @@ export function useRemotePlaybackIntegration() {
     // Note: Autoplay error toast is handled by HowlerAudioElement directly
     // This hook just clears the pending remote play ref on autoplay errors
     useEffect(() => {
-        const handlePlayerError = (data: { error: any }) => {
+        const handlePlayerError = (data: { error: unknown }) => {
             const errorMsg = String(data?.error || "");
             const isAutoplayError = errorMsg.includes("user interaction") ||
                 errorMsg.includes("play()") ||

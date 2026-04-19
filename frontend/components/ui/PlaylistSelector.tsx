@@ -20,7 +20,7 @@ export function PlaylistSelector({
     isLoading: isSaving,
     loadingMessage,
 }: PlaylistSelectorProps) {
-    const [playlists, setPlaylists] = useState<any[]>([]);
+    const [playlists, setPlaylists] = useState<{ id: string; name: string; trackCount?: number }[]>([]);
     const [newPlaylistName, setNewPlaylistName] = useState("");
     const [isPublic, setIsPublic] = useState(false);
     const [isCreating, setIsCreating] = useState(false);

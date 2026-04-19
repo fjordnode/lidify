@@ -70,6 +70,7 @@ export function LidarrSection({ settings, onUpdate, onTest, isTesting }: LidarrS
         if (settings.lidarrEnabled && settings.lidarrUrl && settings.lidarrApiKey) {
             fetchProfiles();
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchProfiles depends on the listed settings values
     }, [settings.lidarrEnabled, settings.lidarrUrl, settings.lidarrApiKey]);
 
     const handleTest = async () => {

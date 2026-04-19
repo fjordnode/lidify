@@ -13,7 +13,6 @@ import {
     useRef,
     memo,
     useCallback,
-    useMemo,
 } from "react";
 import { toast } from "sonner";
 
@@ -71,14 +70,13 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
         canSeek,
         setCanSeek,
         setDownloadProgress,
-        lockSeek,
     } = useAudioPlayback();
 
     // Controls context
     const { pause, next } = useAudioControls();
 
     // Remote playback - check if this device should actually play audio
-    const { isActivePlayer, becomeActivePlayer, controlMode, getControlMode } = useRemotePlayback();
+    const { isActivePlayer, becomeActivePlayer, controlMode } = useRemotePlayback();
 
     // Ref to track isActivePlayer for use in callbacks
     const isActivePlayerRef = useRef(isActivePlayer);
@@ -87,6 +85,14 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
     // Ref for controlMode
     const controlModeRef = useRef(controlMode);
     controlModeRef.current = controlMode;
+
+    // Ref for becomeActivePlayer to avoid stale-closure capture in long-lived
+    // event handlers (the autoplay-blocked toast onClick is created inside the
+    // events useEffect and persists until the user taps it; if currentDeviceId
+    // arrives via WebSocket between toast creation and tap, a directly-captured
+    // becomeActivePlayer would still see the pre-WebSocket state and bail out).
+    const becomeActivePlayerRef = useRef(becomeActivePlayer);
+    becomeActivePlayerRef.current = becomeActivePlayer;
 
     // Refs
     const lastTrackIdRef = useRef<string | null>(null);
@@ -132,6 +138,17 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
             loadWatchdogTimeoutRef.current = null;
         }, 15000);
     }, [clearLoadWatchdogTimeout]);
+
+    const clearTrackedLoadListeners = useCallback(() => {
+        if (loadListenerRef.current) {
+            howlerEngine.off("load", loadListenerRef.current);
+            loadListenerRef.current = null;
+        }
+        if (loadErrorListenerRef.current) {
+            howlerEngine.off("loaderror", loadErrorListenerRef.current);
+            loadErrorListenerRef.current = null;
+        }
+    }, []);
 
     // Reset duration when nothing is playing
     useEffect(() => {
@@ -182,7 +199,7 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
         };
 
         // Handle LOAD errors (network issues, 404, corrupt audio) - advance to next track
-        const handleLoadError = (data: { error: any }) => {
+        const handleLoadError = (data: { error: unknown }) => {
             console.error("[HowlerAudioElement] Load error:", data.error);
             setIsPlaying(false);
             isUserInitiatedRef.current = false;
@@ -214,7 +231,7 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
         };
 
         // Handle PLAY errors (autoplay blocked, codec issues) - DON'T auto-advance
-        const handlePlayError = (data: { error: any }) => {
+        const handlePlayError = (data: { error: unknown }) => {
             const errorMsg = String(data?.error || "");
             const isAutoplayError = errorMsg.includes("user interaction") ||
                 errorMsg.includes("play()") ||
@@ -250,8 +267,11 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
                             label: "▶ Play",
                             onClick: () => {
                                 console.log("[HowlerAudioElement] User tapped play - unlocking audio");
-                                // Make this device the active player first (for remote playback)
-                                becomeActivePlayer();
+                                // Make this device the active player first (for remote playback).
+                                // Use the ref to read the latest becomeActivePlayer; the function
+                                // identity changes when currentDeviceId is set after WebSocket
+                                // connect, and a directly-captured reference would bail out.
+                                becomeActivePlayerRef.current();
                                 // Then start playback
                                 setIsPlaying(true);
                                 howlerEngine.play();
@@ -326,6 +346,7 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
             howlerEngine.off("play", handlePlay);
             howlerEngine.off("pause", handlePause);
         };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- becomeActivePlayer is read via becomeActivePlayerRef.current to avoid stale-closure capture; saveAudiobookProgress/savePodcastProgress are effectively-stable because their meaningful dep (currentAudiobook/currentPodcast) is already in this array, so the parent effect re-runs and recaptures them whenever they could matter.
     }, [playbackType, currentTrack, currentAudiobook, currentPodcast, repeatMode, next, pause, setCurrentTimeFromEngine, setDuration, setIsPlaying, queue, setCurrentTrack, setCurrentAudiobook, setCurrentPodcast, setPlaybackType]);
 
     // Save audiobook progress
@@ -411,6 +432,8 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
             // If we're in remote control mode OR this device is not the active player,
             // NEVER load audio on this device.
             if (controlModeRef.current === "remote" || !isActivePlayerRef.current) {
+                loadIdRef.current += 1;
+                clearTrackedLoadListeners();
                 howlerEngine.stop();
                 lastTrackIdRef.current = null;
                 isLoadingRef.current = false;
@@ -425,6 +448,8 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
                 null;
 
             if (!currentMediaId) {
+                loadIdRef.current += 1;
+                clearTrackedLoadListeners();
                 howlerEngine.stop();
                 lastTrackIdRef.current = null;
                 isLoadingRef.current = false;
@@ -452,195 +477,201 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
                 return;
             }
 
-            if (isLoadingRef.current) return;
-
-            isLoadingRef.current = true;
-            lastTrackIdRef.current = currentMediaId;
             loadIdRef.current += 1;
             const thisLoadId = loadIdRef.current;
+            isLoadingRef.current = true;
+            lastTrackIdRef.current = currentMediaId;
             startLoadWatchdogTimeout(thisLoadId);
 
-        let streamUrl: string | null = null;
-        let startTime = 0;
-        let audioFormat = "mp3"; // Default format
-        let source: "local" | "youtube" | null = null;
+            // New media requests supersede any in-flight load. Remove listeners tied to
+            // the previous request so stale load events cannot flip state back afterwards.
+            clearTrackedLoadListeners();
 
-        if (playbackType === "track" && currentTrack) {
-            // DEBUG: Log track details to diagnose local vs YouTube decision
-            console.log(`[HowlerAudioElement] Loading track: "${currentTrack.title}" by ${currentTrack.artist?.name}`);
-            console.log(`[HowlerAudioElement] Track filePath: "${currentTrack.filePath}" (truthy: ${!!currentTrack.filePath})`);
-            console.log(`[HowlerAudioElement] Track keys: ${Object.keys(currentTrack).join(', ')}`);
-            console.log(`[HowlerAudioElement] controlMode: ${controlModeRef.current}, isActivePlayer: ${isActivePlayerRef.current}`);
-            console.log(`[HowlerAudioElement] STACK TRACE:`, new Error().stack);
-            
-            // Check if track has a local file
-            if (currentTrack.filePath) {
-                // Local file available - use native streaming
-                console.log(`[HowlerAudioElement] Using LOCAL stream for track`);
-                streamUrl = api.getStreamUrl(currentTrack.id);
-                source = "local";
-                
-                // Determine format from file extension
-                const ext = currentTrack.filePath.split(".").pop()?.toLowerCase();
-                if (ext === "flac") audioFormat = "flac";
-                else if (ext === "m4a" || ext === "aac") audioFormat = "mp4";
-                else if (ext === "ogg" || ext === "opus") audioFormat = "webm";
-                else if (ext === "wav") audioFormat = "wav";
-            } else {
-                // No local file - try YouTube Music fallback
-                console.log(`[HowlerAudioElement] No filePath - falling back to YOUTUBE`);
-                try {
-                    const artistName = currentTrack.artist?.name || "Unknown Artist";
-                    const result = await api.findYouTubeMatch(
-                        artistName,
-                        currentTrack.title,
-                        currentTrack.duration
-                    );
-                    
-                    if (result.match) {
-                        streamUrl = api.getYouTubeStreamUrl(result.match.videoId);
-                        source = "youtube";
-                        audioFormat = "webm"; // YouTube streams are webm/opus
-                        console.log(`[HowlerAudioElement] Using YouTube stream for "${artistName} - ${currentTrack.title}" (videoId: ${result.match.videoId})`);
-                    } else {
-                        console.warn(`[HowlerAudioElement] No YouTube match found for "${artistName} - ${currentTrack.title}"`);
-                        // Track has no local file and no YouTube match - skip to next
-                        toast.error(`Track unavailable: ${currentTrack.title}`);
+            let streamUrl: string | null = null;
+            let startTime = 0;
+            let audioFormat = "mp3"; // Default format
+            let source: "local" | "youtube" | null = null;
+
+            if (playbackType === "track" && currentTrack) {
+                // DEBUG: Log track details to diagnose local vs YouTube decision
+                console.log(`[HowlerAudioElement] Loading track: "${currentTrack.title}" by ${currentTrack.artist?.name}`);
+                console.log(`[HowlerAudioElement] Track filePath: "${currentTrack.filePath}" (truthy: ${!!currentTrack.filePath})`);
+                console.log(`[HowlerAudioElement] Track keys: ${Object.keys(currentTrack).join(', ')}`);
+                console.log(`[HowlerAudioElement] controlMode: ${controlModeRef.current}, isActivePlayer: ${isActivePlayerRef.current}`);
+                console.log(`[HowlerAudioElement] STACK TRACE:`, new Error().stack);
+
+                // Check if track has a local file
+                if (currentTrack.filePath) {
+                    // Local file available - use native streaming
+                    console.log(`[HowlerAudioElement] Using LOCAL stream for track`);
+                    streamUrl = api.getStreamUrl(currentTrack.id);
+                    source = "local";
+
+                    // Determine format from file extension
+                    const ext = currentTrack.filePath.split(".").pop()?.toLowerCase();
+                    if (ext === "flac") audioFormat = "flac";
+                    else if (ext === "m4a" || ext === "aac") audioFormat = "mp4";
+                    else if (ext === "ogg" || ext === "opus") audioFormat = "webm";
+                    else if (ext === "wav") audioFormat = "wav";
+                } else {
+                    // No local file - try YouTube Music fallback
+                    console.log(`[HowlerAudioElement] No filePath - falling back to YOUTUBE`);
+                    try {
+                        const artistName = currentTrack.artist?.name || "Unknown Artist";
+                        const result = await api.findYouTubeMatch(
+                            artistName,
+                            currentTrack.title,
+                            currentTrack.duration
+                        );
+
+                        if (loadIdRef.current !== thisLoadId) {
+                            return;
+                        }
+
+                        if (result.match) {
+                            streamUrl = api.getYouTubeStreamUrl(result.match.videoId);
+                            source = "youtube";
+                            audioFormat = "webm"; // YouTube streams are webm/opus
+                            console.log(`[HowlerAudioElement] Using YouTube stream for "${artistName} - ${currentTrack.title}" (videoId: ${result.match.videoId})`);
+                        } else {
+                            console.warn(`[HowlerAudioElement] No YouTube match found for "${artistName} - ${currentTrack.title}"`);
+                            // Track has no local file and no YouTube match - skip to next
+                            toast.error(`Track unavailable: ${currentTrack.title}`);
+                            isLoadingRef.current = false;
+                            clearLoadWatchdogTimeout();
+                            next();
+                            return;
+                        }
+                    } catch (error) {
+                        if (loadIdRef.current !== thisLoadId) {
+                            return;
+                        }
+                        console.error("[HowlerAudioElement] YouTube match error:", error);
+                        toast.error(`Failed to stream: ${currentTrack.title}`);
                         isLoadingRef.current = false;
                         clearLoadWatchdogTimeout();
                         next();
                         return;
                     }
-                } catch (error) {
-                    console.error("[HowlerAudioElement] YouTube match error:", error);
-                    toast.error(`Failed to stream: ${currentTrack.title}`);
-                    isLoadingRef.current = false;
-                    clearLoadWatchdogTimeout();
-                    next();
-                    return;
                 }
-            }
-            
-            // Update source indicator
-            setCurrentSource(source);
-        } else if (playbackType === "audiobook" && currentAudiobook) {
-            streamUrl = api.getAudiobookStreamUrl(currentAudiobook.id);
-            startTime = currentAudiobook.progress?.currentTime || 0;
-            setCurrentSource(null); // Audiobooks are always local
-        } else if (playbackType === "podcast" && currentPodcast) {
-            const [podcastId, episodeId] = currentPodcast.id.split(":");
-            streamUrl = api.getPodcastEpisodeStreamUrl(podcastId, episodeId);
-            startTime = currentPodcast.progress?.currentTime || 0;
-            setCurrentSource(null); // Podcasts have their own streaming logic
-            podcastDebugLog("load podcast", {
-                currentPodcastId: currentPodcast.id,
-                podcastId,
-                episodeId,
-                title: currentPodcast.title,
-                podcastTitle: currentPodcast.podcastTitle,
-                startTime,
-                loadId: thisLoadId,
-            });
-        }
 
-        if (streamUrl) {
-            const wasHowlerPlayingBeforeLoad = howlerEngine.isPlaying();
-
-            const fallbackDuration =
-                currentTrack?.duration ||
-                currentAudiobook?.duration ||
-                currentPodcast?.duration ||
-                0;
-            setDuration(fallbackDuration);
-
-            // Use audioFormat determined above (handles both local files and YouTube)
-            howlerEngine.load(streamUrl, false, audioFormat);
-            if (playbackType === "podcast" && currentPodcast) {
-                podcastDebugLog("howlerEngine.load()", {
-                    url: streamUrl,
-                    format: audioFormat,
+                // Update source indicator
+                setCurrentSource(source);
+            } else if (playbackType === "audiobook" && currentAudiobook) {
+                streamUrl = api.getAudiobookStreamUrl(currentAudiobook.id);
+                startTime = currentAudiobook.progress?.currentTime || 0;
+                setCurrentSource(null); // Audiobooks are always local
+            } else if (playbackType === "podcast" && currentPodcast) {
+                const [podcastId, episodeId] = currentPodcast.id.split(":");
+                streamUrl = api.getPodcastEpisodeStreamUrl(podcastId, episodeId);
+                startTime = currentPodcast.progress?.currentTime || 0;
+                setCurrentSource(null); // Podcasts have their own streaming logic
+                podcastDebugLog("load podcast", {
+                    currentPodcastId: currentPodcast.id,
+                    podcastId,
+                    episodeId,
+                    title: currentPodcast.title,
+                    podcastTitle: currentPodcast.podcastTitle,
+                    startTime,
                     loadId: thisLoadId,
                 });
             }
 
-            // Clean up any previous load listeners before adding new ones
-            if (loadListenerRef.current) {
-                howlerEngine.off("load", loadListenerRef.current);
-                loadListenerRef.current = null;
-            }
-            if (loadErrorListenerRef.current) {
-                howlerEngine.off("loaderror", loadErrorListenerRef.current);
-                loadErrorListenerRef.current = null;
+            if (loadIdRef.current !== thisLoadId) {
+                return;
             }
 
-            const handleLoaded = () => {
-                if (loadIdRef.current !== thisLoadId) return;
+            if (streamUrl) {
+                const wasHowlerPlayingBeforeLoad = howlerEngine.isPlaying();
 
-                isLoadingRef.current = false;
-                clearLoadWatchdogTimeout();
+                const fallbackDuration =
+                    currentTrack?.duration ||
+                    currentAudiobook?.duration ||
+                    currentPodcast?.duration ||
+                    0;
+                setDuration(fallbackDuration);
 
-                if (startTime > 0) {
-                    howlerEngine.seek(startTime);
-                }
+                // Use audioFormat determined above (handles both local files and YouTube)
+                howlerEngine.load(streamUrl, false, audioFormat);
                 if (playbackType === "podcast" && currentPodcast) {
-                    podcastDebugLog("loaded", {
+                    podcastDebugLog("howlerEngine.load()", {
+                        url: streamUrl,
+                        format: audioFormat,
                         loadId: thisLoadId,
-                        durationHowler: howlerEngine.getDuration(),
-                        howlerTime: howlerEngine.getCurrentTime(),
-                        actualTime: howlerEngine.getActualCurrentTime(),
-                        startTime,
-                        canSeek,
                     });
                 }
 
-                const shouldAutoPlay =
-                    lastPlayingStateRef.current || wasHowlerPlayingBeforeLoad;
+                const handleLoaded = () => {
+                    if (loadIdRef.current !== thisLoadId) return;
 
-                console.log(`[HowlerAudioElement] handleLoaded: shouldAutoPlay=${shouldAutoPlay}, lastPlayingState=${lastPlayingStateRef.current}, wasHowlerPlaying=${wasHowlerPlayingBeforeLoad}`);
+                    isLoadingRef.current = false;
+                    clearLoadWatchdogTimeout();
 
-                // Only autoplay if this device is in local mode, is active player,
-                // and play isn't already pending.
-                const canPlayLocally = controlModeRef.current === "local" && isActivePlayerRef.current;
-                if (shouldAutoPlay && canPlayLocally && !howlerEngine.isPendingPlay()) {
-                    console.log("[HowlerAudioElement] Calling howlerEngine.play() from handleLoaded");
-                    howlerEngine.play();
-                    if (!lastPlayingStateRef.current) {
-                        setIsPlaying(true);
+                    if (startTime > 0) {
+                        howlerEngine.seek(startTime);
                     }
-                } else if (shouldAutoPlay && !canPlayLocally) {
-                    console.log("[HowlerAudioElement] Blocking autoplay - not local active player");
-                }
+                    if (playbackType === "podcast" && currentPodcast) {
+                        podcastDebugLog("loaded", {
+                            loadId: thisLoadId,
+                            durationHowler: howlerEngine.getDuration(),
+                            howlerTime: howlerEngine.getCurrentTime(),
+                            actualTime: howlerEngine.getActualCurrentTime(),
+                            startTime,
+                            canSeek,
+                        });
+                    }
 
-                // Clean up both listeners
-                howlerEngine.off("load", handleLoaded);
-                howlerEngine.off("loaderror", handleLoadError);
-                loadListenerRef.current = null;
-                loadErrorListenerRef.current = null;
-            };
+                    const shouldAutoPlay =
+                        lastPlayingStateRef.current || wasHowlerPlayingBeforeLoad;
 
-            const handleLoadError = () => {
+                    console.log(`[HowlerAudioElement] handleLoaded: shouldAutoPlay=${shouldAutoPlay}, lastPlayingState=${lastPlayingStateRef.current}, wasHowlerPlaying=${wasHowlerPlayingBeforeLoad}`);
+
+                    // Only autoplay if this device is in local mode, is active player,
+                    // and play isn't already pending.
+                    const canPlayLocally = controlModeRef.current === "local" && isActivePlayerRef.current;
+                    if (shouldAutoPlay && canPlayLocally && !howlerEngine.isPendingPlay()) {
+                        console.log("[HowlerAudioElement] Calling howlerEngine.play() from handleLoaded");
+                        howlerEngine.play();
+                        if (!lastPlayingStateRef.current) {
+                            setIsPlaying(true);
+                        }
+                    } else if (shouldAutoPlay && !canPlayLocally) {
+                        console.log("[HowlerAudioElement] Blocking autoplay - not local active player");
+                    }
+
+                    // Clean up both listeners
+                    howlerEngine.off("load", handleLoaded);
+                    howlerEngine.off("loaderror", handleLoadError);
+                    loadListenerRef.current = null;
+                    loadErrorListenerRef.current = null;
+                };
+
+                const handleLoadError = () => {
+                    if (loadIdRef.current !== thisLoadId) return;
+
+                    isLoadingRef.current = false;
+                    clearLoadWatchdogTimeout();
+                    howlerEngine.off("load", handleLoaded);
+                    howlerEngine.off("loaderror", handleLoadError);
+                    loadListenerRef.current = null;
+                    loadErrorListenerRef.current = null;
+                };
+
+                // Store refs for cleanup on unmount
+                loadListenerRef.current = handleLoaded;
+                loadErrorListenerRef.current = handleLoadError;
+
+                howlerEngine.on("load", handleLoaded);
+                howlerEngine.on("loaderror", handleLoadError);
+            } else {
                 isLoadingRef.current = false;
                 clearLoadWatchdogTimeout();
-                howlerEngine.off("load", handleLoaded);
-                howlerEngine.off("loaderror", handleLoadError);
-                loadListenerRef.current = null;
-                loadErrorListenerRef.current = null;
-            };
-
-            // Store refs for cleanup on unmount
-            loadListenerRef.current = handleLoaded;
-            loadErrorListenerRef.current = handleLoadError;
-
-            howlerEngine.on("load", handleLoaded);
-            howlerEngine.on("loaderror", handleLoadError);
-        } else {
-            isLoadingRef.current = false;
-            clearLoadWatchdogTimeout();
-        }
+            }
         };
 
         loadAudio();
-    }, [currentTrack, currentAudiobook, currentPodcast, playbackType, setDuration, setCurrentSource, next, clearLoadWatchdogTimeout, startLoadWatchdogTimeout]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- canSeek/isPlaying are playback state, not load dependencies
+    }, [currentTrack, currentAudiobook, currentPodcast, playbackType, setDuration, setCurrentSource, next, clearLoadWatchdogTimeout, startLoadWatchdogTimeout, clearTrackedLoadListeners]);
 
     // Check podcast cache status and control canSeek
     useEffect(() => {

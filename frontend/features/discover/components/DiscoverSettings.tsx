@@ -35,7 +35,7 @@ export function DiscoverSettings({
         debounceRef.current = setTimeout(async () => {
             try {
                 await api.updateDiscoverConfig({ [key]: value });
-            } catch (error) {
+            } catch (_error) {
                 toast.error("Failed to save setting");
             }
         }, 500);
@@ -74,7 +74,7 @@ export function DiscoverSettings({
             }
 
             onPlaylistCleared?.();
-        } catch (error) {
+        } catch (_error) {
             toast.error("Failed to clear playlist");
         } finally {
             setIsClearing(false);

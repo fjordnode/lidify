@@ -28,7 +28,7 @@ export function CacheSection({ settings, onUpdate }: CacheSectionProps) {
         try {
             await api.clearAllCaches();
             refreshNotifications();
-        } catch (err) {
+        } catch (_err) {
             setError("Failed to clear caches");
         } finally {
             setClearingCaches(false);

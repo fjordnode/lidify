@@ -1,9 +1,10 @@
 import React from "react";
-import { Play, Pause, Volume2, Music, Radio } from "lucide-react";
+import { Play, Pause, Music } from "lucide-react";
 import { cn } from "@/utils/cn";
 import Image from "next/image";
 import { api } from "@/lib/api";
 import type { Track, Artist } from "../types";
+import type { ColorPalette } from "@/hooks/useImageColor";
 
 interface PreviewAlbumInfo {
     title: string;
@@ -14,7 +15,7 @@ interface PopularTracksProps {
     tracks: Track[];
     artist: Artist;
     currentTrackId: string | undefined;
-    colors: any;
+    colors: ColorPalette | null;
     onPlayTrack: (track: Track) => void;
     previewTrack: string | null;
     previewPlaying: boolean;
@@ -25,9 +26,7 @@ interface PopularTracksProps {
 
 export const PopularTracks: React.FC<PopularTracksProps> = ({
     tracks,
-    artist,
     currentTrackId,
-    colors,
     onPlayTrack,
     previewTrack,
     previewPlaying,

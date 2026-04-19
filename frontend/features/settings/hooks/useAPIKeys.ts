@@ -47,9 +47,10 @@ export function useAPIKeys() {
             setNewApiKeyName("");
             await loadApiKeys();
             return { success: true };
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Failed to create API key:", error);
-            return { success: false, error: error.message || "Failed to create" };
+            const message = error instanceof Error ? error.message : "Failed to create";
+            return { success: false, error: message };
         } finally {
             setCreatingApiKey(false);
         }
@@ -64,9 +65,10 @@ export function useAPIKeys() {
             await api.revokeApiKey(id);
             await loadApiKeys();
             return { success: true };
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Failed to revoke API key:", error);
-            return { success: false, error: error.message || "Failed to revoke" };
+            const message = error instanceof Error ? error.message : "Failed to revoke";
+            return { success: false, error: message };
         }
     };
 

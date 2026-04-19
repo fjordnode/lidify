@@ -34,7 +34,7 @@ function queueDebugEnabled(): boolean {
 
 function queueDebugLog(message: string, data?: Record<string, unknown>) {
     if (!queueDebugEnabled()) return;
-    // eslint-disable-next-line no-console
+     
     console.log(`[QueueDebug] ${message}`, data || {});
 }
 
@@ -192,10 +192,10 @@ export function AudioControlsProvider({ children }: { children: ReactNode }) {
                 return;
             }
 
-            api.logPlay(trackId, playAccumulatedSecondsRef.current).catch((error: any) => {
+            api.logPlay(trackId, playAccumulatedSecondsRef.current).catch((error: unknown) => {
                 // 404 means the track isn't in our DB (common for external playlist playback).
                 // Treat as a no-op so we don't retry every tick and spam logs.
-                if (error?.status === 404) {
+                if (error && typeof error === "object" && "status" in error && (error as { status: number }).status === 404) {
                     return;
                 }
                 console.error("Failed to log play:", error);
@@ -565,8 +565,6 @@ export function AudioControlsProvider({ children }: { children: ReactNode }) {
                     Math.max(0, plannedInsertAt),
                     prevQueue.length
                 );
-                // Keep existing log payload shape: it expects insertAt === currentIdx + 1.
-                const currentIdx = insertAt - 1;
                 const newQueue = [...prevQueue];
                 newQueue.splice(insertAt, 0, track);
                 upNextInsertRef.current = insertAt + 1;
@@ -613,7 +611,6 @@ export function AudioControlsProvider({ children }: { children: ReactNode }) {
                     const newIndices = [...shifted];
                     newIndices.splice(insertPos, 0, insertAt);
                     shuffleInsertPosRef.current = insertPos + 1;
-                    const newIndex = insertAt;
                     const currentIdx = playingIdx;
                     queueDebugLog("addToQueue() shuffleIndices updated", {
                         currentIdx,

@@ -84,7 +84,7 @@ export function useDownloadStatus(pollingInterval: number = 15000, isAuthenticat
                     // Check again in longer interval if no active downloads (30 seconds)
                     pollTimeout = setTimeout(pollDownloads, 30000);
                 }
-            } catch (error: any) {
+            } catch (error: unknown) {
                 console.error('Failed to poll download status:', error);
 
                 // Increment error count
@@ -94,7 +94,8 @@ export function useDownloadStatus(pollingInterval: number = 15000, isAuthenticat
                 const backoffDelay = Math.min(pollingInterval * Math.pow(2, errorCount), 120000);
 
                 // Silently continue on rate limit errors - don't spam console
-                if (error.message !== 'Too Many Requests') {
+                const errorMessage = error instanceof Error ? error.message : "";
+                if (errorMessage !== 'Too Many Requests') {
                     console.error('Download polling error:', error);
                 }
 

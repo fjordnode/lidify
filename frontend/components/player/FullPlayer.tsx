@@ -31,7 +31,7 @@ import { toast } from "sonner";
 import { KeyboardShortcutsTooltip } from "./KeyboardShortcutsTooltip";
 import { DeviceSelector } from "./DeviceSelector";
 import { EnhancedVibeOverlay } from "./VibeOverlayEnhanced";
-import { cn, isLocalUrl } from "@/utils/cn";
+import { cn } from "@/utils/cn";
 import { formatTime } from "@/utils/formatTime";
 
 type SourceFeaturesPayload = {
@@ -87,9 +87,7 @@ export function FullPlayer() {
         isMuted,
         isShuffle,
         repeatMode,
-        playerMode,
         vibeMode,
-        vibeSourceFeatures,
         queue,
         currentIndex,
         currentSource,

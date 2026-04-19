@@ -1,7 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Music } from "lucide-react";
-import { cn } from "@/utils/cn";
 import { DiscoverResult } from "../types";
 import { api } from "@/lib/api";
 

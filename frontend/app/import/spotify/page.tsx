@@ -260,7 +260,7 @@ function SpotifyImportPageContent() {
 
         setIsCancelling(true);
         try {
-            const result = await api.post<{
+            await api.post<{
                 message: string;
                 playlistId: string | null;
                 tracksMatched: number;
@@ -392,10 +392,13 @@ function SpotifyImportPageContent() {
                         {/* Playlist Info */}
                         <div className="flex items-start gap-4 p-4 bg-white/5 rounded-lg">
                             {preview.playlist.imageUrl ? (
-                                <img
+                                <Image
                                     src={preview.playlist.imageUrl}
                                     alt={preview.playlist.name}
-                                    className="w-20 h-20 rounded-md object-cover"
+                                    width={80}
+                                    height={80}
+                                    unoptimized
+                                    className="rounded-md object-cover"
                                 />
                             ) : (
                                 <div className="w-20 h-20 rounded-md bg-white/10 flex items-center justify-center">

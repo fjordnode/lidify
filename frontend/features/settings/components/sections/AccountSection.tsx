@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { LogOut } from "lucide-react";
 import { SettingsSection, SettingsRow, SettingsInput } from "../ui";
 import { useAuth } from "@/lib/auth-context";
@@ -31,7 +32,6 @@ export function AccountSection() {
         twoFactorSecret,
         recoveryCodes,
         showRecoveryCodes,
-        load2FAStatus,
         setup2FA,
         enable2FA,
         disable2FA,
@@ -77,9 +77,10 @@ export function AccountSection() {
             setNewPassword("");
             setConfirmPassword("");
             setTimeout(() => setShowPasswordForm(false), 1500);
-        } catch (error: any) {
+        } catch (error: unknown) {
             setPasswordStatus("error");
-            setPasswordMessage(error.response?.data?.message || "Failed");
+            const message = error instanceof Error ? error.message : "Failed";
+            setPasswordMessage(message);
         } finally {
             setChangingPassword(false);
         }
@@ -93,9 +94,10 @@ export function AccountSection() {
             setTfaStatus("success");
             setTfaMessage("Enabled");
             setTwoFactorToken("");
-        } catch (error: any) {
+        } catch (error: unknown) {
             setTfaStatus("error");
-            setTfaMessage(error.message || "Invalid code");
+            const message = error instanceof Error ? error.message : "Invalid code";
+            setTfaMessage(message);
         }
     };
 
@@ -109,9 +111,10 @@ export function AccountSection() {
             setDisablePassword("");
             setDisableToken("");
             setShowDisableFlow(false);
-        } catch (error: any) {
+        } catch (error: unknown) {
             setTfaStatus("error");
-            setTfaMessage(error.message || "Failed");
+            const message = error instanceof Error ? error.message : "Failed";
+            setTfaMessage(message);
         }
     };
 
@@ -228,7 +231,7 @@ export function AccountSection() {
                         {twoFactorQR && (
                             <div className="flex justify-center">
                                 <div className="bg-white p-3 rounded-lg">
-                                    <img src={twoFactorQR} alt="2FA QR Code" className="w-40 h-40" />
+                                    <Image src={twoFactorQR} alt="2FA QR Code" width={160} height={160} unoptimized />
                                 </div>
                             </div>
                         )}

@@ -3,11 +3,21 @@
 import { Book } from "lucide-react";
 import Image from "next/image";
 import { ReactNode } from "react";
+import type { ColorPalette } from "@/hooks/useImageColor";
+
+interface AudiobookData {
+  title: string;
+  author: string;
+  duration: number;
+  series?: { name: string; sequence: string | number } | null;
+  genres?: string[];
+  progress?: { progress: number; isFinished: boolean } | null;
+}
 
 interface AudiobookHeroProps {
-  audiobook: any;
+  audiobook: AudiobookData;
   heroImage: string | null;
-  colors: any;
+  colors: ColorPalette | null;
   metadata: {
     narrator: string | null;
     genre: string | null;

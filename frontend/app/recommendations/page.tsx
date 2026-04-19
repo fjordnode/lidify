@@ -139,8 +139,10 @@ export default function RecommendationsPage() {
             const result = await api.getDiscoverRecommendations(20, "28d", "mix", false, "lastfm");
             setData(result);
             setCachedData(result);
-        } catch (err: any) {
-            setError(err.data?.message || err.message || "Failed to load recommendations");
+        } catch (err: unknown) {
+            const errObj = err as Record<string, unknown> | undefined;
+            const dataMsg = errObj?.data && typeof errObj.data === "object" ? (errObj.data as Record<string, unknown>)?.message : undefined;
+            setError((typeof dataMsg === "string" ? dataMsg : undefined) || (err instanceof Error ? err.message : "Failed to load recommendations"));
         } finally {
             setLoading(false);
         }
@@ -175,7 +177,7 @@ export default function RecommendationsPage() {
 
             if (topTracks.length > 0) {
                 const trackResults = await Promise.allSettled(
-                    topTracks.slice(0, 5).map(async (track: any) => {
+                    topTracks.slice(0, 5).map(async (track: { title: string }) => {
                         try {
                             const response = await api.getTrackPreview(artistName, track.title);
                             return {
@@ -298,8 +300,10 @@ export default function RecommendationsPage() {
 
             await audio.play();
             setPreviewPlaying(true);
-        } catch (err: any) {
-            if (err?.error === "Preview not found" || /preview not found/i.test(err?.message || "")) {
+        } catch (err: unknown) {
+            const errObj = err as Record<string, unknown> | undefined;
+            const errMsg = err instanceof Error ? err.message : "";
+            if (errObj?.error === "Preview not found" || /preview not found/i.test(errMsg)) {
                 noPreviewSet.current.add(trackKey);
                 setTrackPreviews(prev => ({ ...prev, [trackKey]: { previewUrl: null, albumCover: null, albumTitle: null } }));
                 toast("No Deezer preview available", { duration: 1500 });

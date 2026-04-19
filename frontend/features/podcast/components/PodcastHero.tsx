@@ -3,6 +3,7 @@
 import { Mic2 } from "lucide-react";
 import Image from "next/image";
 import { ReactNode } from "react";
+import type { ColorPalette } from "@/hooks/useImageColor";
 
 interface PodcastHeroProps {
     title: string;
@@ -10,7 +11,7 @@ interface PodcastHeroProps {
     description?: string;
     genres?: string[];
     heroImage: string | null;
-    colors: any;
+    colors: ColorPalette | null;
     episodeCount: number;
     inProgressCount: number;
     children?: ReactNode;

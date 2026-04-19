@@ -69,9 +69,10 @@ export function useSoulseekSearch({
                 if (!cancelled) {
                     setSoulseekResults(results || []);
                 }
-            } catch (error: any) {
+            } catch (error: unknown) {
                 console.error("Soulseek search error:", error);
-                if (error.message?.includes("not enabled")) {
+                const errorMessage = error instanceof Error ? error.message : "";
+                if (errorMessage.includes("not enabled")) {
                     setSoulseekEnabled(false);
                 }
             } finally {
@@ -121,9 +122,10 @@ export function useSoulseekSearch({
                     return newSet;
                 });
             }, 5000);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Download error:", error);
-            toast.error(error.message || "Failed to start download");
+            const message = error instanceof Error ? error.message : "Failed to start download";
+            toast.error(message);
             setDownloadingFiles((prev) => {
                 const newSet = new Set(prev);
                 newSet.delete(result.filename);

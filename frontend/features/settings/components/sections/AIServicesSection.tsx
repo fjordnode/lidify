@@ -34,17 +34,19 @@ export function AIServicesSection({ settings, onUpdate, onTest, isTesting }: AIS
             .catch(() => setOpenrouterConfigured(false));
     }, []);
 
-    // Track if we've started loading to avoid repeated calls
-    const hasStartedLoadingRef = useRef(false);
-    const prevDropdownOpenRef = useRef(isDropdownOpen);
-    
-    // Set loading state synchronously when dropdown opens (before effect)
-    if (isDropdownOpen && !prevDropdownOpenRef.current && models.length === 0 && !hasStartedLoadingRef.current) {
-        hasStartedLoadingRef.current = true;
-        setModelsLoading(true);
+    // Track previous dropdown state for edge detection
+    const [prevDropdownOpen, setPrevDropdownOpen] = useState(isDropdownOpen);
+    const [hasStartedLoading, setHasStartedLoading] = useState(false);
+
+    // Set loading state synchronously when dropdown opens (React-approved setState during render)
+    if (isDropdownOpen !== prevDropdownOpen) {
+        setPrevDropdownOpen(isDropdownOpen);
+        if (isDropdownOpen && models.length === 0 && !hasStartedLoading) {
+            setHasStartedLoading(true);
+            setModelsLoading(true);
+        }
     }
-    prevDropdownOpenRef.current = isDropdownOpen;
-    
+
     // Fetch models when dropdown is opened (lazy load)
     useEffect(() => {
         if (isDropdownOpen && models.length === 0 && modelsLoading) {

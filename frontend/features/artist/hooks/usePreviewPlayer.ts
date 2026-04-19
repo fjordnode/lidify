@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { Track } from "../types";
@@ -249,7 +249,8 @@ export function usePreviewPlayer(options: UsePreviewPlayerOptions = {}) {
         // Delay prefetch to not block initial page render
         const timeoutId = setTimeout(prefetchAlbumInfo, 500);
         return () => clearTimeout(timeoutId);
-    }, [artistName, tracks]); // Only run when artist/tracks change
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- previewAlbumInfo is populated by this effect, not a dependency
+    }, [artistName, tracks]);
 
     return { previewTrack, previewPlaying, previewAlbumInfo, noPreviewTracks, handlePreview };
 }

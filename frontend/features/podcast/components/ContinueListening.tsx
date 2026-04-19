@@ -1,6 +1,6 @@
 "use client";
 
-import { Play, Pause, Check, Download, Sparkles } from "lucide-react";
+import { Play, Pause, Download, Sparkles } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { Podcast, Episode } from "../types";
 import { formatDuration, formatDate } from "../utils";

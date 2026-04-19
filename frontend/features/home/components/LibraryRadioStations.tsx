@@ -282,6 +282,7 @@ export function LibraryRadioStations() {
             if (el) el.removeEventListener("scroll", checkScroll);
             window.removeEventListener("resize", checkScroll);
         };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- checkScroll is stable, defined inline in effect
     }, [stationPages, isMobileOrTablet]);
 
     const scroll = (direction: "left" | "right") => {

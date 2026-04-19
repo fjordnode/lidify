@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { ExternalLink, Trash2, Plus, Loader2, Download, Sparkles, Link2, Check } from "lucide-react";
+import type { ColorPalette } from "@/hooks/useImageColor";
 
 interface PodcastActionBarProps {
     isSubscribed: boolean;
     podcastId?: string;
     feedUrl?: string;
-    colors: any;
+    colors: ColorPalette | null;
     isSubscribing: boolean;
     showDeleteConfirm: boolean;
     onSubscribe: () => void;

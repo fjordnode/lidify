@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { Search, ExternalLink, Check, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 

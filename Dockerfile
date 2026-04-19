@@ -55,35 +55,57 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     mutagen
 
 # Download Essentia ML models (~200MB total) - these enable Enhanced vibe matching
-RUN echo "Downloading Essentia ML models for Enhanced vibe matching..." && \
-    # Base embedding model (required for all predictions)
-    curl -L --progress-bar -o /app/models/discogs-effnet-bs64-1.pb \
-        "https://essentia.upf.edu/models/feature-extractors/discogs-effnet/discogs-effnet-bs64-1.pb" && \
+RUN set -eu; \
+    download_model() { \
+        dest="$1"; \
+        url="$2"; \
+        tmp="${dest}.part"; \
+        attempt=1; \
+        while [ "$attempt" -le 5 ]; do \
+            echo "Downloading $(basename "$dest") (attempt ${attempt}/5)..."; \
+            if curl --fail --location --retry 5 --retry-delay 2 --retry-all-errors --connect-timeout 30 --max-time 900 --progress-bar -o "$tmp" "$url" && [ -s "$tmp" ]; then \
+                mv "$tmp" "$dest"; \
+                echo "Saved $(basename "$dest") ($(stat -c%s "$dest") bytes)"; \
+                return 0; \
+            fi; \
+            attempt=$((attempt + 1)); \
+            sleep 2; \
+        done; \
+        echo "Failed to download non-empty model: $(basename "$dest")" >&2; \
+        exit 1; \
+    }; \
+    echo "Downloading Essentia ML models for Enhanced vibe matching..."; \
+    # Base embedding models (both variants kept so they can be benchmarked safely)
+    download_model /app/models/discogs-effnet-bs64-1.pb \
+        "https://essentia.upf.edu/models/feature-extractors/discogs-effnet/discogs-effnet-bs64-1.pb"; \
+    download_model /app/models/discogs-effnet-bs1-1.pb \
+        "https://essentia.upf.edu/models/feature-extractors/discogs-effnet/discogs-effnet-bs1-1.pb"; \
     # Mood models
-    curl -L --progress-bar -o /app/models/mood_happy-discogs-effnet-1.pb \
-        "https://essentia.upf.edu/models/classification-heads/mood_happy/mood_happy-discogs-effnet-1.pb" && \
-    curl -L --progress-bar -o /app/models/mood_sad-discogs-effnet-1.pb \
-        "https://essentia.upf.edu/models/classification-heads/mood_sad/mood_sad-discogs-effnet-1.pb" && \
-    curl -L --progress-bar -o /app/models/mood_relaxed-discogs-effnet-1.pb \
-        "https://essentia.upf.edu/models/classification-heads/mood_relaxed/mood_relaxed-discogs-effnet-1.pb" && \
-    curl -L --progress-bar -o /app/models/mood_aggressive-discogs-effnet-1.pb \
-        "https://essentia.upf.edu/models/classification-heads/mood_aggressive/mood_aggressive-discogs-effnet-1.pb" && \
-    curl -L --progress-bar -o /app/models/mood_party-discogs-effnet-1.pb \
-        "https://essentia.upf.edu/models/classification-heads/mood_party/mood_party-discogs-effnet-1.pb" && \
-    curl -L --progress-bar -o /app/models/mood_acoustic-discogs-effnet-1.pb \
-        "https://essentia.upf.edu/models/classification-heads/mood_acoustic/mood_acoustic-discogs-effnet-1.pb" && \
-    curl -L --progress-bar -o /app/models/mood_electronic-discogs-effnet-1.pb \
-        "https://essentia.upf.edu/models/classification-heads/mood_electronic/mood_electronic-discogs-effnet-1.pb" && \
+    download_model /app/models/mood_happy-discogs-effnet-1.pb \
+        "https://essentia.upf.edu/models/classification-heads/mood_happy/mood_happy-discogs-effnet-1.pb"; \
+    download_model /app/models/mood_sad-discogs-effnet-1.pb \
+        "https://essentia.upf.edu/models/classification-heads/mood_sad/mood_sad-discogs-effnet-1.pb"; \
+    download_model /app/models/mood_relaxed-discogs-effnet-1.pb \
+        "https://essentia.upf.edu/models/classification-heads/mood_relaxed/mood_relaxed-discogs-effnet-1.pb"; \
+    download_model /app/models/mood_aggressive-discogs-effnet-1.pb \
+        "https://essentia.upf.edu/models/classification-heads/mood_aggressive/mood_aggressive-discogs-effnet-1.pb"; \
+    download_model /app/models/mood_party-discogs-effnet-1.pb \
+        "https://essentia.upf.edu/models/classification-heads/mood_party/mood_party-discogs-effnet-1.pb"; \
+    download_model /app/models/mood_acoustic-discogs-effnet-1.pb \
+        "https://essentia.upf.edu/models/classification-heads/mood_acoustic/mood_acoustic-discogs-effnet-1.pb"; \
+    download_model /app/models/mood_electronic-discogs-effnet-1.pb \
+        "https://essentia.upf.edu/models/classification-heads/mood_electronic/mood_electronic-discogs-effnet-1.pb"; \
     # Danceability and Voice/Instrumental (arousal/valence derived from mood predictions)
-    curl -L --progress-bar -o /app/models/danceability-discogs-effnet-1.pb \
-        "https://essentia.upf.edu/models/classification-heads/danceability/danceability-discogs-effnet-1.pb" && \
-    curl -L --progress-bar -o /app/models/voice_instrumental-discogs-effnet-1.pb \
-        "https://essentia.upf.edu/models/classification-heads/voice_instrumental/voice_instrumental-discogs-effnet-1.pb" && \
-    echo "ML models downloaded successfully" && \
+    download_model /app/models/danceability-discogs-effnet-1.pb \
+        "https://essentia.upf.edu/models/classification-heads/danceability/danceability-discogs-effnet-1.pb"; \
+    download_model /app/models/voice_instrumental-discogs-effnet-1.pb \
+        "https://essentia.upf.edu/models/classification-heads/voice_instrumental/voice_instrumental-discogs-effnet-1.pb"; \
+    echo "ML models downloaded successfully"; \
     ls -lh /app/models/
 
 # Copy audio analyzer script
 COPY services/audio-analyzer/analyzer.py /app/audio-analyzer/
+COPY services/audio-analyzer/benchmark_effnet_variants.py /app/audio-analyzer/
 
 # ============================================
 # BACKEND BUILD

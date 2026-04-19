@@ -30,7 +30,8 @@ export function RemoteVolumeCapture() {
         if (audioContextRef.current) return;
 
         try {
-            const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+            const audioContext = new AudioContextClass();
             audioContextRef.current = audioContext;
 
             // Create a silent oscillator (or use a buffer of silence)

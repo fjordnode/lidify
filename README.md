@@ -45,9 +45,23 @@ Lidify uses machine learning models to analyze your music library for mood, ener
 
 ```yaml
 environment:
-  - NUM_WORKERS=6        # Increase for faster analysis (default: 2)
-  - BATCH_SIZE=10        # Tracks per batch (default: 10, don't increase)
+  - NUM_WORKERS=6                # Increase for faster analysis (default: 2)
+  - BATCH_SIZE=10                # Tracks per batch (default: 10, don't increase)
+  - EFFNET_MODEL_VARIANT=bs64    # Base embedding model (current supported runtime option)
 ```
+
+`discogs-effnet-bs1-1` was investigated as a possible alternative, but the current
+`essentia-tensorflow` runtime rejects it with a reshape error in
+`TensorflowPredictEffnetDiscogs`, so Lidify falls back to `bs64`.
+
+**Benchmarking the current supported variant:**
+
+```bash
+docker exec lidify python3 /app/audio-analyzer/benchmark_effnet_variants.py \
+  /music/path/to/track1.flac /music/path/to/track2.mp3
+```
+
+This reports wall time, peak RSS, and per-track outputs for the requested compatible variants.
 
 **Initial analysis time estimates (20,000 tracks):**
 - 2 workers: ~22 hours

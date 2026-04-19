@@ -4,7 +4,7 @@ import { use, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAudio } from "@/lib/audio-context";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
-import { useImageColor, getPlayButtonStyles } from "@/hooks/useImageColor";
+import { useImageColor } from "@/hooks/useImageColor";
 import { api } from "@/lib/api";
 import { PlaylistSelector } from "@/components/ui/PlaylistSelector";
 import { useDownloadContext } from "@/lib/download-context";
@@ -35,8 +35,8 @@ export default function AlbumPage({ params }: AlbumPageProps) {
     // State
     const [showPlaylistSelector, setShowPlaylistSelector] = useState(false);
     const [pendingTrackIds, setPendingTrackIds] = useState<string[]>([]);
-    const [isBulkAdd, setIsBulkAdd] = useState(false);
-    const [isAddingToPlaylist, setIsAddingToPlaylist] = useState(false);
+    const [, setIsBulkAdd] = useState(false);
+    const [, setIsAddingToPlaylist] = useState(false);
 
     // Custom hooks
     const { album, source, loading, reloadAlbum } = useAlbumData(id);

@@ -3,6 +3,7 @@ import { Card } from '@/components/ui/Card';
 import { Play, Pause, Volume2, ListPlus, Plus, Disc } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import type { Track, Album, AlbumSource } from '../types';
+import type { ColorPalette } from '@/hooks/useImageColor';
 
 interface TrackListProps {
   tracks: Track[];
@@ -10,7 +11,7 @@ interface TrackListProps {
   source: AlbumSource;
   currentTrackId: string | undefined;
   isPlaying?: boolean;
-  colors: any;
+  colors: ColorPalette | null;
   onPlayTrack: (track: Track, index: number) => void;
   onPause?: () => void;
   onAddToQueue: (track: Track) => void;
@@ -29,7 +30,7 @@ interface TrackRowProps {
   isCurrentTrack: boolean;
   isActuallyPlaying: boolean; // Current track AND audio is playing (not paused)
   isPreviewPlaying: boolean;
-  colors: any;
+  colors: ColorPalette | null;
   onPlayTrack: (track: Track, index: number) => void;
   onPause?: () => void;
   onAddToQueue: (track: Track) => void;
@@ -123,7 +124,7 @@ const TrackRow = memo(function TrackRow({
   isCurrentTrack,
   isActuallyPlaying,
   isPreviewPlaying,
-  colors,
+  colors: _colors,
   onPlayTrack,
   onPause,
   onAddToQueue,

@@ -655,7 +655,6 @@ export function VibeComparisonArt({
                     const labelRadius = maxRadius + 25;
                     const x = center + labelRadius * Math.cos(angle);
                     const y = center + labelRadius * Math.sin(angle);
-                    const Icon = feature.icon;
 
                     return (
                         <g key={feature.key}>

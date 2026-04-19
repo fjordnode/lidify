@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Trash2 } from "lucide-react";
-import { SettingsSection, SettingsRow, SettingsInput, SettingsSelect } from "../ui";
+import { SettingsSection, SettingsInput, SettingsSelect } from "../ui";
 import { Modal } from "@/components/ui/Modal";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
@@ -66,9 +66,10 @@ export function UserManagementSection() {
             setNewPassword("");
             setNewRole("user");
             loadUsers();
-        } catch (error: any) {
+        } catch (error: unknown) {
             setCreateStatus("error");
-            setCreateMessage(error.message || "Failed");
+            const message = error instanceof Error ? error.message : "Failed";
+            setCreateMessage(message);
         } finally {
             setCreating(false);
         }
@@ -82,9 +83,10 @@ export function UserManagementSection() {
             setDeleteMessage("Deleted");
             setConfirmDelete(null);
             loadUsers();
-        } catch (error: any) {
+        } catch (error: unknown) {
             setDeleteStatus("error");
-            setDeleteMessage(error.message || "Failed");
+            const message = error instanceof Error ? error.message : "Failed";
+            setDeleteMessage(message);
         }
     };
 

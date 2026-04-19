@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { Calendar, Clock, Download, Music2, Disc, ArrowRight, CheckCircle2, Loader2 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { GradientSpinner } from "@/components/ui/GradientSpinner";
@@ -40,8 +41,8 @@ export default function ReleasesPage() {
             if (!res.ok) throw new Error("Failed to fetch releases");
             const json = await res.json();
             setData(json);
-        } catch (err: any) {
-            setError(err.message);
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : "Failed to fetch releases");
         } finally {
             setLoading(false);
         }
@@ -216,10 +217,12 @@ function ReleaseCard({
             {/* Cover Art */}
             <div className="aspect-square rounded-lg overflow-hidden bg-white/5 mb-3 relative">
                 {release.coverUrl ? (
-                    <img
+                    <Image
                         src={release.coverUrl}
                         alt={release.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        fill
+                        unoptimized
+                        className="object-cover group-hover:scale-105 transition-transform duration-300"
                     />
                 ) : (
                     <div className="w-full h-full flex items-center justify-center">

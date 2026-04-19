@@ -1,8 +1,6 @@
 import React, { memo } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { LucideIcon } from "lucide-react";
-import { isLocalUrl } from "@/utils/cn";
 
 interface MediaCardProps {
     href: string;

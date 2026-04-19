@@ -25,7 +25,7 @@ function queueDebugEnabled(): boolean {
 
 function queueDebugLog(message: string, data?: Record<string, unknown>) {
     if (!queueDebugEnabled()) return;
-    // eslint-disable-next-line no-console
+     
     console.log(`[QueueDebug] ${message}`, data || {});
 }
 
@@ -58,14 +58,6 @@ function getRemotePlaybackStorageSnapshot(): {
     }
 
     return { deviceId, activePlayerId, controlMode };
-}
-
-function isThisDeviceActivePlayerFromStorage(): boolean {
-    const snap = getRemotePlaybackStorageSnapshot();
-    if (snap.controlMode !== "local") return false;
-    if (!snap.deviceId) return false;
-    if (!snap.activePlayerId) return false;
-    return snap.activePlayerId === snap.deviceId;
 }
 
 function canReadPlaybackStateFromStorage(): boolean {
@@ -371,11 +363,9 @@ export function AudioStateProvider({ children }: { children: ReactNode }) {
     const [currentSource, setCurrentSource] = useState<"local" | "youtube" | null>(null);
 
     // Restore state from localStorage on mount
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional hydration from localStorage
+     
     useEffect(() => {
         if (typeof window === "undefined") return;
-
-        let hadLocalState = false;
 
         try {
             const savedTrack = localStorage.getItem(STORAGE_KEYS.CURRENT_TRACK);
@@ -400,16 +390,7 @@ export function AudioStateProvider({ children }: { children: ReactNode }) {
             const savedVolume = localStorage.getItem(STORAGE_KEYS.VOLUME);
             const savedMuted = localStorage.getItem(STORAGE_KEYS.IS_MUTED);
 
-            // Track whether we actually had local state worth preserving.
-            // If we did, only the active player device should overwrite it using the per-user server state.
-            hadLocalState = Boolean(
-                savedTrack ||
-                    savedAudiobook ||
-                    savedPodcast ||
-                    (savedQueue && savedQueue !== "[]")
-            );
-
-            // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional hydration from localStorage
+             
             if (savedTrack) setCurrentTrack(JSON.parse(savedTrack));
 
             // For audiobooks, restore then fetch fresh progress
@@ -570,6 +551,7 @@ export function AudioStateProvider({ children }: { children: ReactNode }) {
             .catch(() => {
                 // No server state available - this is expected on first load
             });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-once: restores persisted state on hydration
     }, []);
 
     // Save state to localStorage whenever it changes
@@ -777,7 +759,7 @@ export function AudioStateProvider({ children }: { children: ReactNode }) {
                                 setCurrentIndex(serverState.currentIndex || 0);
                                 setIsShuffle(serverState.isShuffle || false);
                             }
-                        } catch (trackErr) {
+                        } catch (_trackErr) {
                             if (!mounted) return;
                             await api.clearPlaybackState().catch(() => {});
                             setCurrentTrack(null);
@@ -865,6 +847,7 @@ export function AudioStateProvider({ children }: { children: ReactNode }) {
             );
             clearInterval(pollInterval);
         };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- using ?.id intentionally to avoid re-running on every track property change
     }, [
         isHydrated,
         playbackType,
@@ -940,6 +923,7 @@ export function AudioStateProvider({ children }: { children: ReactNode }) {
             isHydrated,
             lastServerSync,
             repeatOneCount,
+            setCurrentTrack,
         ]
     );
 

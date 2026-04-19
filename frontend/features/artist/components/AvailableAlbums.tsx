@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Album, ArtistSource } from "../types";
+import type { ColorPalette } from "@/hooks/useImageColor";
 import { PlayableCard } from "@/components/ui/PlayableCard";
 import { Disc3 } from "lucide-react";
 import { api } from "@/lib/api";
@@ -10,7 +11,7 @@ interface AvailableAlbumsProps {
     albums: Album[];
     artistName: string;
     source: ArtistSource;
-    colors: any;
+    colors: ColorPalette | null;
     onDownloadAlbum: (album: Album, e: React.MouseEvent) => void;
     onSearchAlbum: (album: Album, e: React.MouseEvent) => void;
     isPendingDownload: (mbid: string) => boolean;
@@ -19,7 +20,6 @@ interface AvailableAlbumsProps {
 // Component to handle lazy-loading cover art for albums without cached covers
 function LazyAlbumCard({
     album,
-    source,
     colors,
     onDownloadAlbum,
     onSearchAlbum,
@@ -28,7 +28,7 @@ function LazyAlbumCard({
 }: {
     album: Album;
     source: ArtistSource;
-    colors: any;
+    colors: ColorPalette | null;
     onDownloadAlbum: (album: Album, e: React.MouseEvent) => void;
     onSearchAlbum: (album: Album, e: React.MouseEvent) => void;
     isPendingDownload: (mbid: string) => boolean;
@@ -138,7 +138,6 @@ function AlbumGrid({
 
 export function AvailableAlbums({
     albums,
-    artistName,
     source,
     colors,
     onDownloadAlbum,

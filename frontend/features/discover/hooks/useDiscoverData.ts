@@ -129,6 +129,7 @@ export function useDiscoverData() {
     return () => {
       stopPolling();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-once: initializes data loading and polling
   }, []);
 
   // Start polling when batch becomes active OR when generation is pending

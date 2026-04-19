@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { Edit, X, Save } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
@@ -22,7 +23,7 @@ interface MetadataEditorProps {
         heroUrl?: string;
     };
     artistName?: string; // For album MBID lookup, to filter by artist
-    onSave?: (updatedData: any) => void;
+    onSave?: (updatedData: Record<string, unknown>) => void;
 }
 
 /**
@@ -75,15 +76,16 @@ export function MetadataEditor({
             );
             onSave?.(response);
             setIsOpen(false);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Failed to update metadata:", error);
-            toast.error(error.message || "Failed to update metadata");
+            const message = error instanceof Error ? error.message : "Failed to update metadata";
+            toast.error(message);
         } finally {
             setIsSaving(false);
         }
     };
 
-    const handleChange = (field: string, value: any) => {
+    const handleChange = (field: string, value: string | number | string[]) => {
         setFormData((prev) => ({ ...prev, [field]: value }));
     };
 
@@ -271,13 +273,16 @@ export function MetadataEditor({
                                 {/* Image Preview */}
                                 {(formData.heroUrl || formData.coverUrl) && (
                                     <div className="mt-2">
-                                        <img
+                                        <Image
                                             src={
                                                 formData.heroUrl ||
                                                 formData.coverUrl
                                             }
                                             alt="Preview"
-                                            className="w-32 h-32 object-cover rounded"
+                                            width={128}
+                                            height={128}
+                                            unoptimized
+                                            className="object-cover rounded"
                                         />
                                     </div>
                                 )}

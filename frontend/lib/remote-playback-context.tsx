@@ -212,7 +212,7 @@ export function RemotePlaybackProvider({ children }: { children: ReactNode }) {
     // CRITICAL: Use lazy initializers to set these synchronously on first render
     // This prevents the race condition where isActivePlayer is incorrectly true
     // during the first render before effects run
-    const [currentDeviceId, setCurrentDeviceId] = useState<string | null>(() => {
+    const [currentDeviceId] = useState<string | null>(() => {
         if (typeof window === "undefined") return null;
         return getOrCreateDeviceId();
     });
@@ -258,7 +258,7 @@ export function RemotePlaybackProvider({ children }: { children: ReactNode }) {
     const controlTargetIdRef = useRef<string | null>(controlTargetId);
     
     // Sync refs with state (required by React Compiler)
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional ref sync
+     
     useEffect(() => {
         activePlayerIdRef.current = activePlayerId;
         currentDeviceIdRef.current = currentDeviceId;
@@ -339,6 +339,7 @@ export function RemotePlaybackProvider({ children }: { children: ReactNode }) {
         if (activePlayerState) {
             console.log(`[RemotePlayback] ACTIVE PLAYER STATE: time=${activePlayerState.currentTime?.toFixed(1)}, playing=${activePlayerState.isPlaying}, vol=${activePlayerState.volume}`);
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally only logging specific property changes
     }, [activePlayerState?.currentTime, activePlayerState?.isPlaying, activePlayerState?.volume]);
 
     // Connect to WebSocket when authenticated
@@ -543,7 +544,7 @@ export function RemotePlaybackProvider({ children }: { children: ReactNode }) {
             socket.disconnect();
             socketRef.current = null;
         };
-    }, [isAuthenticated, user, currentDeviceId, currentDeviceName]);
+    }, [isAuthenticated, user, currentDeviceId, currentDeviceName, setActivePlayerId, setControlMode]);
 
     // Send a command to another device
     const sendCommand = useCallback(
@@ -598,7 +599,7 @@ export function RemotePlaybackProvider({ children }: { children: ReactNode }) {
             });
             socketRef.current.emit("playback:setActivePlayer", { deviceId: toDeviceId });
         }, 50);
-    }, []);
+    }, [setControlMode, setActivePlayerId]);
 
     // Become the active player (transfer playback TO this device - will stop remote)
     // Use this when you actually want to PLAY on this device
@@ -622,7 +623,7 @@ export function RemotePlaybackProvider({ children }: { children: ReactNode }) {
         } else {
             console.warn("[RemotePlayback] WebSocket not connected - local state set, server not notified");
         }
-    }, [currentDeviceId, setControlMode]);
+    }, [currentDeviceId, setControlMode, setActivePlayerId]);
 
     // Switch to local mode WITHOUT stopping remote playback
     // Use this when you want to stop remote controlling and just view/control local state

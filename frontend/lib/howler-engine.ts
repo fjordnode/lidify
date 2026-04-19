@@ -463,7 +463,7 @@ class HowlerEngine {
             if (sounds && sounds.length > 0 && sounds[0]._node) {
                 return sounds[0]._node.currentTime || 0;
             }
-        } catch (e) {
+        } catch (_e) {
             // Fallback to Howler's reported time
         }
 

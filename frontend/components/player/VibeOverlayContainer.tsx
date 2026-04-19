@@ -2,7 +2,7 @@
 
 import { useAudioState } from "@/lib/audio-state-context";
 import { EnhancedVibeOverlay } from "./VibeOverlayEnhanced";
-import { useState, useRef } from "react";
+import { useState } from "react";
 
 /**
  * Container component that manages the floating EnhancedVibeOverlay.
@@ -11,17 +11,16 @@ import { useState, useRef } from "react";
 export function VibeOverlayContainer() {
     const { vibeMode, queue, currentIndex } = useAudioState();
     const [isDismissed, setIsDismissed] = useState(false);
-    
-    // Track previous vibeMode to reset dismissed state when vibeMode changes
-    const prevVibeModeRef = useRef(vibeMode);
-    
-    // Reset dismissed state when vibeMode turns on
-    // eslint-disable-next-line react-hooks/rules-of-hooks, react-hooks/refs -- Intentional ref tracking pattern
-    if (vibeMode && !prevVibeModeRef.current) {
-        setIsDismissed(false);
+    const [prevVibeMode, setPrevVibeMode] = useState(vibeMode);
+
+    // Reset dismissed state when vibeMode turns on (React-approved setState during render)
+    if (vibeMode !== prevVibeMode) {
+        setPrevVibeMode(vibeMode);
+        if (vibeMode && !prevVibeMode) {
+            setIsDismissed(false);
+        }
     }
-    prevVibeModeRef.current = vibeMode;
-    
+
     // Visibility is derived from vibeMode (no need for separate state)
     const isVisible = vibeMode;
 

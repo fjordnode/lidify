@@ -2,13 +2,13 @@
 
 import { useCallback } from "react";
 import { useAudio } from "@/lib/audio-context";
-import { useAudioState } from "@/lib/audio-state-context";
+import { useAudioState, Audiobook } from "@/lib/audio-state-context";
 import { useToast } from "@/lib/toast-context";
 import { api } from "@/lib/api";
 
 export function useAudiobookActions(
   audiobookId: string,
-  audiobook: any, // Raw API response
+  audiobook: Audiobook | null,
   refetch: () => void
 ) {
   const {

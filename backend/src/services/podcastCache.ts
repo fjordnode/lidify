@@ -20,12 +20,8 @@ export class PodcastCacheService {
     private coverCacheDir: string;
 
     constructor() {
-        // Store covers in: <MUSIC_PATH>/cover-cache/podcasts/
-        this.coverCacheDir = path.join(
-            config.music.musicPath,
-            "cover-cache",
-            "podcasts"
-        );
+        // Store covers in /data/cover-cache/podcasts/ (writable volume, not read-only /music)
+        this.coverCacheDir = path.join("/data", "cover-cache", "podcasts");
     }
 
     /**

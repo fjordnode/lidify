@@ -1,9 +1,9 @@
 "use client";
 
-import { Play, Pause, RotateCcw, CheckCircle, Shuffle } from "lucide-react";
+import { Play, Pause, RotateCcw, CheckCircle } from "lucide-react";
 
 interface AudiobookActionBarProps {
-  audiobook: any;
+  audiobook: { duration: number; progress?: { progress: number; currentTime: number; isFinished?: boolean } | null };
   isThisBookPlaying?: boolean;
   isPlaying?: boolean;
   currentTime?: number;

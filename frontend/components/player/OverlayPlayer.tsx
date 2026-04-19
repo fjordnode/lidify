@@ -26,7 +26,6 @@ import { cn } from "@/utils/cn";
 import { useIsMobile, useIsTablet } from "@/hooks/useMediaQuery";
 import { toast } from "sonner";
 import { VibeComparisonArt } from "./VibeOverlay";
-import { useAudioState } from "@/lib/audio-state-context";
 
 type SourceFeaturesPayload = {
     bpm?: number;

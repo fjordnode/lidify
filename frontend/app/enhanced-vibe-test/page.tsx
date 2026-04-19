@@ -53,7 +53,7 @@ export default function EnhancedVibeTest() {
     };
 
     // Simulate vibe mode
-    const testVibeMode = isTestMode ? { 
+    const _testVibeMode = isTestMode ? { 
         isActive: true, 
         sourceFeatures: mockSourceFeatures,
         queue: []

@@ -1,4 +1,4 @@
-import { Play, Pause, Heart, Music } from "lucide-react";
+import { Play, Heart, Music } from "lucide-react";
 import Image from "next/image";
 import { cn } from "@/utils/cn";
 import { DiscoverTrack } from "../types";

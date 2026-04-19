@@ -105,7 +105,7 @@ export default function DiscoverPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [data, setData] = useState<DiscoverData | null>(null);
-    const [prefsLoaded, setPrefsLoaded] = useState(false);
+    const [, setPrefsLoaded] = useState(false);
 
     // User controls - loaded from preferences
     const [mode, setMode] = useState<DiscoveryMode>("mix");
@@ -266,8 +266,10 @@ export default function DiscoverPage() {
                 // Notify other pages (main page) that recommendations were refreshed
                 window.dispatchEvent(new Event("discover-recommendations-updated"));
             }
-        } catch (err: any) {
-            setError(err.data?.message || err.message || "Failed to generate recommendations");
+        } catch (err: unknown) {
+            const errObj = err as Record<string, unknown> | undefined;
+            const dataMsg = errObj?.data && typeof errObj.data === "object" ? (errObj.data as Record<string, unknown>)?.message : undefined;
+            setError((typeof dataMsg === "string" ? dataMsg : undefined) || (err instanceof Error ? err.message : "Failed to generate recommendations"));
         } finally {
             setLoading(false);
         }
@@ -305,7 +307,7 @@ export default function DiscoverPage() {
             // Fetch album art for tracks
             if (topTracks.length > 0) {
                 const trackResults = await Promise.allSettled(
-                    topTracks.slice(0, 5).map(async (track: any) => {
+                    topTracks.slice(0, 5).map(async (track: { title: string }) => {
                         try {
                             const response = await api.getTrackPreview(artistName, track.title);
                             return {
@@ -432,8 +434,10 @@ export default function DiscoverPage() {
 
             await audio.play();
             setPreviewPlaying(true);
-        } catch (err: any) {
-            if (err?.error === "Preview not found" || /preview not found/i.test(err?.message || "")) {
+        } catch (err: unknown) {
+            const errObj = err as Record<string, unknown> | undefined;
+            const errMsg = err instanceof Error ? err.message : "";
+            if (errObj?.error === "Preview not found" || /preview not found/i.test(errMsg)) {
                 noPreviewSet.current.add(trackKey);
                 setTrackPreviews(prev => ({ ...prev, [trackKey]: { previewUrl: null, albumCover: null, albumTitle: null } }));
                 toast("No Deezer preview available", { duration: 1500 });

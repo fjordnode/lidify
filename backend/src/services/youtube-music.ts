@@ -441,6 +441,135 @@ class YouTubeMusicService {
         return 0;
     }
 
+    private sanitizePlaylistCreator(value: string): string {
+        const creator = value.trim();
+        if (!creator) {
+            return "YouTube Music";
+        }
+
+        if (/^(n\/a|na)$/i.test(creator)) {
+            return "YouTube Music";
+        }
+
+        if (/^(playlist|album|single|ep)$/i.test(creator)) {
+            return "YouTube Music";
+        }
+
+        return creator;
+    }
+
+    private isKeywordStuffedText(value: string): boolean {
+        const normalized = value.toLowerCase().replace(/\s+/g, " ").trim();
+        if (!normalized) {
+            return false;
+        }
+
+        const words = normalized.split(/[\s,./|]+/).filter(Boolean);
+        if (words.length < 25) {
+            return false;
+        }
+
+        const uniqueRatio = new Set(words).size / words.length;
+        const repeatedTerms =
+            normalized.match(
+                /\b(clean playlist|top hits|today'?s hits|playlist 20\d{2}|music 20\d{2})\b/g
+            )?.length || 0;
+        const yearMentions = normalized.match(/\b20\d{2}\b/g)?.length || 0;
+
+        return uniqueRatio < 0.55 || repeatedTerms >= 4 || yearMentions >= 6;
+    }
+
+    private sanitizePlaylistDescription(
+        description: string | null
+    ): string | null {
+        if (!description) {
+            return null;
+        }
+
+        const trimmed = description.trim();
+        if (!trimmed) {
+            return null;
+        }
+
+        if (this.isKeywordStuffedText(trimmed)) {
+            return null;
+        }
+
+        return trimmed;
+    }
+
+    private isLowQualityPlaylistPreview(
+        playlist: YouTubeMusicPlaylistPreview
+    ): boolean {
+        const title = playlist.title.trim();
+        if (!title) {
+            return true;
+        }
+
+        if (this.isKeywordStuffedText(title)) {
+            return true;
+        }
+
+        const normalizedTitle = title.toLowerCase();
+        const yearMentions = title.match(/\b20\d{2}\b/g)?.length || 0;
+        const playlistWordMentions = normalizedTitle.match(/\bplaylist\b/g)?.length || 0;
+
+        if (playlistWordMentions >= 2 && yearMentions >= 1) {
+            return true;
+        }
+
+        if (
+            yearMentions >= 2 &&
+            /(clean playlist|top hits|today'?s hits)/i.test(title)
+        ) {
+            return true;
+        }
+
+        if (
+            yearMentions >= 1 &&
+            /(today'?s hits|top hits|spotify playlist|tiktok songs)/i.test(title) &&
+            !/official/i.test(title)
+        ) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private filterPlaylistPreviews(
+        playlists: YouTubeMusicPlaylistPreview[]
+    ): YouTubeMusicPlaylistPreview[] {
+        return playlists.filter((playlist) => !this.isLowQualityPlaylistPreview(playlist));
+    }
+
+    private isFeaturedTrustedPlaylist(
+        playlist: YouTubeMusicPlaylistPreview
+    ): boolean {
+        const creator = (playlist.creator || "").trim().toLowerCase();
+        const title = (playlist.title || "").trim();
+        const id = (playlist.id || "").trim();
+
+        if (/^(rdclak5uy_|olak5uy_)/i.test(id)) {
+            return true;
+        }
+
+        if (creator === "youtube music") {
+            return true;
+        }
+
+        if (/\bofficial\b/i.test(title)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private filterFeaturedPlaylists(
+        playlists: YouTubeMusicPlaylistPreview[]
+    ): YouTubeMusicPlaylistPreview[] {
+        return playlists.filter((playlist) => this.isFeaturedTrustedPlaylist(playlist));
+    }
+
     // ============================================
     // Playlist Methods
     // ============================================
@@ -498,8 +627,28 @@ class YouTubeMusicService {
                     `[YouTube Music] Discarding stale playlist cache for ${playlistId}`
                 );
             } else {
+                const normalizedTracks =
+                    cached.trackCount > 0
+                        ? cached.tracks.slice(0, cached.trackCount)
+                        : cached.tracks;
+
+                const normalizedCached: YouTubeMusicPlaylist = {
+                    ...cached,
+                    tracks: normalizedTracks,
+                    creator: this.sanitizePlaylistCreator(cached.creator || ""),
+                    description: this.sanitizePlaylistDescription(cached.description),
+                };
+
+                if (
+                    normalizedTracks.length !== cached.tracks.length ||
+                    normalizedCached.creator !== cached.creator ||
+                    normalizedCached.description !== cached.description
+                ) {
+                    await this.setCache(cacheKey, normalizedCached, SEARCH_CACHE_TTL);
+                }
+
                 console.log(`[YouTube Music] Playlist cache hit for ${playlistId}`);
-                return cached;
+                return normalizedCached;
             }
         }
 
@@ -516,7 +665,9 @@ class YouTubeMusicService {
 
             // Parse all tracks, handling pagination
             const tracks: YouTubeMusicTrack[] = [];
+            const seenTrackIds = new Set<string>();
             let currentPage = playlist;
+            let reachedExpectedTrackCount = false;
 
             while (true) {
                 const items = currentPage.items || currentPage.contents;
@@ -524,9 +675,23 @@ class YouTubeMusicService {
                     for (const item of items) {
                         const track = this.parseTrackFromMusicItem(item);
                         if (track) {
+                            if (seenTrackIds.has(track.videoId)) {
+                                continue;
+                            }
+
+                            seenTrackIds.add(track.videoId);
                             tracks.push(track);
+
+                            if (trackCount > 0 && tracks.length >= trackCount) {
+                                reachedExpectedTrackCount = true;
+                                break;
+                            }
                         }
                     }
+                }
+
+                if (reachedExpectedTrackCount) {
+                    break;
                 }
 
                 if (currentPage.has_continuation) {
@@ -585,30 +750,34 @@ class YouTubeMusicService {
         let trackCount = 0;
 
         if (header) {
+            const subtitleCreator = this.extractText(header.subtitle).split(" • ")[0];
+
             title =
                 this.extractText(header.title) ||
                 this.extractText(header.edit_header?.title) ||
                 this.extractText(header.header?.title) ||
                 title;
 
-            creator =
+            creator = this.sanitizePlaylistCreator(
                 this.extractText(header.author?.name) ||
-                this.extractText(header.strapline_text_one) ||
-                this.extractText(
-                    header.subtitle?.runs?.find(
-                        (r: any) =>
-                            r?.endpoint?.payload?.browseId &&
-                            String(r.endpoint.payload.browseId).startsWith("UC")
-                    )?.text
-                ) ||
-                this.extractText(header.subtitle).split(" • ")[0] ||
-                "YouTube Music";
+                    this.extractText(header.strapline_text_one) ||
+                    this.extractText(
+                        header.subtitle?.runs?.find(
+                            (r: any) =>
+                                r?.endpoint?.payload?.browseId &&
+                                String(r.endpoint.payload.browseId).startsWith("UC")
+                        )?.text
+                    ) ||
+                    subtitleCreator ||
+                    "YouTube Music"
+            );
 
-            description =
+            description = this.sanitizePlaylistDescription(
                 this.extractText(header.description) ||
-                this.extractText(header.description?.description) ||
-                this.extractText(header.edit_header?.edit_description) ||
-                null;
+                    this.extractText(header.description?.description) ||
+                    this.extractText(header.edit_header?.edit_description) ||
+                    null
+            );
 
             trackCount =
                 this.extractTrackCount(header.song_count) ||
@@ -642,7 +811,11 @@ class YouTubeMusicService {
             trackCount: number;
         }>(cacheKey);
         if (cached) {
-            return cached;
+            return {
+                ...cached,
+                creator: this.sanitizePlaylistCreator(cached.creator || ""),
+                description: this.sanitizePlaylistDescription(cached.description),
+            };
         }
 
         try {
@@ -706,7 +879,7 @@ class YouTubeMusicService {
         const cached = await this.getCached<YouTubeMusicPlaylistPreview[]>(cacheKey);
         if (cached) {
             console.log(`[YouTube Music] Playlist search cache hit for "${query}"`);
-            return cached.slice(0, limit);
+            return this.filterPlaylistPreviews(cached).slice(0, limit);
         }
 
         try {
@@ -733,12 +906,16 @@ class YouTubeMusicService {
                 }
             }
 
-            if (playlists.length > 0) {
-                await this.setCache(cacheKey, playlists, SEARCH_CACHE_TTL);
+            const filteredPlaylists = this.filterPlaylistPreviews(playlists);
+
+            if (filteredPlaylists.length > 0) {
+                await this.setCache(cacheKey, filteredPlaylists, SEARCH_CACHE_TTL);
             }
 
-            console.log(`[YouTube Music] Playlist search for "${query}" found ${playlists.length} results`);
-            return playlists;
+            console.log(
+                `[YouTube Music] Playlist search for "${query}" found ${filteredPlaylists.length} results`
+            );
+            return filteredPlaylists;
         } catch (error: any) {
             console.error(`[YouTube Music] Playlist search error for "${query}":`, error.message);
             return [];
@@ -776,8 +953,10 @@ class YouTubeMusicService {
             this.getCached<YouTubeMusicPlaylistPreview[]>(EXPLORE_COMMUNITY_KEY),
         ]);
 
-        let featured = cachedFeatured || [];
-        let community = cachedCommunity || [];
+        let featured = this.filterFeaturedPlaylists(
+            this.filterPlaylistPreviews(cachedFeatured || [])
+        );
+        let community = this.filterPlaylistPreviews(cachedCommunity || []);
 
         const staleFeatured =
             featured.length > 0 && featured.every((playlist) => playlist.trackCount === 0);
@@ -798,13 +977,22 @@ class YouTubeMusicService {
                 const popular = await this.getPopularPlaylistsFromCharts(
                     Math.max(featuredLimit, 40)
                 );
-                featured = await this.enrichPlaylistPreviewCounts(popular);
+                featured = this.filterFeaturedPlaylists(
+                    this.filterPlaylistPreviews(
+                        await this.enrichPlaylistPreviewCounts(popular)
+                    )
+                );
 
                 if (featured.length === 0) {
-                    featured = await this.getFeaturedPlaylistsFromSearch(
-                        Math.max(featuredLimit, 30)
+                    featured = this.filterFeaturedPlaylists(
+                        this.filterPlaylistPreviews(
+                            await this.enrichPlaylistPreviewCounts(
+                                await this.getFeaturedPlaylistsFromSearch(
+                                    Math.max(featuredLimit, 30)
+                                )
+                            )
+                        )
                     );
-                    featured = await this.enrichPlaylistPreviewCounts(featured);
                     if (featured.length > 0) {
                         console.log(
                             `[YouTube Music] Featured fallback search returned ${featured.length} playlists`
@@ -819,16 +1007,23 @@ class YouTubeMusicService {
                     );
                 }
             } else {
-                featured = await this.enrichPlaylistPreviewCounts(featured);
+                featured = this.filterFeaturedPlaylists(
+                    this.filterPlaylistPreviews(
+                        await this.enrichPlaylistPreviewCounts(featured)
+                    )
+                );
             }
 
             if (community.length === 0) {
                 const featuredIds = new Set(featured.map((playlist) => playlist.id));
-                community = await this.getCommunityPlaylistsFromSearch(
-                    Math.max(communityLimit, 40),
-                    featuredIds
+                community = this.filterPlaylistPreviews(
+                    await this.enrichPlaylistPreviewCounts(
+                        await this.getCommunityPlaylistsFromSearch(
+                            Math.max(communityLimit, 40),
+                            featuredIds
+                        )
+                    )
                 );
-                community = await this.enrichPlaylistPreviewCounts(community);
                 if (community.length > 0) {
                     await this.setCache(EXPLORE_COMMUNITY_KEY, community, MATCH_CACHE_TTL);
                     console.log(
@@ -836,7 +1031,9 @@ class YouTubeMusicService {
                     );
                 }
             } else {
-                community = await this.enrichPlaylistPreviewCounts(community);
+                community = this.filterPlaylistPreviews(
+                    await this.enrichPlaylistPreviewCounts(community)
+                );
             }
 
             const featuredIds = new Set(featured.map((playlist) => playlist.id));
@@ -1054,7 +1251,9 @@ class YouTubeMusicService {
                         this.extractText(item.subtitle)
                 ) || "";
 
-            creator = byAuthor || byAuthors || byArtists || byMeta || creator;
+            creator = this.sanitizePlaylistCreator(
+                byAuthor || byAuthors || byArtists || byMeta || creator
+            );
 
             let imageUrl =
                 this.extractThumbnailUrl(item.thumbnails || item.thumbnail?.contents) ||
@@ -1080,7 +1279,7 @@ class YouTubeMusicService {
                 id: playlistId,
                 title: title.trim(),
                 description: null,
-                creator: creator.trim(),
+                creator,
                 imageUrl,
                 trackCount,
             };

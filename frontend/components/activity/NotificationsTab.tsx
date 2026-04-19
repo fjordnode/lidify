@@ -20,7 +20,7 @@ interface Notification {
     type: string;
     title: string;
     message: string | null;
-    metadata: any;
+    metadata: Record<string, unknown> | null;
     read: boolean;
     createdAt: string;
 }

@@ -7,7 +7,7 @@ import {
     ReactNode,
     useEffect,
 } from "react";
-import { useDownloadStatus, DownloadJob, DownloadStatus } from "@/hooks/useDownloadStatus";
+import { useDownloadStatus, DownloadStatus } from "@/hooks/useDownloadStatus";
 import { useAuth } from "@/lib/auth-context";
 
 interface PendingDownload {

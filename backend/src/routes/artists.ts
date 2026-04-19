@@ -38,6 +38,65 @@ function safeDecodeURIComponent(str: string): string {
     }
 }
 
+async function applyLibraryOwnership(
+    artistName: string,
+    artistMbid: string | null,
+    albums: Array<any>
+) {
+    if (albums.length === 0) {
+        return albums;
+    }
+
+    const libraryArtist = await prisma.artist.findFirst({
+        where: {
+            OR: [
+                ...(artistMbid ? [{ mbid: artistMbid }] : []),
+                {
+                    name: {
+                        equals: artistName,
+                        mode: "insensitive",
+                    },
+                },
+            ],
+        },
+        select: {
+            albums: {
+                select: {
+                    rgMbid: true,
+                    title: true,
+                    tracks: {
+                        select: { id: true },
+                        take: 1,
+                    },
+                },
+            },
+        },
+    });
+
+    if (!libraryArtist) {
+        return albums;
+    }
+
+    const ownedRgMbids = new Set(
+        libraryArtist.albums
+            .filter((album) => album.tracks.length > 0)
+            .map((album) => album.rgMbid)
+            .filter((rgMbid) => rgMbid && !rgMbid.startsWith("temp-"))
+    );
+    const ownedTitles = new Set(
+        libraryArtist.albums
+            .filter((album) => album.tracks.length > 0)
+            .map((album) => album.title.toLowerCase())
+    );
+
+    return albums.map((album) => ({
+        ...album,
+        owned:
+            ownedRgMbids.has(album.rgMbid || album.id) ||
+            ownedTitles.has(album.title.toLowerCase()),
+    }));
+}
+
 const AI_SIMILAR_CACHE_TTL = 7 * 24 * 60 * 60; // 7 days
 
 // Interface for enriched similar artist
@@ -518,7 +577,13 @@ router.get("/discover/:nameOrMbid", async (req, res) => {
             const cached = await redisClient.get(cacheKey);
             if (cached) {
                 console.log(`[Discovery] Cache hit for artist: ${nameOrMbid}`);
-                return res.json(JSON.parse(cached));
+                const cachedResponse = JSON.parse(cached);
+                cachedResponse.albums = await applyLibraryOwnership(
+                    cachedResponse.name,
+                    cachedResponse.mbid || null,
+                    cachedResponse.albums || []
+                );
+                return res.json(cachedResponse);
             }
         } catch (err) {
             // Redis errors are non-critical
@@ -827,7 +892,7 @@ router.get("/discover/:nameOrMbid", async (req, res) => {
             listeners: parseInt(lastFmInfo?.stats?.listeners || "0"),
             playcount: parseInt(lastFmInfo?.stats?.playcount || "0"),
             url: lastFmInfo?.url || null,
-            albums: albums.map((album) => ({ ...album, owned: false })), // Mark all as not owned
+            albums: await applyLibraryOwnership(artistName, mbid, albums),
             topTracks: topTracks.map((track: any) => ({
                 id: `lastfm-${mbid || artistName}-${track.name}`,
                 title: track.name,

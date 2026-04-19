@@ -3,10 +3,11 @@
 import { Plus, Loader2 } from "lucide-react";
 import { PodcastPreview } from "../types";
 import { formatDuration, formatDate } from "../utils";
+import type { ColorPalette } from "@/hooks/useImageColor";
 
 interface PreviewEpisodesProps {
     previewData: PodcastPreview;
-    colors: any;
+    colors: ColorPalette | null;
     isSubscribing: boolean;
     onSubscribe: () => void;
 }

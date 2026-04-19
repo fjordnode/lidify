@@ -21,12 +21,8 @@ export class AudiobookCacheService {
     private coverCacheDir: string;
 
     constructor() {
-        // Store covers in: <MUSIC_PATH>/cover-cache/audiobooks/
-        this.coverCacheDir = path.join(
-            config.music.musicPath,
-            "cover-cache",
-            "audiobooks"
-        );
+        // Store covers in /data/cover-cache/audiobooks/ (writable volume, not read-only /music)
+        this.coverCacheDir = path.join("/data", "cover-cache", "audiobooks");
     }
 
     /**

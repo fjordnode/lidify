@@ -411,7 +411,8 @@ export class MusicScannerService {
      */
     private async isDiscoveryDownload(
         artistName: string,
-        albumTitle: string
+        albumTitle: string,
+        allowDiscoveryAlbumFallback: boolean = true
     ): Promise<boolean> {
         if (!artistName || !albumTitle) return false;
 
@@ -486,6 +487,11 @@ export class MusicScannerService {
                     console.log(`[Scanner]   Track artist "${normalizedArtist}" is likely featured on "${jobAlbum}"`);
                     return true;
                 }
+            }
+
+            if (!allowDiscoveryAlbumFallback) {
+                console.log(`[Scanner] Skipping DiscoveryAlbum fallback for main library path`);
+                return false;
             }
 
             // Pass 4: Check DiscoveryAlbum table (for already processed albums) by album title AND artist
@@ -811,6 +817,19 @@ export class MusicScannerService {
             });
         }
 
+        // Determine whether this scan should keep the album hidden from library views.
+        // If a later normal library scan finds an existing DISCOVER album, we may need to
+        // promote it back to LIBRARY below.
+        const isDiscoveryByPath = this.isDiscoveryPath(relativePath);
+        const allowDiscoveryAlbumFallback = isDiscoveryByPath || this.playlistOnlyMode;
+        const isDiscoveryByJob = await this.isDiscoveryDownload(
+            artistName,
+            albumTitle,
+            allowDiscoveryAlbumFallback
+        );
+        const isDiscoveryAlbum = isDiscoveryByPath || isDiscoveryByJob;
+        const shouldBeHiddenFromLibrary = isDiscoveryAlbum || this.playlistOnlyMode;
+
         if (!album) {
             // Try to find by release group MBID if available
             const albumMbid = metadata.common.musicbrainz_releasegroupid;
@@ -866,18 +885,6 @@ export class MusicScannerService {
                     console.log(`[Scanner] Using temp MBID for "${albumTitle}" (no MusicBrainz match)`);
                 }
 
-                // Determine if this is a discovery album:
-                // 1. Check file path (legacy: /music/discovery/ folder)
-                // 2. Check if artist+album matches a discovery download job
-                // NOTE: Removed "isDiscoveryArtist" cascade logic - it caused bugs where
-                //       legitimate library albums got permanently marked as DISCOVER
-                const isDiscoveryByPath = this.isDiscoveryPath(relativePath);
-                const isDiscoveryByJob = await this.isDiscoveryDownload(artistName, albumTitle);
-
-                const isDiscoveryAlbum = isDiscoveryByPath || isDiscoveryByJob;
-                // Playlist-only mode also uses DISCOVER location to hide from library
-                const shouldBeHiddenFromLibrary = isDiscoveryAlbum || this.playlistOnlyMode;
-
                 // Only create album if not found by MBID lookup above
                 if (!album) {
                     // rgMbid is guaranteed to be set at this point (either from metadata, MB lookup, or temp fallback)
@@ -924,10 +931,19 @@ export class MusicScannerService {
                     // Only create OwnedAlbum record and update lastSynced for library albums
                     // Skip for: discovery albums, playlist-only downloads (Soulseek for playlists)
                     if (!shouldBeHiddenFromLibrary) {
-                        await prisma.ownedAlbum.create({
-                            data: {
+                        await prisma.ownedAlbum.upsert({
+                            where: {
+                                artistId_rgMbid: {
+                                    artistId: artist.id,
+                                    rgMbid: albumMbidToUse,
+                                },
+                            },
+                            create: {
                                 rgMbid: albumMbidToUse,
                                 artistId: artist.id,
+                                source: "native_scan",
+                            },
+                            update: {
                                 source: "native_scan",
                             },
                         });
@@ -940,6 +956,37 @@ export class MusicScannerService {
                     }
                 }
             }
+        }
+
+        // Existing albums can get stuck as DISCOVER if they were first seen in playlist-only
+        // or discovery mode. Promote them when a normal library scan sees them again.
+        if (album && !shouldBeHiddenFromLibrary && album.location !== "LIBRARY") {
+            album = await prisma.album.update({
+                where: { id: album.id },
+                data: { location: "LIBRARY" },
+            });
+
+            await prisma.ownedAlbum.upsert({
+                where: {
+                    artistId_rgMbid: {
+                        artistId: artist.id,
+                        rgMbid: album.rgMbid,
+                    },
+                },
+                create: {
+                    artistId: artist.id,
+                    rgMbid: album.rgMbid,
+                    source: "native_scan",
+                },
+                update: {
+                    source: "native_scan",
+                },
+            });
+
+            await prisma.artist.update({
+                where: { id: artist.id },
+                data: { lastSynced: new Date() },
+            });
         }
 
         // Extract cover art if we have an extractor

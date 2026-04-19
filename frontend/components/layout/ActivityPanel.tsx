@@ -10,7 +10,6 @@ import {
     Bell,
     Download,
     History,
-    ChevronLeft,
     ChevronRight,
     X,
 } from "lucide-react";
@@ -52,7 +51,6 @@ export function ActivityPanel({
     const notificationBadge = unreadCount > 0 ? unreadCount : null;
     const activeBadge =
         activeDownloads.length > 0 ? activeDownloads.length : null;
-    const hasActivity = unreadCount > 0 || activeDownloads.length > 0;
 
     // Mobile/Tablet: Full-screen overlay
     if (isMobileOrTablet) {

@@ -57,7 +57,7 @@ export function AISimilarArtists({ artistId, artistName }: AISimilarArtistsProps
                     setModelName(data.model || null);
                 }
             }
-        } catch (err) {
+        } catch (_err) {
             // Ignore storage errors
         }
     }, [artistId]);
@@ -71,7 +71,7 @@ export function AISimilarArtists({ artistId, artistName }: AISimilarArtistsProps
                     messages,
                     model: modelName,
                 }));
-            } catch (err) {
+            } catch (_err) {
                 // Ignore storage errors
             }
         }
@@ -114,9 +114,12 @@ export function AISimilarArtists({ artistId, artistName }: AISimilarArtistsProps
                 text: response.text,
                 recommendations: response.recommendations,
             }]);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error("[AI Chat] Error:", err);
-            setError(err.data?.message || err.message || "Failed to get recommendations");
+            const errObj = err as Record<string, unknown> | undefined;
+            const dataMsg = errObj?.data && typeof errObj.data === "object" ? (errObj.data as Record<string, unknown>)?.message : undefined;
+            const message = (typeof dataMsg === "string" ? dataMsg : undefined) || (err instanceof Error ? err.message : "Failed to get recommendations");
+            setError(message);
         } finally {
             setLoading(false);
         }
@@ -140,7 +143,7 @@ export function AISimilarArtists({ artistId, artistName }: AISimilarArtistsProps
                 text: response.text,
                 recommendations: response.recommendations,
             }]);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error("[AI Chat] Error:", err);
             setMessages(prev => [...prev, {
                 role: "assistant",

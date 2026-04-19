@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -9,7 +10,6 @@ import { useAudio } from "@/lib/audio-context";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
 import { api } from "@/lib/api";
-import { cn } from "@/utils/cn";
 import {
     Music,
     Play,
@@ -131,13 +131,16 @@ export default function QueuePage() {
                             <div className="flex items-center gap-4 p-4 bg-[#1a1a1a] border-l-2 border-purple-500">
                                 <div className="relative flex-shrink-0">
                                     {currentTrack.album?.coverArt ? (
-                                        <img
+                                        <Image
                                             src={api.getCoverArtUrl(
                                                 currentTrack.album.coverArt,
                                                 100
                                             )}
                                             alt={currentTrack.album.title}
-                                            className="w-16 h-16 rounded-sm"
+                                            width={64}
+                                            height={64}
+                                            unoptimized
+                                            className="rounded-sm"
                                         />
                                     ) : (
                                         <div className="w-16 h-16 bg-[#0a0a0a] rounded-sm flex items-center justify-center">
@@ -199,14 +202,17 @@ export default function QueuePage() {
                                             {/* Album Art */}
                                             <div className="flex-shrink-0">
                                                 {track.album?.coverArt ? (
-                                                    <img
+                                                    <Image
                                                         src={api.getCoverArtUrl(
                                                             track.album
                                                                 .coverArt,
                                                             100
                                                         )}
                                                         alt={track.album.title}
-                                                        className="w-12 h-12 rounded-sm"
+                                                        width={48}
+                                                        height={48}
+                                                        unoptimized
+                                                        className="rounded-sm"
                                                     />
                                                 ) : (
                                                     <div className="w-12 h-12 bg-[#0a0a0a] rounded-sm flex items-center justify-center">
@@ -313,13 +319,16 @@ export default function QueuePage() {
                                         {/* Album Art */}
                                         <div className="flex-shrink-0">
                                             {track.album?.coverArt ? (
-                                                <img
+                                                <Image
                                                     src={api.getCoverArtUrl(
                                                         track.album.coverArt,
                                                         100
                                                     )}
                                                     alt={track.album.title}
-                                                    className="w-12 h-12 rounded-sm"
+                                                    width={48}
+                                                    height={48}
+                                                    unoptimized
+                                                    className="rounded-sm"
                                                 />
                                             ) : (
                                                 <div className="w-12 h-12 bg-[#0a0a0a] rounded-sm flex items-center justify-center">

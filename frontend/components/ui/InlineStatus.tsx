@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { Check, X, Loader2, AlertCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Check, X, Loader2 } from "lucide-react";
 import { cn } from "@/utils/cn";
 
 export type StatusType = "idle" | "loading" | "success" | "error";
@@ -30,12 +30,11 @@ export function InlineStatus({
     onClear,
 }: InlineStatusProps) {
     const [visible, setVisible] = useState(status !== "idle");
-    const prevStatusRef = useRef(status);
-    
-    // Sync visible state with status changes (without useEffect)
-    // eslint-disable-next-line react-hooks/rules-of-hooks, react-hooks/refs -- Intentional ref tracking pattern
-    if (status !== prevStatusRef.current) {
-        prevStatusRef.current = status;
+    const [prevStatus, setPrevStatus] = useState(status);
+
+    // Sync visible state with status changes (React-approved setState during render)
+    if (status !== prevStatus) {
+        setPrevStatus(status);
         const shouldBeVisible = status !== "idle";
         if (shouldBeVisible !== visible) {
             setVisible(shouldBeVisible);
@@ -132,7 +131,7 @@ export function ConnectionTestButton({
     className,
     disabled,
 }: ConnectionTestButtonProps) {
-    const { status, message, setSuccess, setError, setLoading, reset, props } = useInlineStatus();
+    const { status, setSuccess, setError, setLoading, props } = useInlineStatus();
 
     const handleTest = async () => {
         setLoading("Testing...");
@@ -145,8 +144,9 @@ export function ConnectionTestButton({
             } else {
                 setSuccess("Connected");
             }
-        } catch (err: any) {
-            setError(err.message || "Failed");
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : "Failed";
+            setError(message);
         }
     };
 
@@ -192,8 +192,9 @@ export function SaveButton({
         try {
             await onSave();
             setSuccess("Saved");
-        } catch (err: any) {
-            setError(err.message || "Failed");
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : "Failed";
+            setError(message);
         }
     };
 

@@ -3,7 +3,6 @@
 import { useState, memo, useCallback } from "react";
 import Image from "next/image";
 import { Track } from "../types";
-import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PlaylistSelector } from "@/components/ui/PlaylistSelector";
 import { GradientSpinner } from "@/components/ui/GradientSpinner";

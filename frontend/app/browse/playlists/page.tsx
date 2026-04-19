@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { Search, Loader2, Music2, Link2, X, ChevronRight } from "lucide-react";
 import { api } from "@/lib/api";
 import { useToast } from "@/lib/toast-context";
@@ -364,10 +365,12 @@ export default function BrowsePlaylistsPage() {
         >
             <div className="relative aspect-square mb-3 rounded-md overflow-hidden bg-[#282828] shadow-lg">
                 {item.imageUrl ? (
-                    <img
+                    <Image
                         src={item.imageUrl}
                         alt={item.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        fill
+                        unoptimized
+                        className="object-cover group-hover:scale-105 transition-transform duration-300"
                     />
                 ) : (
                     <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#AD47FF]/30 to-[#AD47FF]/10">
@@ -423,10 +426,12 @@ export default function BrowsePlaylistsPage() {
             className="group cursor-pointer relative aspect-square rounded-lg overflow-hidden"
         >
             {genre.imageUrl ? (
-                <img
+                <Image
                     src={genre.imageUrl}
                     alt={genre.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    fill
+                    unoptimized
+                    className="object-cover group-hover:scale-105 transition-transform duration-300"
                 />
             ) : (
                 <div className="w-full h-full bg-gradient-to-br from-[#AD47FF] to-brand" />
@@ -446,10 +451,12 @@ export default function BrowsePlaylistsPage() {
             className="group cursor-pointer relative aspect-square rounded-lg overflow-hidden"
         >
             {category.imageUrl ? (
-                <img
+                <Image
                     src={category.imageUrl}
                     alt={category.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    fill
+                    unoptimized
+                    className="object-cover group-hover:scale-105 transition-transform duration-300"
                 />
             ) : (
                 <div className="w-full h-full bg-gradient-to-br from-spotify to-[#191414]" />

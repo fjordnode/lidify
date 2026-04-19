@@ -1,7 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
-
 /**
  * GalaxyBackground Component
  *
@@ -13,6 +11,33 @@ import { useMemo } from "react";
  * - Customizable colors from Vibrant.js for artist/album pages
  */
 
+// Generate particle positions at module level (stable across renders, no purity issues)
+function generateParticleLayer(count: number, bottomMin: number, bottomRange: number, durationBase: number, durationRange: number, delayRange: number) {
+    return Array.from({ length: count }, () => ({
+        left: Math.random() * 100,
+        bottom: bottomMin + Math.random() * bottomRange,
+        duration: durationBase + Math.random() * durationRange,
+        delay: Math.random() * delayRange,
+    }));
+}
+
+const PARTICLES = {
+    bottom: generateParticleLayer(30, 0, 30, 3, 4, 3),
+    mid: generateParticleLayer(20, 30, 30, 4, 3, 2),
+    top: generateParticleLayer(12, 60, 40, 5, 3, 2),
+    white: generateParticleLayer(18, 0, 50, 2, 3, 2),
+    accent: generateParticleLayer(10, 0, 40, 4, 4, 3),
+};
+
+function hexToRgb(hex: string) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+    } : null;
+}
+
 interface GalaxyBackgroundProps {
     /** Primary color extracted from Vibrant.js (e.g., "#8B4789") */
     primaryColor?: string;
@@ -21,55 +46,9 @@ interface GalaxyBackgroundProps {
 }
 
 export function GalaxyBackground({ primaryColor, secondaryColor }: GalaxyBackgroundProps = {}) {
-    // Convert hex color to RGB values for opacity control
-    const hexToRgb = (hex: string) => {
-        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-        return result ? {
-            r: parseInt(result[1], 16),
-            g: parseInt(result[2], 16),
-            b: parseInt(result[3], 16)
-        } : null;
-    };
-
     // Use provided colors or default purple theme
     const baseColor = primaryColor ? hexToRgb(primaryColor) : null;
     const accentColor = secondaryColor ? hexToRgb(secondaryColor) : null;
-
-    // Generate particle positions once on mount using useMemo with empty deps
-    // This ensures stable positions across re-renders while satisfying React Compiler
-    const particles = useMemo(() => ({
-        bottom: Array(30).fill(0).map(() => ({
-            left: Math.random() * 100,
-            bottom: Math.random() * 30,
-            duration: 3 + Math.random() * 4,
-            delay: Math.random() * 3,
-        })),
-        mid: Array(20).fill(0).map(() => ({
-            left: Math.random() * 100,
-            bottom: 30 + Math.random() * 30,
-            duration: 4 + Math.random() * 3,
-            delay: Math.random() * 2,
-        })),
-        top: Array(12).fill(0).map(() => ({
-            left: Math.random() * 100,
-            bottom: 60 + Math.random() * 40,
-            duration: 5 + Math.random() * 3,
-            delay: Math.random() * 2,
-        })),
-        white: Array(18).fill(0).map(() => ({
-            left: Math.random() * 100,
-            bottom: Math.random() * 50,
-            duration: 2 + Math.random() * 3,
-            delay: Math.random() * 2,
-        })),
-        accent: Array(10).fill(0).map(() => ({
-            left: Math.random() * 100,
-            bottom: Math.random() * 40,
-            duration: 4 + Math.random() * 4,
-            delay: Math.random() * 3,
-        })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }), []);
 
     return (
         <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
@@ -93,7 +72,7 @@ export function GalaxyBackground({ primaryColor, secondaryColor }: GalaxyBackgro
 
             {/* Floating Star Particles - more concentrated at bottom */}
             {/* Bottom layer - most prominent */}
-            {particles.bottom.map((p, i) => (
+            {PARTICLES.bottom.map((p, i) => (
                 <div
                     key={`bottom-purple-${i}`}
                     className={baseColor ? "absolute w-0.5 h-0.5 rounded-full blur-[0.4px]" : "absolute w-0.5 h-0.5 bg-purple-300/35 rounded-full blur-[0.4px]"}
@@ -110,7 +89,7 @@ export function GalaxyBackground({ primaryColor, secondaryColor }: GalaxyBackgro
             ))}
 
             {/* Middle layer - medium prominence */}
-            {particles.mid.map((p, i) => (
+            {PARTICLES.mid.map((p, i) => (
                 <div
                     key={`mid-purple-${i}`}
                     className={baseColor ? "absolute w-0.5 h-0.5 rounded-full blur-[0.4px]" : "absolute w-0.5 h-0.5 bg-indigo-300/25 rounded-full blur-[0.4px]"}
@@ -127,7 +106,7 @@ export function GalaxyBackground({ primaryColor, secondaryColor }: GalaxyBackgro
             ))}
 
             {/* Top layer - subtle and sparse */}
-            {particles.top.map((p, i) => (
+            {PARTICLES.top.map((p, i) => (
                 <div
                     key={`top-purple-${i}`}
                     className={baseColor ? "absolute w-0.5 h-0.5 rounded-full blur-[0.4px]" : "absolute w-0.5 h-0.5 bg-violet-300/15 rounded-full blur-[0.4px]"}
@@ -144,7 +123,7 @@ export function GalaxyBackground({ primaryColor, secondaryColor }: GalaxyBackgro
             ))}
 
             {/* Accent white/blue stars scattered throughout */}
-            {particles.white.map((p, i) => (
+            {PARTICLES.white.map((p, i) => (
                 <div
                     key={`white-star-${i}`}
                     className="absolute w-0.5 h-0.5 bg-white/30 rounded-full blur-[0.3px]"
@@ -158,7 +137,7 @@ export function GalaxyBackground({ primaryColor, secondaryColor }: GalaxyBackgro
             ))}
 
             {/* Very subtle accent particles - use secondary color if available */}
-            {particles.accent.map((p, i) => (
+            {PARTICLES.accent.map((p, i) => (
                 <div
                     key={`blue-accent-${i}`}
                     className={accentColor ? "absolute w-0.5 h-0.5 rounded-full blur-[0.4px]" : "absolute w-0.5 h-0.5 bg-blue-300/25 rounded-full blur-[0.4px]"}
