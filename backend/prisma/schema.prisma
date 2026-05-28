@@ -193,7 +193,8 @@ model Track {
   searchVector Unsupported("tsvector")?
 
   // Native file system fields (required for self-contained system)
-  filePath     String   @unique // Relative path: "Artist/Album/track.flac"
+  filePath     String   // Relative path within fileStorage root: "Artist/Album/track.flac"
+  fileStorage  String   @default("music") // music or download; disambiguates identical relative paths
   fileModified DateTime // mtime for change detection
   fileSize     Int // File size in bytes
 
@@ -259,7 +260,9 @@ model Track {
   transcodedFiles TranscodedFile[]
   moodBuckets     MoodBucket[]
 
+  @@unique([fileStorage, filePath])
   @@index([albumId])
+  @@index([fileStorage])
   @@index([fileModified])
   @@index([title])
   @@index([searchVector], type: Gin)
