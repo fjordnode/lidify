@@ -51,12 +51,14 @@ interface ScanResult {
     tracksAdded: number;
     tracksUpdated: number;
     tracksRemoved: number;
+    affectedArtistIds: string[];
     errors: Array<{ file: string; error: string }>;
     duration: number;
 }
 
 export class MusicScannerService {
-    private scanQueue = new PQueue({ concurrency: 10 });
+    // Process files serially so same-artist/same-album creates cannot race into duplicates.
+    private scanQueue = new PQueue({ concurrency: 1 });
     private progressCallback?: (progress: ScanProgress) => void;
     private coverArtExtractor?: CoverArtExtractor;
     // When true: marks albums as DISCOVER (hidden from library), skips OwnedAlbum, skips lastSynced
@@ -85,14 +87,19 @@ export class MusicScannerService {
             tracksAdded: 0,
             tracksUpdated: 0,
             tracksRemoved: 0,
+            affectedArtistIds: [],
             errors: [],
             duration: 0,
         };
+        const affectedArtistIds = new Set<string>();
 
         console.log(`Starting library scan: ${musicPath}`);
 
         const settings = await prisma.systemSettings.findFirst();
         const downloadPath = settings?.downloadPath || "/soulseek-downloads";
+        const fileStorage = path.resolve(basePathForDb) === path.resolve(downloadPath)
+            ? "download"
+            : "music";
 
         const excludedDirs: string[] = [];
         this.excludedRelativePrefixes = [];
@@ -101,7 +108,12 @@ export class MusicScannerService {
         // inside the main library (e.g. /music/soulseek-downloads), a normal library scan can
         // accidentally ingest download-only files as owned library content. Exclude that nested
         // mirror from full library scans and keep a defensive prefix guard below.
-        if (!this.playlistOnlyMode) {
+        const canRunOrphanCleanup =
+            !this.playlistOnlyMode &&
+            fileStorage === "music" &&
+            path.resolve(musicPath) === path.resolve(basePathForDb);
+
+        if (canRunOrphanCleanup) {
             const nestedDownloadDir = path.join(
                 musicPath,
                 path.basename(downloadPath)
@@ -132,10 +144,17 @@ export class MusicScannerService {
 
         // Step 2: Get existing tracks from database
         const existingTracks = await prisma.track.findMany({
+            where: { fileStorage },
             select: {
                 id: true,
                 filePath: true,
+                fileStorage: true,
                 fileModified: true,
+                album: {
+                    select: {
+                        artistId: true,
+                    },
+                },
             },
         });
 
@@ -178,11 +197,14 @@ export class MusicScannerService {
                     }
 
                     // Extract metadata and update database
-                    await this.processAudioFile(
+                    const affectedArtistId = await this.processAudioFile(
                         audioFile,
                         relativePath,
                         basePathForDb
                     );
+                    if (affectedArtistId) {
+                        affectedArtistIds.add(affectedArtistId);
+                    }
 
                     // Increment counters only after successful insert/update
                     if (isUpdate) {
@@ -208,15 +230,29 @@ export class MusicScannerService {
 
         await this.scanQueue.onIdle();
 
+        const sparseScanCleanupThreshold = 0.5;
+        const sparseFullScanWithExistingTracks =
+            canRunOrphanCleanup &&
+            existingTracks.length > 0 &&
+            audioFiles.length < existingTracks.length * sparseScanCleanupThreshold;
+        if (sparseFullScanWithExistingTracks) {
+            const message =
+                `Full library scan found ${audioFiles.length} audio file(s) while ` +
+                `${existingTracks.length} track(s) exist; skipping orphan cleanup to avoid ` +
+                `mass deletion from an unavailable or partially mounted library.`;
+            console.warn(`[Scanner] ${message}`);
+            result.errors.push({ file: musicPath, error: message });
+        }
+
         // Step 4-6: Remove orphaned tracks/albums/artists
-        // SKIP for playlistOnlyMode (partial scans like /soulseek-downloads)
-        // These scans should ONLY add tracks, never remove from other paths
-        if (!this.playlistOnlyMode) {
+        // Only full music-root scans are allowed to delete missing rows. Partial scans,
+        // download-storage scans, and suspicious sparse full scans should only add/update.
+        if (canRunOrphanCleanup && !sparseFullScanWithExistingTracks) {
             // Step 4: Remove tracks for files that no longer exist
             // IMPORTANT: Check BOTH musicPath AND downloadPath before deleting
             // Tracks can exist in either location
             const scannedPaths = new Set(
-                audioFiles.map((f) => path.relative(musicPath, f))
+                audioFiles.map((f) => path.relative(basePathForDb, f))
             );
 
             // Only remove tracks that don't exist in EITHER location
@@ -236,6 +272,10 @@ export class MusicScannerService {
             }
 
             if (tracksToRemove.length > 0) {
+                for (const track of tracksToRemove) {
+                    affectedArtistIds.add(track.album.artistId);
+                }
+
                 await prisma.track.deleteMany({
                     where: {
                         id: { in: tracksToRemove.map((t) => t.id) },
@@ -279,10 +319,11 @@ export class MusicScannerService {
                 });
             }
         } else {
-            console.log(`Skipping orphan cleanup (playlist-only mode)`);
+            console.log(`Skipping orphan cleanup (partial, download, or playlist-only scan)`);
         }
 
         result.duration = Date.now() - startTime;
+        result.affectedArtistIds = Array.from(affectedArtistIds);
         console.log(
             `Scan complete: +${result.tracksAdded} ~${result.tracksUpdated} -${result.tracksRemoved} (${result.duration}ms)`
         );
@@ -331,12 +372,12 @@ export class MusicScannerService {
             }
         }
 
-        // LOWER PRIORITY: These might be band names, so only split if the result
-        // looks like a complete artist name (not truncated)
+        // LOWER PRIORITY: Only split on "with", which is usually additive featuring credit.
+        // Do NOT split on "and" here. Duo/score acts like "Trent Reznor and Atticus Ross"
+        // and band names like "The Naked and Famous" should stay intact.
         // NOTE: Removed " & " - too many false positives (Above & Beyond, Nick Cave & the Bad Seeds, etc.)
         // NOTE: Removed ", " - false positives like "Tyler, The Creator", "Earth, Wind & Fire"
         const ambiguousPatterns = [
-            { pattern: / and /i, name: "and" }, // "The Naked and Famous" shouldn't split
             { pattern: / with /i, name: "with" },
         ];
 
@@ -641,7 +682,7 @@ export class MusicScannerService {
         absolutePath: string,
         relativePath: string,
         musicPath: string
-    ): Promise<void> {
+    ): Promise<string | null> {
         // Extract metadata - if parsing fails due to malformed picture data, retry without covers
         let metadata;
         let skipCoverExtraction = false;
@@ -707,12 +748,15 @@ export class MusicScannerService {
         // Sanitize each genre string to remove null bytes
         const genres = (metadata.common.genre || []).map(g => sanitizeMetadataString(g)).filter(g => g.length > 0);
 
-        // ALWAYS extract primary artist first - this handles both:
-        // - Featured artists: "Artist A feat. Artist B" -> "Artist A"  
-        // - Collaborations: "Artist A & Artist B" -> "Artist A"
-        // Band names like "Of Mice & Men" are preserved because extractPrimaryArtist
-        // only splits on " feat.", " ft.", " featuring ", " & ", etc. (with spaces)
-        const extractedPrimaryArtist = this.extractPrimaryArtist(rawArtistName);
+        // Prefer albumartist as-is when present. Album artist tags usually represent the
+        // intended canonical artist for the whole release, including duo/score projects
+        // like "Trent Reznor and Atticus Ross". Only collapse featured artists when we
+        // have to fall back to per-track artist tags.
+        const hasAlbumArtist =
+            !!sanitizeMetadataString(metadata.common.albumartist);
+        const extractedPrimaryArtist = hasAlbumArtist
+            ? rawArtistName
+            : this.extractPrimaryArtist(rawArtistName);
         let artistName = extractedPrimaryArtist;
 
         // Canonicalize Various Artists variations (VA, V.A., <Various Artists>, etc.)
@@ -972,7 +1016,7 @@ export class MusicScannerService {
                                 // skip adding this track (it's already in the main library)
                                 if (this.playlistOnlyMode && existingByTitle.location === "LIBRARY") {
                                     console.log(`[Scanner] Skipping track from existing LIBRARY album "${existingByTitle.title}" (playlist mode)`);
-                                    return;
+                                    return null;
                                 }
                                 console.log(`[Scanner] Album already exists, reusing: "${existingByTitle.title}"`);
                                 album = existingByTitle;
@@ -1120,12 +1164,23 @@ export class MusicScannerService {
         if (existingTrackInAlbum && this.playlistOnlyMode) {
             // In playlist mode, skip adding duplicate tracks to existing library albums
             console.log(`[Scanner] Skipping duplicate track "${title}" in album "${albumTitle}" (playlist mode)`);
-            return;
+            return null;
         }
+
+        const settings = await prisma.systemSettings.findFirst();
+        const downloadPath = settings?.downloadPath || "/soulseek-downloads";
+        const fileStorage = path.resolve(musicPath) === path.resolve(downloadPath)
+            ? "download"
+            : "music";
 
         // Upsert track
         await prisma.track.upsert({
-            where: { filePath: relativePath },
+            where: {
+                fileStorage_filePath: {
+                    fileStorage,
+                    filePath: relativePath,
+                },
+            },
             create: {
                 albumId: album.id,
                 title,
@@ -1134,6 +1189,7 @@ export class MusicScannerService {
                 duration,
                 mime,
                 filePath: relativePath,
+                fileStorage,
                 fileModified: stats.mtime,
                 fileSize: stats.size,
             },
@@ -1148,5 +1204,7 @@ export class MusicScannerService {
                 fileSize: stats.size,
             },
         });
+
+        return artist.id;
     }
 }

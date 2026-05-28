@@ -17,12 +17,14 @@ export interface ScanJobData {
     lidarrAlbumMbid?: string; // Release MBID from Lidarr (will be converted to Release Group MBID)
     lidarrArtistName?: string; // Artist name for matching
     lidarrAlbumTitle?: string; // Album title for matching
+    playlistOnlyMode?: boolean; // Override inferred download-path behavior for direct library downloads
 }
 
 export interface ScanJobResult {
     tracksAdded: number;
     tracksUpdated: number;
     tracksRemoved: number;
+    affectedArtistIds?: string[];
     errors: Array<{ file: string; error: string }>;
     duration: number;
 }
@@ -43,6 +45,7 @@ export async function processScan(
         lidarrAlbumMbid,
         lidarrArtistName,
         lidarrAlbumTitle,
+        playlistOnlyMode: playlistOnlyModeOverride,
     } = job.data;
 
     console.log(`\n═══════════════════════════════════════════════`);
@@ -76,10 +79,14 @@ export async function processScan(
     const { prisma } = await import("../../utils/db");
     const settings = await prisma.systemSettings.findFirst();
     const downloadPath = settings?.downloadPath || "/soulseek-downloads";
-    const playlistOnlyMode =
+    const inferredPlaylistOnlyMode =
         scanPath === downloadPath ||
         scanPath.startsWith(downloadPath) ||
         scanPath.includes("soulseek-download");
+    const playlistOnlyMode =
+        typeof playlistOnlyModeOverride === "boolean"
+            ? playlistOnlyModeOverride
+            : inferredPlaylistOnlyMode;
 
     // Create scanner with progress callback and cover cache path
     const scanner = new MusicScannerService((progress) => {
@@ -102,6 +109,24 @@ export async function processScan(
         console.log(
             `[ScanJob ${job.id}] Scan complete: +${result.tracksAdded} ~${result.tracksUpdated} -${result.tracksRemoved}`
         );
+
+        if (result.affectedArtistIds.length > 0) {
+            try {
+                const { redisClient } = await import("../../utils/redis");
+                const cacheKeys = result.affectedArtistIds.map(
+                    (artistId) => `artist-top-tracks-processed:${artistId}`
+                );
+                await redisClient.del(cacheKeys);
+                console.log(
+                    `[ScanJob ${job.id}] Invalidated top track cache for ${result.affectedArtistIds.length} artist(s)`
+                );
+            } catch (error) {
+                console.error(
+                    `[ScanJob ${job.id}] Failed to invalidate top track cache:`,
+                    error
+                );
+            }
+        }
 
         // Send ntfy push notification for new music (triggers Symfonium sync via Tasker)
         if (result.tracksAdded > 0) {
