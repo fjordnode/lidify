@@ -8,6 +8,7 @@ import path from "path";
 import { requireAuth } from "../middleware/auth";
 import { soulseekService } from "../services/soulseek";
 import { getSystemSettings } from "../utils/systemSettings";
+import { scanQueue } from "../workers/queues";
 
 const router = Router();
 
@@ -314,9 +315,19 @@ router.post(
             );
 
             if (result.success) {
+                const albumScanPath = path.dirname(destPath);
+                const scanJob = await scanQueue.add("scan", {
+                    userId: req.user!.id,
+                    musicPath: albumScanPath,
+                    basePath: downloadBase,
+                    source: "soulseek_direct",
+                    playlistOnlyMode: false,
+                });
+
                 res.json({
                     success: true,
                     filePath: destPath,
+                    scanJobId: scanJob.id,
                 });
             } else {
                 res.status(404).json({

@@ -6,6 +6,8 @@
  */
 
 import { Router } from "express";
+import fs from "fs";
+import path from "path";
 import { prisma } from "../utils/db";
 import { scanQueue } from "../workers/queues";
 import { discoverWeeklyService } from "../services/discoverWeekly";
@@ -14,6 +16,89 @@ import { queueCleaner } from "../jobs/queueCleaner";
 import { getSystemSettings } from "../utils/systemSettings";
 
 const router = Router();
+
+function collectStringValues(...values: any[]): string[] {
+    return values
+        .flat(Infinity)
+        .filter((value): value is string => typeof value === "string")
+        .map((value) => value.trim())
+        .filter(Boolean);
+}
+
+function getCommonAncestorDirectory(pathsToCompare: string[]): string | null {
+    if (pathsToCompare.length === 0) return null;
+
+    const splitPaths = pathsToCompare.map((candidate) =>
+        path.resolve(candidate).split(path.sep).filter(Boolean)
+    );
+    const shortestLength = Math.min(...splitPaths.map((parts) => parts.length));
+    const commonParts: string[] = [];
+
+    for (let i = 0; i < shortestLength; i += 1) {
+        const segment = splitPaths[0][i];
+        if (splitPaths.every((parts) => parts[i] === segment)) {
+            commonParts.push(segment);
+        } else {
+            break;
+        }
+    }
+
+    if (commonParts.length === 0) return null;
+    return `${path.sep}${commonParts.join(path.sep)}`;
+}
+
+function resolveImportedAlbumScanPath(payload: any, musicRoot: string): string | null {
+    const normalizedMusicRoot = path.resolve(musicRoot);
+
+    const dirCandidates = collectStringValues(
+        payload.album?.path,
+        payload.album?.folderPath,
+        payload.release?.path,
+        payload.release?.folderPath,
+        payload.importedPath,
+        payload.path
+    )
+        .map((candidate) => path.resolve(candidate))
+        .filter(
+            (candidate) =>
+                candidate !== normalizedMusicRoot &&
+                candidate.startsWith(`${normalizedMusicRoot}${path.sep}`) &&
+                fs.existsSync(candidate) &&
+                fs.statSync(candidate).isDirectory()
+        );
+
+    const trackFilePaths = collectStringValues(
+        payload.trackFile?.path,
+        payload.trackFiles?.map((trackFile: any) => trackFile?.path),
+        payload.tracks?.map((track: any) => track?.path),
+        payload.tracks?.map((track: any) => track?.trackFile?.path)
+    )
+        .map((candidate) => path.resolve(candidate))
+        .filter(
+            (candidate) =>
+                candidate.startsWith(`${normalizedMusicRoot}${path.sep}`) &&
+                fs.existsSync(candidate)
+        );
+
+    if (trackFilePaths.length > 0) {
+        const commonDir = getCommonAncestorDirectory(trackFilePaths);
+        if (
+            commonDir &&
+            commonDir !== normalizedMusicRoot &&
+            commonDir.startsWith(`${normalizedMusicRoot}${path.sep}`) &&
+            fs.existsSync(commonDir) &&
+            fs.statSync(commonDir).isDirectory()
+        ) {
+            dirCandidates.push(commonDir);
+        }
+    }
+
+    if (dirCandidates.length === 0) {
+        return null;
+    }
+
+    return dirCandidates.sort((a, b) => a.length - b.length)[0];
+}
 
 // POST /webhooks/lidarr - Handle Lidarr webhooks
 router.post("/lidarr", async (req, res) => {
@@ -121,6 +206,8 @@ async function handleGrab(payload: any) {
  * Handle Download event (download complete + imported)
  */
 async function handleDownload(payload: any) {
+    const settings = await getSystemSettings();
+    const musicRoot = settings?.musicPath || "/music";
     const downloadId = payload.downloadId;
     const albumTitle = payload.album?.title || payload.albums?.[0]?.title;
     const artistName = payload.artist?.name;
@@ -157,6 +244,7 @@ async function handleDownload(payload: any) {
         albumTitle,
         lidarrAlbumId
     );
+    const scanPath = resolveImportedAlbumScanPath(payload, musicRoot);
 
     if (result.jobId) {
         // Check if this is part of a download batch (artist download)
@@ -178,10 +266,18 @@ async function handleDownload(payload: any) {
             }
         } else if (!result.batchId) {
             // Single album download (not part of discovery batch)
-            console.log(`   Triggering library scan with MBID: ${albumMbid}...`);
+            console.log(
+                `   Triggering library scan with MBID: ${albumMbid}${scanPath ? ` at ${scanPath}` : ""}...`
+            );
             await scanQueue.add("scan", {
                 type: "full",
                 source: "lidarr-import",
+                ...(scanPath
+                    ? {
+                          musicPath: scanPath,
+                          basePath: musicRoot,
+                      }
+                    : {}),
                 lidarrAlbumMbid: albumMbid,
                 lidarrArtistName: artistName,
                 lidarrAlbumTitle: albumTitle,
@@ -191,10 +287,18 @@ async function handleDownload(payload: any) {
     } else {
         // No job found - this might be an external download not initiated by us
         // Still trigger a scan to pick up the new music
-        console.log(`   No matching job, triggering scan with MBID: ${albumMbid}...`);
+        console.log(
+            `   No matching job, triggering scan with MBID: ${albumMbid}${scanPath ? ` at ${scanPath}` : ""}...`
+        );
         await scanQueue.add("scan", {
             type: "full",
             source: "lidarr-import-external",
+            ...(scanPath
+                ? {
+                      musicPath: scanPath,
+                      basePath: musicRoot,
+                  }
+                : {}),
             lidarrAlbumMbid: albumMbid,
             lidarrArtistName: artistName,
             lidarrAlbumTitle: albumTitle,

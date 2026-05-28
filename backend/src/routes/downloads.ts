@@ -289,6 +289,13 @@ async function processDownload(
     }
 
     if (type === "album") {
+        const metadata = (job.metadata as any) || {};
+        const effectiveRootFolderPath =
+            metadata.rootFolderPath || rootFolderPath || "/music";
+        const isDiscoveryDownload =
+            metadata.downloadType === "discovery" ||
+            effectiveRootFolderPath.includes("/discovery");
+
         // For albums, use the simple download manager
         let parsedArtist = artistName;
         let parsedAlbum = albumTitle;
@@ -312,7 +319,9 @@ async function processDownload(
             parsedArtist,
             parsedAlbum,
             mbid,
-            job.userId
+            job.userId,
+            isDiscoveryDownload,
+            effectiveRootFolderPath
         );
 
         if (!result.success) {
@@ -775,14 +784,36 @@ router.post("/keep-track", async (req, res) => {
         // If Lidarr enabled, create job to download full album to permanent library
         const lidarrEnabled = await lidarrService.isEnabled();
         if (lidarrEnabled) {
+            const subject = `${discoveryTrack.discoveryAlbum.artistName} - ${discoveryTrack.discoveryAlbum.albumTitle}`;
             const job = await prisma.downloadJob.create({
                 data: {
                     userId,
-                    subject: `${discoveryTrack.discoveryAlbum.albumTitle} by ${discoveryTrack.discoveryAlbum.artistName}`,
+                    subject,
                     type: "album",
                     targetMbid: discoveryTrack.discoveryAlbum.rgMbid,
                     status: "pending",
+                    metadata: {
+                        downloadType: "library",
+                        rootFolderPath: "/music",
+                        artistName: discoveryTrack.discoveryAlbum.artistName,
+                        albumTitle: discoveryTrack.discoveryAlbum.albumTitle,
+                    },
                 },
+            });
+
+            processDownload(
+                job.id,
+                "album",
+                discoveryTrack.discoveryAlbum.rgMbid,
+                subject,
+                "/music",
+                discoveryTrack.discoveryAlbum.artistName,
+                discoveryTrack.discoveryAlbum.albumTitle
+            ).catch((error) => {
+                console.error(
+                    `Keep-track download processing failed for job ${job.id}:`,
+                    error
+                );
             });
 
             return res.json({

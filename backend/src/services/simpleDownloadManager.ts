@@ -51,7 +51,8 @@ class SimpleDownloadManager {
         albumTitle: string,
         albumMbid: string,
         userId: string,
-        isDiscovery: boolean = false
+        isDiscovery: boolean = false,
+        rootFolderPath: string = isDiscovery ? "/music/discovery" : "/music"
     ): Promise<{ success: boolean; correlationId?: string; error?: string; replacedWith?: string }> {
         console.log(`\n Starting download: ${artistName} - ${albumTitle}${isDiscovery ? " (discovery)" : ""}`);
         console.log(`   Job ID: ${jobId}`);
@@ -117,7 +118,7 @@ class SimpleDownloadManager {
                 albumMbid,
                 artistName,
                 albumTitle,
-                "/music",
+                rootFolderPath,
                 artistMbid,
                 isDiscovery
             );
@@ -164,6 +165,7 @@ class SimpleDownloadManager {
                         albumMbid, // Original requested MBID
                         lidarrMbid: actualLidarrMbid, // Actual Lidarr MBID (may differ)
                         downloadType: existingMetadata.downloadType || "library",
+                        rootFolderPath,
                         startedAt: now.toISOString(), // Backup in metadata for timeout tracking
                     },
                 },
@@ -999,7 +1001,9 @@ class SimpleDownloadManager {
                 artistName || "Unknown Artist",
                 nextAlbum.title,
                 albumMbid,
-                job.userId
+                job.userId,
+                metadata.downloadType === "discovery" || !!job.discoveryBatchId,
+                metadata.rootFolderPath || (metadata.downloadType === "discovery" ? "/music/discovery" : "/music")
             );
 
             if (result.success) {
@@ -1212,9 +1216,9 @@ class SimpleDownloadManager {
                 ? new Date(metadata.startedAt)
                 : job.createdAt;
 
-            // Skip Soulseek jobs - they complete immediately with direct soulseek-ts
-            // Old SLSKD jobs used source: "slskd", new direct jobs use source: "soulseek_direct"
-            if (metadata?.source === "slskd" || metadata?.source === "soulseek_direct") {
+            // Skip Soulseek jobs - they complete immediately with direct soulseek-ts.
+            // Keep legacy aliases so old jobs do not get marked stale after deploys.
+            if (["slskd", "soulseek_direct", "soulseek-direct"].includes(metadata?.source)) {
                 console.log(`   ${job.subject}: Soulseek download, skipping stale check`);
                 sessionLog('CLEANUP', `Skipping Soulseek job: ${job.subject} (status: ${job.status})`);
                 continue;
