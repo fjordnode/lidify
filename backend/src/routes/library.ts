@@ -66,6 +66,49 @@ const applyCoverArtCorsHeaders = (res: Response, origin?: string) => {
     res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
 };
 
+const resolvePathWithinRoot = (root: string, filePathValue: string): string | null => {
+    const normalizedFilePath = filePathValue.replace(/\\/g, "/");
+    const normalizedRoot = path.normalize(root);
+    const candidate = path.normalize(path.join(root, normalizedFilePath));
+    if (!candidate.startsWith(normalizedRoot + path.sep) && candidate !== normalizedRoot) {
+        return null;
+    }
+    return candidate;
+};
+
+const resolveTrackAbsolutePath = async (
+    filePathValue: string,
+    fileStorage: string = "music"
+): Promise<string | null> => {
+    const settings = await prisma.systemSettings.findFirst({
+        select: { downloadPath: true },
+    });
+    const downloadPath = settings?.downloadPath || "/soulseek-downloads";
+    const primaryRoot = fileStorage === "download" ? downloadPath : config.music.musicPath;
+    const secondaryRoot = fileStorage === "download" ? config.music.musicPath : downloadPath;
+    const normalizedFilePath = filePathValue.replace(/\\/g, "/");
+    const downloadPathPrefix = path.basename(downloadPath);
+    const downloadRelativePath = normalizedFilePath.startsWith(`${downloadPathPrefix}/`)
+        ? normalizedFilePath.slice(downloadPathPrefix.length + 1)
+        : normalizedFilePath;
+    const legacyPlaylistPath = normalizedFilePath.startsWith("Playlists/")
+        ? null
+        : `Playlists/${normalizedFilePath}`;
+
+    const candidates = [
+        resolvePathWithinRoot(primaryRoot, filePathValue),
+        fileStorage === "download"
+            ? resolvePathWithinRoot(primaryRoot, downloadRelativePath)
+            : null,
+        resolvePathWithinRoot(secondaryRoot, filePathValue),
+        fileStorage !== "download" && legacyPlaylistPath
+            ? resolvePathWithinRoot(secondaryRoot, legacyPlaylistPath)
+            : null,
+    ].filter((candidate): candidate is string => Boolean(candidate));
+
+    return candidates.find((candidate) => fs.existsSync(candidate)) || candidates[0] || null;
+};
+
 // All routes require auth (session or API key)
 router.use(requireAuthOrToken);
 
@@ -318,20 +361,6 @@ router.post("/clean-orphans", requireAdmin, async (req, res) => {
             });
         }
 
-        const settings = await prisma.systemSettings.findFirst();
-        const downloadPath = settings?.downloadPath || "/soulseek-downloads";
-        const hasDownloadRoot = downloadPath && fs.existsSync(downloadPath);
-
-        const resolveCandidate = (root: string, filePath: string): string | null => {
-            const normalizedFilePath = filePath.replace(/\\/g, "/");
-            const normalizedRoot = path.normalize(root);
-            const candidate = path.normalize(path.join(root, normalizedFilePath));
-            if (!candidate.startsWith(normalizedRoot + path.sep) && candidate !== normalizedRoot) {
-                return null;
-            }
-            return candidate;
-        };
-
         const batchSize = 1000;
         let checked = 0;
         let deleted = 0;
@@ -340,9 +369,9 @@ router.post("/clean-orphans", requireAdmin, async (req, res) => {
         while (true) {
             // Explicit annotation breaks a TS7022 inference cycle triggered by
             // Prisma's complex conditional types interacting with the spread below.
-            const tracks: { id: string; filePath: string }[] =
+            const tracks: { id: string; filePath: string; fileStorage: string }[] =
                 await prisma.track.findMany({
-                    select: { id: true, filePath: true },
+                    select: { id: true, filePath: true, fileStorage: true },
                     orderBy: { id: "asc" },
                     take: batchSize,
                     ...(lastId ? { skip: 1, cursor: { id: lastId } } : {}),
@@ -360,15 +389,11 @@ router.post("/clean-orphans", requireAdmin, async (req, res) => {
                     continue;
                 }
 
-                const candidateMusic = resolveCandidate(musicRoot, track.filePath);
-                const candidateDownload =
-                    hasDownloadRoot && downloadPath
-                        ? resolveCandidate(downloadPath, track.filePath)
-                        : null;
-
-                const exists =
-                    (candidateMusic && fs.existsSync(candidateMusic)) ||
-                    (candidateDownload && fs.existsSync(candidateDownload));
+                const absolutePath = await resolveTrackAbsolutePath(
+                    track.filePath,
+                    track.fileStorage
+                );
+                const exists = !!absolutePath && fs.existsSync(absolutePath);
 
                 if (!exists) {
                     missingTrackIds.push(track.id);
@@ -884,6 +909,16 @@ router.get("/artists", async (req, res) => {
         } = req.query;
         const limit = parseInt(limitParam as string, 10) || 500; // No max cap - support unlimited pagination
         const offset = parseInt(offsetParam as string, 10) || 0;
+        const settings = await prisma.systemSettings.findFirst({
+            select: { downloadPath: true },
+        });
+        const downloadPathPrefix = path.basename(
+            settings?.downloadPath || "/soulseek-downloads"
+        );
+        const excludedTrackPathPrefixes = [
+            "Playlists/",
+            downloadPathPrefix ? `${downloadPathPrefix}/` : "",
+        ].filter(Boolean);
 
         // Build where clause based on filter
         let where: any = {
@@ -967,7 +1002,7 @@ router.get("/artists", async (req, res) => {
             lastSynced: Date;
             albums: { id: string }[];
         }> = [];
-        const total = await prisma.artist.count({ where });
+        let total = await prisma.artist.count({ where });
         const lastPlayedMap = new Map<string, Date | null>();
 
         if (sortBy === "lastPlayed") {
@@ -1081,6 +1116,106 @@ router.get("/artists", async (req, res) => {
             artistsWithAlbums = orderedIds
                 .map((id) => artistsById.get(id))
                 .filter(Boolean) as typeof artistsWithAlbums;
+        } else if (sortBy === "dateAdded" && filter === "owned") {
+            const whereClauses: Prisma.Sql[] = [
+                Prisma.sql`al."location" = 'LIBRARY'`,
+            ];
+
+            for (const prefix of excludedTrackPathPrefixes) {
+                whereClauses.push(
+                    Prisma.sql`t."filePath" NOT LIKE ${`${prefix}%`}`
+                );
+            }
+
+            if (query) {
+                whereClauses.push(
+                    Prisma.sql`a.name ILIKE ${`%${query}%`}`
+                );
+            }
+
+            const whereSql = Prisma.sql`WHERE ${Prisma.join(
+                whereClauses,
+                " AND "
+            )}`;
+
+            const orderedArtists = await prisma.$queryRaw<
+                { id: string; lastSynced: Date }[]
+            >`
+                SELECT a.id, MAX(al."lastSynced") AS "lastSynced"
+                FROM "Artist" a
+                JOIN "Album" al ON al."artistId" = a.id
+                JOIN "Track" t ON t."albumId" = al.id
+                ${whereSql}
+                GROUP BY a.id
+                ORDER BY "lastSynced" DESC NULLS LAST, a.id ASC
+                LIMIT ${limit} OFFSET ${offset}
+            `;
+
+            const totalRows = await prisma.$queryRaw<{ count: bigint }[]>`
+                SELECT COUNT(*)::bigint AS count
+                FROM (
+                    SELECT a.id
+                    FROM "Artist" a
+                    JOIN "Album" al ON al."artistId" = a.id
+                    JOIN "Track" t ON t."albumId" = al.id
+                    ${whereSql}
+                    GROUP BY a.id
+                ) artist_scope
+            `;
+            total = Number(totalRows[0]?.count || 0);
+
+            const orderedIds = orderedArtists.map((artist) => artist.id);
+            orderedArtists.forEach((artist) => {
+                lastPlayedMap.set(artist.id, artist.lastSynced);
+            });
+
+            if (orderedIds.length === 0) {
+                return res.json({
+                    artists: [],
+                    total,
+                    offset,
+                    limit,
+                });
+            }
+
+            const excludedTrackPathFilters = excludedTrackPathPrefixes.map(
+                (prefix) => ({
+                    filePath: { startsWith: prefix },
+                })
+            );
+
+            artistsWithAlbums = await prisma.artist.findMany({
+                where: { id: { in: orderedIds } },
+                select: {
+                    id: true,
+                    mbid: true,
+                    name: true,
+                    heroUrl: true,
+                    lastSynced: true,
+                    albums: {
+                        where: {
+                            location: "LIBRARY",
+                            tracks: {
+                                some: {
+                                    NOT: {
+                                        OR: excludedTrackPathFilters,
+                                    },
+                                },
+                            },
+                        },
+                        select: {
+                            id: true,
+                        },
+                    },
+                },
+            });
+
+            const artistsById = new Map(
+                artistsWithAlbums.map((artist) => [artist.id, artist])
+            );
+            artistsWithAlbums = orderedIds
+                .map((id) => artistsById.get(id))
+                .filter(Boolean) as typeof artistsWithAlbums;
         } else {
             // Determine orderBy based on sortBy parameter
             let orderBy: any = { name: "asc" };
@@ -1135,8 +1270,12 @@ router.get("/artists", async (req, res) => {
                 heroUrl: coverArt,
                 coverArt, // Alias for frontend consistency
                 albumCount: artist.albums.length,
-                lastSynced: artist.lastSynced,
-                lastPlayedAt: lastPlayedMap.get(artist.id) || null,
+                lastSynced:
+                    lastPlayedMap.get(artist.id) || artist.lastSynced,
+                lastPlayedAt:
+                    sortBy === "lastPlayed"
+                        ? lastPlayedMap.get(artist.id) || null
+                        : null,
             };
         });
 
@@ -1285,7 +1424,6 @@ router.get("/artists/:id", async (req, res) => {
                 include: {
                     tracks: {
                         orderBy: [{ discNo: "asc" }, { trackNo: "asc" }],
-                        take: 10, // Top tracks
                         include: {
                             album: {
                                 select: {
@@ -1662,6 +1800,50 @@ router.get("/artists/:id", async (req, res) => {
                     `[Artist] No valid MBID, using ${dbAlbums.length} albums from database`
                 );
                 albumsWithOwnership = dbAlbums;
+            }
+        }
+
+        if (albumsWithOwnership.some((album: any) => !album.owned)) {
+            try {
+                const normalizeAlbumTitle = (title: string): string =>
+                    title
+                        .toLowerCase()
+                        .replace(/[^a-z0-9]+/g, " ")
+                        .trim();
+                const validMbid = effectiveMbid && !effectiveMbid.startsWith("temp-")
+                    ? effectiveMbid
+                    : "";
+                const topAlbums = await lastFmService.getArtistTopAlbums(
+                    validMbid,
+                    artist.name,
+                    100
+                );
+                const popularityByTitle = new Map<string, { playCount: number; listeners: number; rank: number }>();
+
+                topAlbums.forEach((topAlbum: any, index: number) => {
+                    const title = topAlbum.name || topAlbum.title;
+                    if (!title) return;
+                    popularityByTitle.set(normalizeAlbumTitle(title), {
+                        playCount: parseInt(topAlbum.playcount || "0", 10) || 0,
+                        listeners: parseInt(topAlbum.listeners || "0", 10) || 0,
+                        rank: index + 1,
+                    });
+                });
+
+                albumsWithOwnership = albumsWithOwnership.map((album: any) => {
+                    const popularity = popularityByTitle.get(
+                        normalizeAlbumTitle(album.title)
+                    );
+                    if (!popularity) return album;
+                    return {
+                        ...album,
+                        playCount: popularity.playCount,
+                        listeners: popularity.listeners,
+                        popularityRank: popularity.rank,
+                    };
+                });
+            } catch (error) {
+                console.error(`[Artist] Failed to attach Last.fm album popularity:`, error);
             }
         }
 
@@ -2181,6 +2363,31 @@ router.get("/albums", async (req, res) => {
         } = req.query;
         const limit = parseInt(limitParam as string, 10) || 500; // No max cap - support unlimited pagination
         const offset = parseInt(offsetParam as string, 10) || 0;
+        const settings = await prisma.systemSettings.findFirst({
+            select: { downloadPath: true },
+        });
+        const downloadPathPrefix = path.basename(
+            settings?.downloadPath || "/soulseek-downloads"
+        );
+        const excludedTrackPathPrefixes = [
+            "Playlists/",
+            downloadPathPrefix ? `${downloadPathPrefix}/Playlists/` : "",
+        ].filter(Boolean);
+        const excludedTrackPathFilters = excludedTrackPathPrefixes.map(
+            (prefix) => ({
+                filePath: { startsWith: prefix },
+            })
+        );
+        const nonPlaylistTrackFilter =
+            excludedTrackPathFilters.length > 0
+                ? {
+                      some: {
+                          NOT: {
+                              OR: excludedTrackPathFilters,
+                          },
+                      },
+                  }
+                : { some: {} };
 
         let where: any = {
             tracks: { some: {} }, // Only albums with tracks
@@ -2196,8 +2403,8 @@ router.get("/albums", async (req, res) => {
 
             // Albums with LIBRARY location OR rgMbid in OwnedAlbum
             where.OR = [
-                { location: "LIBRARY", tracks: { some: {} } },
-                { rgMbid: { in: ownedMbids }, tracks: { some: {} } },
+                { location: "LIBRARY", tracks: nonPlaylistTrackFilter },
+                { rgMbid: { in: ownedMbids }, tracks: nonPlaylistTrackFilter },
             ];
         } else if (filter === "discovery") {
             where.location = "DISCOVER";
@@ -3190,33 +3397,13 @@ router.get("/tracks/:id/stream", async (req, res) => {
 
                 // Get absolute path to source file
                 // Normalize path separators for cross-platform compatibility (Windows -> Linux)
-                // Check BOTH musicPath AND downloadPath (for Soulseek downloads)
                 const normalizedFilePath = track.filePath.replace(/\\/g, "/");
-                const settings = await prisma.systemSettings.findFirst();
-                const downloadPath = settings?.downloadPath || "/soulseek-downloads";
-
-                let absolutePath = path.join(config.music.musicPath, normalizedFilePath);
-
-                // If not found in music path, check download path
-                if (!fs.existsSync(absolutePath)) {
-                    const dlPath = path.join(downloadPath, normalizedFilePath);
-                    if (fs.existsSync(dlPath)) {
-                        absolutePath = dlPath;
-                    }
-                }
-
-                // Back-compat: older playlist scans stored filePath without "Playlists/" prefix
-                // while files live under downloadPath/Playlists.
-                if (!fs.existsSync(absolutePath)) {
-                    const playlistDlPath = path.join(
-                        downloadPath,
-                        "Playlists",
-                        normalizedFilePath
-                    );
-                    if (fs.existsSync(playlistDlPath)) {
-                        absolutePath = playlistDlPath;
-                    }
-                }
+                const absolutePath =
+                    await resolveTrackAbsolutePath(
+                        normalizedFilePath,
+                        track.fileStorage
+                    ) ||
+                    path.join(config.music.musicPath, normalizedFilePath);
 
                 console.log(
                     `[STREAM] Using native file: ${absolutePath} (${requestedQuality})`
@@ -3275,25 +3462,12 @@ router.get("/tracks/:id/stream", async (req, res) => {
                         `[STREAM] FFmpeg not available, falling back to original quality`
                     );
                     const fallbackFilePath = track.filePath.replace(/\\/g, "/");
-                    let absolutePath = path.join(config.music.musicPath, fallbackFilePath);
-
-                    // Check download path if not found in music path
-                    if (!fs.existsSync(absolutePath)) {
-                        const dlSettings = await prisma.systemSettings.findFirst();
-                        const dlBase = dlSettings?.downloadPath || "/soulseek-downloads";
-
-                        const dlPath = path.join(dlBase, fallbackFilePath);
-                        if (fs.existsSync(dlPath)) {
-                            absolutePath = dlPath;
-                        } else {
-                            const playlistDlPath = path.join(
-                                dlBase,
-                                "Playlists",
-                                fallbackFilePath
-                            );
-                            if (fs.existsSync(playlistDlPath)) absolutePath = playlistDlPath;
-                        }
-                    }
+                    const absolutePath =
+                        await resolveTrackAbsolutePath(
+                            fallbackFilePath,
+                            track.fileStorage
+                        ) ||
+                        path.join(config.music.musicPath, fallbackFilePath);
 
                     const streamingService = new AudioStreamingService(
                         config.music.musicPath,
@@ -4089,12 +4263,12 @@ router.delete("/tracks/:id", async (req, res) => {
         // Delete file from filesystem if path is available
         if (track.filePath) {
             try {
-                const absolutePath = path.join(
-                    config.music.musicPath,
-                    track.filePath
+                const absolutePath = await resolveTrackAbsolutePath(
+                    track.filePath,
+                    track.fileStorage
                 );
 
-                if (fs.existsSync(absolutePath)) {
+                if (absolutePath && fs.existsSync(absolutePath)) {
                     fs.unlinkSync(absolutePath);
                     console.log(`[DELETE] Deleted file: ${absolutePath}`);
                 }
@@ -4142,12 +4316,12 @@ router.delete("/albums/:id", async (req, res) => {
         for (const track of album.tracks) {
             if (track.filePath) {
                 try {
-                    const absolutePath = path.join(
-                        config.music.musicPath,
-                        track.filePath
+                    const absolutePath = await resolveTrackAbsolutePath(
+                        track.filePath,
+                        track.fileStorage
                     );
 
-                    if (fs.existsSync(absolutePath)) {
+                    if (absolutePath && fs.existsSync(absolutePath)) {
                         fs.unlinkSync(absolutePath);
                         deletedFiles++;
                     }
@@ -4224,41 +4398,18 @@ router.delete("/artists/:id", async (req, res) => {
             for (const track of album.tracks) {
                 if (track.filePath) {
                     try {
-                        const absolutePath = path.join(
-                            config.music.musicPath,
-                            track.filePath
+                        const absolutePath = await resolveTrackAbsolutePath(
+                            track.filePath,
+                            track.fileStorage
                         );
 
-                        if (fs.existsSync(absolutePath)) {
+                        if (absolutePath && fs.existsSync(absolutePath)) {
                             fs.unlinkSync(absolutePath);
                             deletedFiles++;
 
-                            // Extract actual artist folder from file path
-                            // Path format: Soulseek/Artist/Album/Track.mp3 OR Artist/Album/Track.mp3
-                            const pathParts = track.filePath.split(path.sep);
-                            if (pathParts.length >= 2) {
-                                // If first part is "Soulseek", artist folder is Soulseek/Artist
-                                // Otherwise, artist folder is just Artist
-                                const actualArtistFolder =
-                                    pathParts[0].toLowerCase() === "soulseek"
-                                        ? path.join(
-                                              config.music.musicPath,
-                                              pathParts[0],
-                                              pathParts[1]
-                                          )
-                                        : path.join(
-                                              config.music.musicPath,
-                                              pathParts[0]
-                                          );
-                                artistFoldersToDelete.add(actualArtistFolder);
-                            } else if (pathParts.length === 1) {
-                                // Single-level path (rare case)
-                                const actualArtistFolder = path.join(
-                                    config.music.musicPath,
-                                    pathParts[0]
-                                );
-                                artistFoldersToDelete.add(actualArtistFolder);
-                            }
+                            artistFoldersToDelete.add(
+                                path.dirname(path.dirname(absolutePath))
+                            );
                         }
                     } catch (err) {
                         console.warn("[DELETE] Could not delete file:", err);

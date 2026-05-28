@@ -138,27 +138,38 @@ function getQueueTrackIds(queue: unknown): string[] {
         .filter((id): id is string => Boolean(id));
 }
 
-async function resolveTrackPath(trackFilePath: string): Promise<string | null> {
+async function resolveTrackPath(
+    trackFilePath: string,
+    fileStorage: string = "music"
+): Promise<string | null> {
     const normalizedFilePath = trackFilePath.replace(/\\/g, "/");
-
-    const roots: string[] = [];
-    roots.push(config.music.musicPath);
 
     const settings = await prisma.systemSettings.findFirst();
     const downloadPath = settings?.downloadPath || "/soulseek-downloads";
-    roots.push(downloadPath);
+    const roots = fileStorage === "download"
+        ? [downloadPath, config.music.musicPath]
+        : [config.music.musicPath, downloadPath];
+    const downloadPathPrefix = path.basename(downloadPath);
+    const pathVariants = fileStorage === "download" && normalizedFilePath.startsWith(`${downloadPathPrefix}/`)
+        ? [normalizedFilePath.slice(downloadPathPrefix.length + 1), normalizedFilePath]
+        : [normalizedFilePath];
+    if (fileStorage !== "download" && !normalizedFilePath.startsWith("Playlists/")) {
+        pathVariants.push(`Playlists/${normalizedFilePath}`);
+    }
 
     for (const root of roots) {
-        const normalizedRoot = path.normalize(root);
-        const candidate = path.normalize(path.join(root, normalizedFilePath));
+        for (const pathVariant of pathVariants) {
+            const normalizedRoot = path.normalize(root);
+            const candidate = path.normalize(path.join(root, pathVariant));
 
-        // Prevent path traversal
-        if (!candidate.startsWith(normalizedRoot + path.sep) && candidate !== normalizedRoot) {
-            continue;
-        }
+            // Prevent path traversal
+            if (!candidate.startsWith(normalizedRoot + path.sep) && candidate !== normalizedRoot) {
+                continue;
+            }
 
-        if (fs.existsSync(candidate)) {
-            return candidate;
+            if (fs.existsSync(candidate)) {
+                return candidate;
+            }
         }
     }
 
@@ -1429,7 +1440,7 @@ router.get("/stream.view", async (req: Request, res: Response) => {
             config.music.transcodeCacheMaxGb
         );
 
-        const absolutePath = await resolveTrackPath(track.filePath);
+        const absolutePath = await resolveTrackPath(track.filePath, track.fileStorage);
 
         if (!absolutePath) {
             return sendSubsonicError(
@@ -1512,7 +1523,7 @@ router.get("/download.view", async (req: Request, res: Response) => {
             );
         }
 
-        const absolutePath = await resolveTrackPath(track.filePath);
+        const absolutePath = await resolveTrackPath(track.filePath, track.fileStorage);
 
         if (!absolutePath) {
             return sendSubsonicError(
