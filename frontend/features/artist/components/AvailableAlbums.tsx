@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Album, ArtistSource } from "../types";
 import type { ColorPalette } from "@/hooks/useImageColor";
 import { PlayableCard } from "@/components/ui/PlayableCard";
@@ -15,6 +15,50 @@ interface AvailableAlbumsProps {
     onDownloadAlbum: (album: Album, e: React.MouseEvent) => void;
     onSearchAlbum: (album: Album, e: React.MouseEvent) => void;
     isPendingDownload: (mbid: string) => boolean;
+}
+
+type AvailableAlbumSort = "release-desc" | "release-asc" | "popularity-desc" | "title-asc";
+
+function getReleaseTime(album: Album) {
+    if (album.releaseDate) {
+        const parsed = Date.parse(album.releaseDate);
+        if (Number.isFinite(parsed)) return parsed;
+    }
+    return album.year ? Date.UTC(album.year, 0, 1) : 0;
+}
+
+function getPopularity(album: Album) {
+    return album.playCount || album.listeners || 0;
+}
+
+function formatPlayCount(count: number) {
+    if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M plays`;
+    if (count >= 1000) return `${Math.round(count / 1000)}K plays`;
+    return `${count} plays`;
+}
+
+function sortAlbums(albums: Album[], sort: AvailableAlbumSort) {
+    return [...albums].sort((a, b) => {
+        if (sort === "popularity-desc") {
+            const popularityDiff = getPopularity(b) - getPopularity(a);
+            if (popularityDiff !== 0) return popularityDiff;
+            return getReleaseTime(b) - getReleaseTime(a);
+        }
+
+        if (sort === "release-asc") {
+            const releaseDiff = getReleaseTime(a) - getReleaseTime(b);
+            if (releaseDiff !== 0) return releaseDiff;
+            return a.title.localeCompare(b.title);
+        }
+
+        if (sort === "title-asc") {
+            return a.title.localeCompare(b.title);
+        }
+
+        const releaseDiff = getReleaseTime(b) - getReleaseTime(a);
+        if (releaseDiff !== 0) return releaseDiff;
+        return a.title.localeCompare(b.title);
+    });
 }
 
 // Component to handle lazy-loading cover art for albums without cached covers
@@ -86,6 +130,7 @@ function LazyAlbumCard({
     const subtitleParts: string[] = [];
     if (album.year) subtitleParts.push(String(album.year));
     if (album.type) subtitleParts.push(album.type);
+    if (album.playCount) subtitleParts.push(formatPlayCount(album.playCount));
     const subtitle = subtitleParts.join(" • ");
 
     return (
@@ -144,16 +189,42 @@ export function AvailableAlbums({
     onSearchAlbum,
     isPendingDownload,
 }: AvailableAlbumsProps) {
+    const [sort, setSort] = useState<AvailableAlbumSort>("release-desc");
+    const hasPopularity = useMemo(
+        () => albums?.some((album) => getPopularity(album) > 0) ?? false,
+        [albums]
+    );
+
     if (!albums || albums.length === 0) {
         return null;
     }
 
     // Separate studio albums from EPs/Singles/Demos
-    const studioAlbums = albums.filter(
-        (album) => album.type?.toLowerCase() === "album"
+    const studioAlbums = sortAlbums(
+        albums.filter((album) => album.type?.toLowerCase() === "album"),
+        sort
     );
-    const epsAndSingles = albums.filter(
-        (album) => album.type?.toLowerCase() !== "album"
+    const epsAndSingles = sortAlbums(
+        albums.filter((album) => album.type?.toLowerCase() !== "album"),
+        sort
+    );
+
+    const sortControl = (
+        <div className="flex items-center gap-2 text-sm text-white/60">
+            <span>Sort</span>
+            <select
+                value={sort}
+                onChange={(event) => setSort(event.target.value as AvailableAlbumSort)}
+                className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-white outline-none transition hover:bg-white/10 focus:border-brand/60"
+            >
+                <option value="release-desc" className="bg-neutral-950">Newest release</option>
+                <option value="release-asc" className="bg-neutral-950">Oldest release</option>
+                <option value="popularity-desc" className="bg-neutral-950" disabled={!hasPopularity}>
+                    Last.fm plays
+                </option>
+                <option value="title-asc" className="bg-neutral-950">Title</option>
+            </select>
+        </div>
     );
 
     return (
@@ -161,9 +232,10 @@ export function AvailableAlbums({
             {/* Studio Albums Section */}
             {studioAlbums.length > 0 && (
                 <section>
-                    <h2 className="text-xl font-bold mb-4">
-                        Albums Available
-                    </h2>
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                        <h2 className="text-xl font-bold">Albums Available</h2>
+                        {sortControl}
+                    </div>
                     <div data-tv-section="available-albums">
                         <AlbumGrid
                             albums={studioAlbums}
@@ -180,9 +252,10 @@ export function AvailableAlbums({
             {/* EPs, Singles & Demos Section */}
             {epsAndSingles.length > 0 && (
                 <section>
-                    <h2 className="text-xl font-bold mb-4">
-                        Singles and EPs
-                    </h2>
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                        <h2 className="text-xl font-bold">Singles and EPs</h2>
+                        {studioAlbums.length === 0 ? sortControl : null}
+                    </div>
                     <div data-tv-section="available-eps-singles">
                         <AlbumGrid
                             albums={epsAndSingles}

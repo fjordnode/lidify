@@ -4,8 +4,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/hooks/useQueries";
 import { api } from "@/lib/api";
 import { useDownloadContext } from "@/lib/download-context";
-import { ArtistSource } from "../types";
+import type { Artist, ArtistSource } from "../types";
 import { useMemo, useEffect, useRef } from "react";
+
+type ArtistWithSource = Artist & { source: ArtistSource };
 
 export function useArtistData() {
     const params = useParams();
@@ -24,6 +26,10 @@ export function useArtistData() {
     const prevActiveCountRef = useRef(downloadStatus.activeDownloads.length);
     const queryClient = useQueryClient();
     const externalLoadedRef = useRef(false);
+
+    useEffect(() => {
+        externalLoadedRef.current = false;
+    }, [id]);
 
     // Use React Query - no polling needed, webhook events trigger refresh via download context
     const {
@@ -48,16 +54,19 @@ export function useArtistData() {
             if (isDatabaseId) {
                 try {
                     console.log(`[useArtistData] Trying library for: ${id}`);
-                    return await api.getArtist(id);
+                    const libraryArtist = await api.getArtist(id);
+                    return { ...libraryArtist, source: "library" } as ArtistWithSource;
                 } catch (_error) {
                     // Library lookup failed, try discovery (might be an MBID)
                     console.log(`[useArtistData] Library failed, trying discovery for: ${id}`);
-                    return await api.getArtistDiscovery(id);
+                    const discoveryArtist = await api.getArtistDiscovery(id);
+                    return { ...discoveryArtist, source: "discovery" } as ArtistWithSource;
                 }
             } else {
                 // It's an artist name, use discovery directly
                 console.log(`[useArtistData] Using discovery for artist name: ${id}`);
-                return await api.getArtistDiscovery(id);
+                const discoveryArtist = await api.getArtistDiscovery(id);
+                return { ...discoveryArtist, source: "discovery" } as ArtistWithSource;
             }
         },
         enabled: !!id,
@@ -80,10 +89,10 @@ export function useArtistData() {
         prevActiveCountRef.current = currentActiveCount;
     }, [downloadStatus.activeDownloads.length, refetch]);
 
-    // Determine source from the artist data (if it came from library or discovery)
+    // Source follows the successful API path, not ID shape. UUID library IDs contain hyphens.
     const source: ArtistSource | null = useMemo(() => {
         if (!artist) return null;
-        return artist.id && !artist.id.includes("-") ? "library" : "discovery";
+        return artist.source;
     }, [artist]);
 
     useEffect(() => {
@@ -97,7 +106,10 @@ export function useArtistData() {
 
         api.getArtist(id, { includeExternal: true })
             .then((fullArtist) => {
-                queryClient.setQueryData(queryKeys.artist(id), fullArtist);
+                queryClient.setQueryData(queryKeys.artist(id), {
+                    ...fullArtist,
+                    source: "library",
+                } as ArtistWithSource);
             })
             .catch(() => {
                 // Ignore background fetch errors

@@ -3,6 +3,7 @@ export type ArtistSource = "library" | "discovery";
 export interface Artist {
     id: string;
     name: string;
+    source?: ArtistSource;
     coverArt?: string;
     image?: string;
     heroUrl?: string;
@@ -32,6 +33,9 @@ export interface Album {
     mbid?: string;
     rgMbid?: string;
     availability?: string;
+    playCount?: number;
+    listeners?: number;
+    popularityRank?: number;
 }
 
 export interface Track {
