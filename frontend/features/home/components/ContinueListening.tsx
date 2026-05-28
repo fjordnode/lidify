@@ -108,10 +108,10 @@ const ContinueListeningCard = memo(function ContinueListeningCard({
                         )}
                     </div>
                     <div className="flex-1 flex flex-col">
-                        <h3 className="text-sm font-semibold text-white truncate">
+                        <h3 className="text-sm font-semibold text-white truncate text-center">
                             {item.name}
                         </h3>
-                        <p className="text-xs text-gray-400 truncate mt-0.5">
+                        <p className="text-xs text-gray-400 truncate mt-0.5 text-center">
                             {getDescriptionLabel(item)}
                         </p>
                     </div>

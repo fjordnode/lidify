@@ -30,16 +30,13 @@ interface AiArtist {
 function getAiRecommendationsFromCache(): AiArtist[] {
     if (typeof window === "undefined") return [];
 
-    // Try to find any discover cache (check common combinations)
-    const cacheKeys = [
-        "lidify_discover_mix_28d_exclib",
-        "lidify_discover_mix_28d_inclib",
-        "lidify_discover_mix_90d_exclib",
-        "lidify_discover_safe_28d_exclib",
-        "lidify_discover_adjacent_28d_exclib",
-    ];
+    const discoverCacheKeys = Object.keys(localStorage).filter((key) =>
+        key.startsWith("lidify_discover_")
+    );
 
-    for (const key of cacheKeys) {
+    const candidates: Array<{ data: any; timestamp: number }> = [];
+
+    for (const key of discoverCacheKeys) {
         try {
             const cached = localStorage.getItem(key);
             if (!cached) continue;
@@ -50,33 +47,37 @@ function getAiRecommendationsFromCache(): AiArtist[] {
 
             if (!data?.recommendations?.length) continue;
 
-            // Transform album recommendations to unique artists with tier
-            const seenArtists = new Set<string>();
-            const artists: AiArtist[] = [];
-
-            for (const rec of data.recommendations) {
-                if (!rec.artistMbid) continue;
-                const artistKey = rec.artistName.toLowerCase();
-                if (seenArtists.has(artistKey)) continue;
-                seenArtists.add(artistKey);
-
-                artists.push({
-                    id: rec.artistMbid,
-                    mbid: rec.artistMbid,
-                    name: rec.artistName,
-                    coverArt: rec.coverUrl,
-                    tier: rec.tier,
-                    reason: rec.reason,
-                });
-            }
-
-            return artists;
+            candidates.push({ data, timestamp });
         } catch {
             continue;
         }
     }
 
-    return [];
+    if (candidates.length === 0) return [];
+
+    const newest = candidates.sort((a, b) => b.timestamp - a.timestamp)[0]?.data;
+    if (!newest?.recommendations?.length) return [];
+
+    const seenArtists = new Set<string>();
+    const artists: AiArtist[] = [];
+
+    for (const rec of newest.recommendations) {
+        if (!rec.artistMbid) continue;
+        const artistKey = rec.artistName.toLowerCase();
+        if (seenArtists.has(artistKey)) continue;
+        seenArtists.add(artistKey);
+
+        artists.push({
+            id: rec.artistMbid,
+            mbid: rec.artistMbid,
+            name: rec.artistName,
+            coverArt: rec.coverUrl,
+            tier: rec.tier,
+            reason: rec.reason,
+        });
+    }
+
+    return artists;
 }
 
 // Loading skeleton for playlist cards
