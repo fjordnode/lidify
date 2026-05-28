@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -15,6 +16,7 @@ import {
     ChevronUp,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { refreshLibraryCaches } from "@/lib/library-refresh";
 import { useToast } from "@/lib/toast-context";
 
 // Types for Spotify Import
@@ -89,6 +91,7 @@ type Step = "input" | "preview" | "importing" | "complete";
 function SpotifyImportPageContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
+    const queryClient = useQueryClient();
     const { toast } = useToast();
     const hasAutoFetched = useRef(false);
 
@@ -158,18 +161,21 @@ function SpotifyImportPageContent() {
 
                 if (job.status === "completed") {
                     setStep("complete");
+                    refreshLibraryCaches(queryClient);
                     window.dispatchEvent(
                         new CustomEvent("notifications-changed")
                     );
                     window.dispatchEvent(new CustomEvent("playlist-created"));
                 } else if (job.status === "cancelled") {
                     setStep("complete");
+                    refreshLibraryCaches(queryClient);
                     window.dispatchEvent(
                         new CustomEvent("notifications-changed")
                     );
                     window.dispatchEvent(new CustomEvent("playlist-created"));
                 } else if (job.status === "failed") {
                     setStep("complete");
+                    refreshLibraryCaches(queryClient);
                     window.dispatchEvent(
                         new CustomEvent("notifications-changed")
                     );
@@ -180,7 +186,7 @@ function SpotifyImportPageContent() {
         }, 2000);
 
         return () => clearInterval(interval);
-    }, [importJob, toast]);
+    }, [importJob, queryClient, toast]);
 
     // Handle URL paste/change
     const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {

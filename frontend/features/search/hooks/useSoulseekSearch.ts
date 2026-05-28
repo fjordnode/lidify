@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { refreshLibraryCaches } from "@/lib/library-refresh";
 import { toast } from "sonner";
 import type { SoulseekResult } from "../types";
 
@@ -28,6 +30,7 @@ export function useSoulseekSearch({
     const [downloadingFiles, setDownloadingFiles] = useState<Set<string>>(
         new Set()
     );
+    const queryClient = useQueryClient();
 
     // Check if Soulseek is configured (has credentials)
     useEffect(() => {
@@ -95,7 +98,7 @@ export function useSoulseekSearch({
         try {
             setDownloadingFiles((prev) => new Set([...prev, result.filename]));
 
-            await api.downloadFromSoulseek(
+            const downloadResult = await api.downloadFromSoulseek(
                 result.username,
                 result.path,
                 result.filename,
@@ -104,8 +107,20 @@ export function useSoulseekSearch({
                 result.parsedAlbum
             );
 
+            if (downloadResult.scanJobId) {
+                const scanJobId = String(downloadResult.scanJobId);
+                for (let attempt = 0; attempt < 20; attempt++) {
+                    await new Promise((resolve) => setTimeout(resolve, 1500));
+                    const status = await api.getScanStatus(scanJobId);
+                    if (status.status === "completed" || status.status === "failed") {
+                        break;
+                    }
+                }
+            }
+
             // Use the activity sidebar (Active tab) instead of a toast/modal
             if (typeof window !== "undefined") {
+                refreshLibraryCaches(queryClient);
                 window.dispatchEvent(
                     new CustomEvent("set-activity-panel-tab", {
                         detail: { tab: "active" },
@@ -132,7 +147,7 @@ export function useSoulseekSearch({
                 return newSet;
             });
         }
-    }, []);
+    }, [queryClient]);
 
     return {
         soulseekResults,

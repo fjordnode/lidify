@@ -1691,6 +1691,7 @@ class ApiClient {
             success: boolean;
             message: string;
             filename: string;
+            scanJobId?: string | number;
         }>("/soulseek/download-file", {
             method: "POST",
             body: JSON.stringify({

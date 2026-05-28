@@ -113,6 +113,15 @@ export function useLibraryData({
         loadData();
     }, [loadData]);
 
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+
+        window.addEventListener("library-data-changed", loadData);
+        return () => {
+            window.removeEventListener("library-data-changed", loadData);
+        };
+    }, [loadData]);
+
     const reloadData = () => {
         loadData();
     };

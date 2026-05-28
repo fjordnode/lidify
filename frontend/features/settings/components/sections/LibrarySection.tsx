@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { SettingsSection } from "../ui";
 import { api } from "@/lib/api";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { refreshLibraryCaches } from "@/lib/library-refresh";
 import { CheckCircle, Loader2, AlertCircle, User, Activity, Tag } from "lucide-react";
 import { toast } from "sonner";
 
@@ -147,6 +148,10 @@ export function LibrarySection() {
         window.dispatchEvent(new CustomEvent("notifications-changed"));
     };
 
+    const refreshLibraryData = () => {
+        refreshLibraryCaches(queryClient);
+    };
+
     const handleSyncAndEnrich = async () => {
         setSyncing(true);
         setEnrichmentError(null);
@@ -194,6 +199,7 @@ export function LibrarySection() {
             }
 
             refreshNotifications();
+            refreshLibraryData();
             refetchProgress();
         } catch (err) {
             console.error("Sync error:", err);

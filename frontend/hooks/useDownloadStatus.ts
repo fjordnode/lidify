@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { refreshLibraryCaches } from '@/lib/library-refresh';
 
 export interface DownloadJob {
     id: string;
@@ -26,6 +28,8 @@ export interface DownloadStatus {
  * @param isAuthenticated - Whether the user is authenticated (required to prevent polling when logged out)
  */
 export function useDownloadStatus(pollingInterval: number = 15000, isAuthenticated: boolean = false) {
+    const queryClient = useQueryClient();
+    const seenCompletedIdsRef = useRef<Set<string>>(new Set());
     const [status, setStatus] = useState<DownloadStatus>({
         activeDownloads: [],
         recentDownloads: [],
@@ -69,6 +73,21 @@ export function useDownloadStatus(pollingInterval: number = 15000, isAuthenticat
                 const failedDownloads = response.filter(
                     (job) => job.status === 'failed' && new Date(job.completedAt || job.createdAt) > fiveMinutesAgo
                 );
+
+                const newlyCompleted = response.filter(
+                    (job) =>
+                        job.status === 'completed' &&
+                        !seenCompletedIdsRef.current.has(job.id)
+                );
+                for (const job of response) {
+                    if (job.status === 'completed') {
+                        seenCompletedIdsRef.current.add(job.id);
+                    }
+                }
+
+                if (newlyCompleted.length > 0) {
+                    refreshLibraryCaches(queryClient);
+                }
 
                 setStatus({
                     activeDownloads,
@@ -122,7 +141,7 @@ export function useDownloadStatus(pollingInterval: number = 15000, isAuthenticat
             }
             window.removeEventListener('download-status-changed', handleDownloadStatusChanged);
         };
-    }, [pollingInterval, isAuthenticated]);
+    }, [pollingInterval, isAuthenticated, queryClient]);
 
     return status;
 }
