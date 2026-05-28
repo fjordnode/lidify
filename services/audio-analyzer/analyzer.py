@@ -28,6 +28,7 @@ from typing import Dict, Any, Optional, List, Tuple
 import traceback
 import numpy as np
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures.process import BrokenProcessPool
 import multiprocessing
 
 # Force spawn mode for TensorFlow compatibility (must be called before any multiprocessing)
@@ -641,44 +642,74 @@ class AudioAnalyzer:
             f"ML Raw Moods: H={raw_values.get('moodHappy')}, S={raw_values.get('moodSad')}, R={raw_values.get('moodRelaxed')}, A={raw_values.get('moodAggressive')}"
         )
 
-        # === DETECT UNRELIABLE PREDICTIONS ===
-        # For some audio (e.g., very niche genres, ambient, noise),
-        # the model may output high values for ALL contradictory moods.
-        # Detect this and normalize to preserve relative ordering.
-        core_moods = ["moodHappy", "moodSad", "moodRelaxed", "moodAggressive"]
-        core_values = [raw_moods[m][0] for m in core_moods if m in raw_moods]
+        # === DETECT UNRELIABLE PREDICTIONS (Entropy-based) ===
+        # Shannon entropy catches OOD cases where many mood heads fire high and uniformly.
+        all_mood_keys = list(raw_moods.keys())
+        all_mood_values = np.array([raw_moods[m][0] for m in all_mood_keys])
 
-        if len(core_values) >= 4:
-            min_mood = min(core_values)
-            max_mood = max(core_values)
-
-            # If all core moods are > 0.7 AND the range is small,
-            # the predictions are likely unreliable (out-of-distribution audio)
-            if min_mood > 0.7 and (max_mood - min_mood) < 0.3:
-                logger.warning(
-                    f"Detected out-of-distribution audio: all moods high ({min_mood:.2f}-{max_mood:.2f}). Normalizing..."
+        if len(all_mood_values) >= 4:
+            total = float(all_mood_values.sum())
+            if total > 1e-6:
+                probs = all_mood_values / total
+                entropy = float(
+                    -np.sum(probs * np.log(probs + 1e-10)) / np.log(len(probs))
                 )
+            else:
+                entropy = 0.0
 
-                # Normalize: scale so max becomes 0.8 and min becomes 0.2
-                # This preserves relative ordering while creating useful differentiation
-                for mood_key in core_moods:
-                    if mood_key in raw_moods:
-                        old_val = raw_moods[mood_key][0]
-                        if max_mood > min_mood:
-                            # Linear scaling: min->0.2, max->0.8
-                            normalized = (
-                                0.2 + (old_val - min_mood) / (max_mood - min_mood) * 0.6
-                            )
-                        else:
-                            normalized = 0.5  # All values equal, use neutral
-                        raw_moods[mood_key] = (
-                            round(normalized, 3),
-                            raw_moods[mood_key][1],
+            mean_val = float(np.mean(all_mood_values))
+
+            if entropy > 0.85 and mean_val > 0.5:
+                logger.warning(
+                    f"Detected OOD audio (entropy={entropy:.3f}, mean={mean_val:.3f}). Normalizing moods..."
+                )
+                min_mood = float(np.min(all_mood_values))
+                max_mood = float(np.max(all_mood_values))
+                for mood_key in all_mood_keys:
+                    old_val = raw_moods[mood_key][0]
+                    if max_mood > min_mood:
+                        normalized = (
+                            0.2 + (old_val - min_mood) / (max_mood - min_mood) * 0.6
                         )
-
+                    else:
+                        normalized = 0.5
+                    raw_moods[mood_key] = (
+                        round(float(normalized), 3),
+                        raw_moods[mood_key][1],
+                    )
                 logger.info(
                     f"Normalized moods: H={raw_moods.get('moodHappy', (0, 0))[0]}, S={raw_moods.get('moodSad', (0, 0))[0]}, R={raw_moods.get('moodRelaxed', (0, 0))[0]}, A={raw_moods.get('moodAggressive', (0, 0))[0]}"
                 )
+
+        # === GROUPED COMPETITION FOR CONTRADICTORY MOODS ===
+        contradictory_groups = [
+            ["moodHappy", "moodSad"],
+            ["moodRelaxed", "moodAggressive"],
+        ]
+        for group in contradictory_groups:
+            present = [k for k in group if k in raw_moods]
+            if len(present) < 2:
+                continue
+            values = np.array([raw_moods[k][0] for k in present])
+            values_clamped = np.clip(values, 0.01, 0.99)
+            logits = np.log(values_clamped / (1 - values_clamped))
+            scaled = logits / 1.5
+            exp_scaled = np.exp(scaled - np.max(scaled))
+            softmax_probs = exp_scaled / exp_scaled.sum()
+            for i, mood_key in enumerate(present):
+                raw_moods[mood_key] = (
+                    round(float(softmax_probs[i]), 3),
+                    raw_moods[mood_key][1],
+                )
+
+        # === VARIANCE-BASED UNCERTAINTY SHRINKAGE ===
+        # When per-frame predictions oscillate heavily, shrink toward neutral.
+        for mood_key in all_mood_keys:
+            val, var = raw_moods[mood_key]
+            if var > 0.02:
+                shrinkage = min(1.0, var / 0.1)
+                neutralized = val * (1 - shrinkage * 0.35) + 0.5 * (shrinkage * 0.35)
+                raw_moods[mood_key] = (round(float(neutralized), 3), var)
 
         # Store final mood values in result
         for mood_key, (val, var) in raw_moods.items():
@@ -1029,20 +1060,44 @@ class AnalysisWorker:
         self.batch_count = 0  # Track batches for periodic cleanup
 
     def _cleanup_stale_processing(self):
-        """Reset tracks stuck in 'processing' status (from crashed workers)"""
+        """Recover tracks stuck in 'processing' status from crashed workers."""
         cursor = self.db.get_cursor()
         try:
-            # Reset tracks that have been "processing" for too long
+            # Mark permanently stale tracks as failed if they have already exhausted retries.
+            cursor.execute(
+                """
+                UPDATE "Track"
+                SET "analysisStatus" = 'failed',
+                    "analysisError" = %s,
+                    "updatedAt" = NOW()
+                WHERE "analysisStatus" = 'processing'
+                AND "updatedAt" < NOW() - INTERVAL '%s minutes'
+                AND COALESCE("analysisRetryCount", 0) >= %s
+                RETURNING id
+            """,
+                (
+                    "Analyzer worker crashed or stalled repeatedly",
+                    STALE_PROCESSING_MINUTES,
+                    MAX_RETRIES,
+                ),
+            )
+
+            failed_ids = cursor.fetchall()
+            failed_count = len(failed_ids)
+
+            # Reset stale tracks back to pending if they still have retry budget.
             cursor.execute(
                 """
                 UPDATE "Track"
                 SET "analysisStatus" = 'pending',
+                    "analysisError" = NULL,
                     "updatedAt" = NOW()
                 WHERE "analysisStatus" = 'processing'
                 AND "updatedAt" < NOW() - INTERVAL '%s minutes'
+                AND COALESCE("analysisRetryCount", 0) < %s
                 RETURNING id
             """,
-                (STALE_PROCESSING_MINUTES,),
+                (STALE_PROCESSING_MINUTES, MAX_RETRIES),
             )
 
             reset_ids = cursor.fetchall()
@@ -1051,6 +1106,10 @@ class AnalysisWorker:
             if reset_count > 0:
                 logger.info(
                     f"Reset {reset_count} stale 'processing' tracks back to 'pending'"
+                )
+            if failed_count > 0:
+                logger.warning(
+                    f"Marked {failed_count} stale 'processing' tracks as failed after exhausting retries"
                 )
 
             self.db.commit()
@@ -1115,6 +1174,59 @@ class AnalysisWorker:
         finally:
             cursor.close()
 
+    def _ensure_pool(self):
+        """Lazily create the worker pool only when there is work to do."""
+        if self.executor is None:
+            logger.info(f"Starting {NUM_WORKERS} worker processes for analysis...")
+            self.executor = ProcessPoolExecutor(
+                max_workers=NUM_WORKERS, initializer=_init_worker_process
+            )
+            logger.info(f"Worker pool started with {NUM_WORKERS} processes")
+
+    def _shutdown_pool(self, wait: bool = True):
+        """Shut down the worker pool if it is running."""
+        if self.executor:
+            try:
+                self.executor.shutdown(wait=wait)
+            except Exception as e:
+                logger.warning(f"Error during worker pool shutdown: {e}")
+            self.executor = None
+
+    def _recreate_pool(self):
+        """Recover from a broken process pool by replacing it."""
+        logger.warning("Recreating worker pool due to broken analyzer workers...")
+        self._shutdown_pool(wait=False)
+        time.sleep(2)
+        self._ensure_pool()
+        logger.info(f"Worker pool recreated with {NUM_WORKERS} workers")
+
+    def _reset_tracks_to_pending(self, track_ids: List[str]):
+        """Reset tracks back to pending after an interrupted batch."""
+        if not track_ids:
+            return
+        cursor = self.db.get_cursor()
+        try:
+            cursor.execute(
+                """
+                UPDATE "Track"
+                SET "analysisStatus" = 'pending',
+                    "analysisError" = NULL,
+                    "updatedAt" = NOW()
+                WHERE id = ANY(%s)
+                AND "analysisStatus" = 'processing'
+            """,
+                (track_ids,),
+            )
+            self.db.commit()
+            logger.info(
+                f"Reset {len(track_ids)} track(s) back to pending after analyzer interruption"
+            )
+        except Exception as e:
+            logger.error(f"Failed to reset interrupted tracks: {e}")
+            self.db.rollback()
+        finally:
+            cursor.close()
+
     def start(self):
         """Start processing jobs with parallel workers"""
         cpu_count = os.cpu_count() or 4
@@ -1172,8 +1284,7 @@ class AnalysisWorker:
                         # Shut down idle workers to free RAM
                         if self._idle_cycles >= IDLE_SHUTDOWN_CYCLES and self.executor:
                             logger.info("No pending work, shutting down worker pool to free memory")
-                            self.executor.shutdown(wait=True)
-                            self.executor = None
+                            self._shutdown_pool(wait=True)
                             self._idle_cycles = 0
 
                         # After 10 consecutive empty batches, do cleanup and retry
@@ -1224,7 +1335,7 @@ class AnalysisWorker:
                     time.sleep(SLEEP_INTERVAL)
         finally:
             if self.executor:
-                self.executor.shutdown(wait=True)
+                self._shutdown_pool(wait=True)
                 logger.info("Worker processes shut down")
             self.db.close()
             logger.info("Worker stopped")
@@ -1335,18 +1446,14 @@ class AnalysisWorker:
             cursor.close()
 
         # Ensure worker pool is running (lazy initialization)
-        if self.executor is None:
-            logger.info(f"Starting {NUM_WORKERS} worker processes for analysis...")
-            self.executor = ProcessPoolExecutor(
-                max_workers=NUM_WORKERS, initializer=_init_worker_process
-            )
-            logger.info(f"Worker pool started with {NUM_WORKERS} processes")
+        self._ensure_pool()
 
         # Submit all tracks to the process pool
         start_time = time.time()
         completed = 0
         failed = 0
         skipped = 0
+        pool_broken = False
 
         futures = {
             self.executor.submit(_analyze_track_in_process, t): t for t in tracks
@@ -1403,6 +1510,17 @@ class AnalysisWorker:
                     skipped += 1
                     logger.error(f"⊘ Timeout (permanent): {track_info[1]}")
 
+                except BrokenProcessPool as e:
+                    logger.error(f"Worker pool broke while analyzing {track_info[1]}: {e}")
+                    pending_track_ids = [track_info[0]]
+                    for pending_future, pending_track in futures.items():
+                        if pending_future is not future and not pending_future.done():
+                            pending_track_ids.append(pending_track[0])
+                    self._reset_tracks_to_pending(pending_track_ids)
+                    self._recreate_pool()
+                    pool_broken = True
+                    break
+
                 except Exception as e:
                     # Other errors - may be retryable
                     error_str = str(e)
@@ -1430,6 +1548,14 @@ class AnalysisWorker:
                     )
                     skipped += 1
                     logger.error(f"⊘ Batch timeout: {track_info[1]}")
+        except BrokenProcessPool as e:
+            logger.error(f"Batch interrupted by broken worker pool: {e}")
+            pending_track_ids = [
+                track_info[0] for future, track_info in futures.items() if not future.done()
+            ]
+            self._reset_tracks_to_pending(pending_track_ids)
+            self._recreate_pool()
+            pool_broken = True
 
         elapsed = time.time() - start_time
         rate = len(tracks) / elapsed if elapsed > 0 else 0
@@ -1440,6 +1566,8 @@ class AnalysisWorker:
             parts.append(f"{skipped} skipped (size/timeout)")
         if failed > 0:
             parts.append(f"{failed} failed")
+        if pool_broken:
+            parts.append("worker pool restarted")
         logger.info(
             f"Batch: {', '.join(parts)} in {elapsed:.1f}s ({rate:.1f} tracks/sec)"
         )
