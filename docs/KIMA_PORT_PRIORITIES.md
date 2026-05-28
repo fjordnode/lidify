@@ -66,6 +66,9 @@ Risk:
 
 Do not replace the Lidify model stack. Port Kima’s reliability logic around the existing Discogs EffNet analyzer.
 
+Status:
+- Implemented in Lidify
+
 What Kima has:
 - Entropy-based OOD detection and normalization in `kima/services/audio-analyzer/analyzer.py`
 - Contradictory-pair competition for `happy/sad` and `relaxed/aggressive`
@@ -85,6 +88,16 @@ What to port:
 - Smarter stale-track recovery
 - Pool recreation after worker breakage
 
+What was actually merged into Lidify:
+- Kept Lidify’s Discogs EffNet analyzer backbone and column-order fix
+- Kept Lidify’s artist-diverse mood-mix selection
+- Ported entropy-based OOD normalization
+- Ported contradictory mood balancing for `happy/sad` and `relaxed/aggressive`
+- Ported variance-based uncertainty shrinkage
+- Ported safer stale `processing` recovery within Lidify’s current schema limits
+- Ported worker-pool recreation and interrupted-batch reset logic
+- Ported `moodTags` fallback in `backend/src/services/moodBucketService.ts`
+
 Why it matters:
 - Mood output gets less nonsensical on weird tracks
 - Analyzer survives crashes better
@@ -93,6 +106,11 @@ Why it matters:
 Risk:
 - Low to medium
 - Best done behind current model outputs, not as a model swap
+
+Practical note:
+- New and reanalyzed tracks benefit immediately.
+- Existing tracks already marked `completed` keep their old mood outputs until they are reanalyzed.
+- A full audio reanalysis is likely worth doing if mood quality matters, because the new sanity checks only apply when tracks are analyzed again.
 
 ## 4. Subsonic Modular Refactor
 
