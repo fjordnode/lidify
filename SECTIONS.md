@@ -81,8 +81,8 @@ Cross-device control. One active player per user.
 
 Discover Weekly, mixes, mood, genre/artist recs.
 
-- **Backend:** `routes/discovery.ts`, `routes/recommendations.ts`,
-  `services/discoverWeekly.ts`, `services/discoveryCache.ts`,
+- **Backend:** `routes/discover.ts` (recs + inline Redis cache),
+  `routes/recommendations.ts`, `services/discoverWeekly.ts`,
   `services/programmaticPlaylists.ts`, `services/recommendations.ts`,
   `routes/playlists.ts`
 - **Queues:** `discover-weekly` (Bull). Recommendation + playlist generation
@@ -100,6 +100,11 @@ Discover Weekly, mixes, mood, genre/artist recs.
   seeded-LCG-in-`sort` pattern across `programmaticPlaylists.ts` (12 sites,
   incl. 9 daily-mix seeded shuffles), `discoverWeekly.ts` (3), and
   `moodBucketService.ts` (1). Daily-mix per-day stability preserved.
+- _Done 2026-05-29:_ discover recs (`app/discover`) now persist until the
+  user clicks Generate instead of auto-expiring at 24h; localStorage TTL
+  eviction dropped, `formatTimeSince` extended past "yesterday" to
+  days/weeks/months, and `routes/discover.ts` `RECOMMENDATIONS_CACHE_TTL`
+  raised 24h→30d so the Redis copy does not regenerate under the client.
 
 ## 6. Downloads & Lidarr
 
@@ -128,7 +133,14 @@ MusicBrainz, Last.fm, Spotify, ListenBrainz enrichment + images.
 - **Invariant:** `temp-` MBIDs are placeholders — skip external lookups for
   them. Use `artist.id` for app links/joins.
 - **Symptoms:** missing/wrong art, rate-limit errors, temp-MBID hitting
-  external APIs, similar-artists empty.
+  external APIs, similar-artists empty, "Last.fm plays" album sort grayed
+  on unowned artists.
+- _Done 2026-05-29:_ `routes/artists.ts` discover route now attaches
+  per-album Last.fm playcount/listeners (`getArtistTopAlbums`, matched by
+  normalized title, temp-MBID guarded) before the 24h Redis cache write,
+  mirroring the owned-artist path in `routes/library.ts`. Fixes the
+  "Last.fm plays" album sort being grayed for unowned artists until a
+  download flipped them to the library endpoint.
 
 ## 8. Audio Analysis
 
