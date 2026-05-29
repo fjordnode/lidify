@@ -12,8 +12,10 @@ import fs from "fs";
 import path from "path";
 import { config } from "../config";
 
-// Cache TTL for AI recommendations (24 hours)
-const RECOMMENDATIONS_CACHE_TTL = 24 * 60 * 60;
+// Cache TTL for AI recommendations (30 days).
+// Recs persist until the user manually refreshes; the frontend shows a
+// "Generated X ago" note rather than auto-expiring results.
+const RECOMMENDATIONS_CACHE_TTL = 30 * 24 * 60 * 60;
 
 // Static imports for performance
 import { discoverQueue, scanQueue } from "../workers/queues";

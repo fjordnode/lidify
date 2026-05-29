@@ -60,18 +60,15 @@ interface TrackPreview {
 // Cache helpers - include mode, timeframe, and includeLibrary in key
 const getCacheKey = (mode: DiscoveryMode, timeframe: DiscoveryTimeframe, includeLibrary: boolean) =>
     `lidify_discover_${mode}_${timeframe}_${includeLibrary ? "inclib" : "exclib"}`;
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+// Cached recommendations persist until the user manually refreshes (Generate).
+// The "Generated X ago" note keeps users aware of staleness instead of auto-wiping.
 function getCachedData(mode: DiscoveryMode, timeframe: DiscoveryTimeframe, includeLibrary: boolean): DiscoverData | null {
     if (typeof window === "undefined") return null;
     try {
         const cached = localStorage.getItem(getCacheKey(mode, timeframe, includeLibrary));
         if (!cached) return null;
-        const { data, timestamp } = JSON.parse(cached);
-        if (Date.now() - timestamp > CACHE_TTL_MS) {
-            localStorage.removeItem(getCacheKey(mode, timeframe, includeLibrary));
-            return null;
-        }
+        const { data } = JSON.parse(cached);
         return data;
     } catch {
         return null;
@@ -454,7 +451,14 @@ export default function DiscoverPage() {
         if (hours < 1) return "just now";
         if (hours === 1) return "1 hour ago";
         if (hours < 24) return `${hours} hours ago`;
-        return "yesterday";
+        const days = Math.floor(hours / 24);
+        if (days === 1) return "yesterday";
+        if (days < 7) return `${days} days ago`;
+        const weeks = Math.floor(days / 7);
+        if (weeks === 1) return "1 week ago";
+        if (days < 30) return `${weeks} weeks ago`;
+        const months = Math.floor(days / 30);
+        return months === 1 ? "1 month ago" : `${months} months ago`;
     };
 
     const formatListeners = (count: number) => {
