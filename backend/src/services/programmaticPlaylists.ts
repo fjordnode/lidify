@@ -1,6 +1,7 @@
 import { prisma } from "../utils/db";
 import { lastFmService } from "./lastfm";
 import { moodBucketService } from "./moodBucketService";
+import { shuffle, seededShuffle } from "../utils/shuffle";
 
 export interface ProgrammaticMix {
     id: string;
@@ -111,8 +112,7 @@ function getMixColor(type: string): string {
 
 // Helper to randomly sample from array
 function randomSample<T>(array: T[], count: number): T[] {
-    const shuffled = [...array].sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, count);
+    return shuffle(array).slice(0, count);
 }
 
 // Helper to enforce artist diversity - max N tracks per artist
@@ -121,7 +121,7 @@ function diversifyByArtist<T extends { album?: { artist?: { id?: string } } }>(
     tracks: T[],
     maxPerArtist: number = 2
 ): T[] {
-    const shuffled = [...tracks].sort(() => Math.random() - 0.5);
+    const shuffled = shuffle(tracks);
     const artistCounts = new Map<string, number>();
     const diverse: T[] = [];
 
@@ -133,7 +133,7 @@ function diversifyByArtist<T extends { album?: { artist?: { id?: string } } }>(
             artistCounts.set(artistId, count + 1);
         }
     }
-    return diverse.sort(() => Math.random() - 0.5);
+    return shuffle(diverse);
 }
 
 // Helper to get seeded random number for daily consistency
@@ -828,12 +828,7 @@ export class ProgrammaticPlaylistService {
         const diverseTracks = diversifyByArtist(underplayedTracks, 2);
 
         // Use date seed for consistent daily selection
-        const seed = getSeededRandom(`rediscover-${today}`);
-        let random = seed;
-        const shuffled = diverseTracks.sort(() => {
-            random = (random * 9301 + 49297) % 233280;
-            return random / 233280 - 0.5;
-        });
+        const shuffled = seededShuffle(diverseTracks, `rediscover-${today}`);
 
         const selectedTracks = shuffled.slice(0, this.TRACK_LIMIT);
         const coverUrls = selectedTracks
@@ -998,13 +993,7 @@ export class ProgrammaticPlaylistService {
         if (allAlbums.length < 10) return null;
 
         // Use seeded shuffle to pick random albums consistently per day
-        const seed = getSeededRandom(`random-${today}`);
-        let random = seed;
-        const shuffledAlbumIds = [...allAlbums]
-            .sort(() => {
-                random = (random * 9301 + 49297) % 233280;
-                return random / 233280 - 0.5;
-            })
+        const shuffledAlbumIds = seededShuffle(allAlbums, `random-${today}`)
             .slice(0, 8) // Pick 8 albums to ensure enough tracks
             .map((a) => a.id);
 
@@ -1397,12 +1386,7 @@ export class ProgrammaticPlaylistService {
             return null;
         }
 
-        const seed = getSeededRandom(`workout-${today}`);
-        let random = seed;
-        const shuffled = diverseTracks.sort(() => {
-            random = (random * 9301 + 49297) % 233280;
-            return random / 233280 - 0.5;
-        });
+        const shuffled = seededShuffle(diverseTracks, `workout-${today}`);
 
         const selectedTracks = shuffled.slice(0, this.TRACK_LIMIT);
         const coverUrls = selectedTracks
@@ -1512,12 +1496,7 @@ export class ProgrammaticPlaylistService {
             return null;
         }
 
-        const seed = getSeededRandom(`focus-${today}`);
-        let random = seed;
-        const shuffled = diverseTracks.sort(() => {
-            random = (random * 9301 + 49297) % 233280;
-            return random / 233280 - 0.5;
-        });
+        const shuffled = seededShuffle(diverseTracks, `focus-${today}`);
 
         const selectedTracks = shuffled.slice(0, this.TRACK_LIMIT);
         const coverUrls = selectedTracks
@@ -1602,12 +1581,7 @@ export class ProgrammaticPlaylistService {
             return null;
         }
 
-        const seed = getSeededRandom(`high-energy-${today}`);
-        let random = seed;
-        const shuffled = diverseTracks.sort(() => {
-            random = (random * 9301 + 49297) % 233280;
-            return random / 233280 - 0.5;
-        });
+        const shuffled = seededShuffle(diverseTracks, `high-energy-${today}`);
 
         const selectedTracks = shuffled.slice(0, this.TRACK_LIMIT);
         const coverUrls = selectedTracks
@@ -1694,12 +1668,7 @@ export class ProgrammaticPlaylistService {
             return null;
         }
 
-        const seed = getSeededRandom(`late-night-${today}`);
-        let random = seed;
-        const shuffled = diverseTracks.sort(() => {
-            random = (random * 9301 + 49297) % 233280;
-            return random / 233280 - 0.5;
-        });
+        const shuffled = seededShuffle(diverseTracks, `late-night-${today}`);
 
         // Determine if daily or weekly based on available tracks
         const isWeekly = diverseTracks.length >= this.MIN_TRACKS_WEEKLY;
@@ -1804,12 +1773,7 @@ export class ProgrammaticPlaylistService {
             return null;
         }
 
-        const seed = getSeededRandom(`happy-${today}`);
-        let random = seed;
-        const shuffled = diverseTracks.sort(() => {
-            random = (random * 9301 + 49297) % 233280;
-            return random / 233280 - 0.5;
-        });
+        const shuffled = seededShuffle(diverseTracks, `happy-${today}`);
 
         const selectedTracks = shuffled.slice(0, this.TRACK_LIMIT);
         const coverUrls = selectedTracks
@@ -1949,13 +1913,8 @@ export class ProgrammaticPlaylistService {
             return aScore - bScore;
         });
 
-        const seed = getSeededRandom(`melancholy-${today}`);
-        let random = seed;
         // Take top 50 most melancholy tracks, then shuffle
-        const shuffled = sortedTracks.slice(0, 50).sort(() => {
-            random = (random * 9301 + 49297) % 233280;
-            return random / 233280 - 0.5;
-        });
+        const shuffled = seededShuffle(sortedTracks.slice(0, 50), `melancholy-${today}`);
 
         const selectedTracks = shuffled.slice(0, this.TRACK_LIMIT);
         const coverUrls = selectedTracks
@@ -2234,12 +2193,7 @@ export class ProgrammaticPlaylistService {
 
         if (tracks.length < 15) return null;
 
-        const seed = getSeededRandom(`mood-${moodTag}-${today}`);
-        let random = seed;
-        const shuffled = tracks.sort(() => {
-            random = (random * 9301 + 49297) % 233280;
-            return random / 233280 - 0.5;
-        });
+        const shuffled = seededShuffle(tracks, `mood-${moodTag}-${today}`);
 
         const selectedTracks = shuffled.slice(0, this.TRACK_LIMIT);
         const coverUrls = selectedTracks

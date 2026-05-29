@@ -6,6 +6,7 @@ import { lastFmService } from "../services/lastfm";
 import { prisma } from "../utils/db";
 import { getEnrichmentProgress } from "../workers/enrichment";
 import { redisClient } from "../utils/redis";
+import { shuffle } from "../utils/shuffle";
 import crypto from "crypto";
 import path from "path";
 import fs from "fs";
@@ -39,7 +40,7 @@ function diversifyTracksByArtist<T extends { album: { artist?: { id: string } } 
     tracks: T[],
     maxPerArtist: number = 2
 ): T[] {
-    const shuffled = [...tracks].sort(() => Math.random() - 0.5);
+    const shuffled = shuffle(tracks);
     const artistCounts = new Map<string, number>();
     const diverse: T[] = [];
 
@@ -51,7 +52,7 @@ function diversifyTracksByArtist<T extends { album: { artist?: { id: string } } 
             artistCounts.set(artistId, count + 1);
         }
     }
-    return diverse.sort(() => Math.random() - 0.5);
+    return shuffle(diverse);
 }
 
 const router = Router();
@@ -5234,14 +5235,15 @@ router.get("/radio", async (req, res) => {
                     similarTracks.length
                 );
 
-                const selectedOriginal = artistTracks
-                    .sort(() => Math.random() - 0.5)
-                    .slice(0, originalCount);
-                // Take top vibe-matched tracks (already sorted by vibe score), then shuffle slightly
-                const selectedSimilar = similarTracks
-                    .slice(0, similarCount * 2)
-                    .sort(() => Math.random() - 0.3) // Slight shuffle to add variety
-                    .slice(0, similarCount);
+                const selectedOriginal = shuffle(artistTracks).slice(
+                    0,
+                    originalCount
+                );
+                // Take top vibe-matched tracks (already sorted by vibe score),
+                // then uniformly shuffle that top pool for variety.
+                const selectedSimilar = shuffle(
+                    similarTracks.slice(0, similarCount * 2)
+                ).slice(0, similarCount);
 
                 trackIds = [...selectedOriginal, ...selectedSimilar].map(
                     (t) => t.id
@@ -5794,7 +5796,7 @@ router.get("/radio", async (req, res) => {
         const finalIds =
             type === "vibe"
                 ? trackIds.slice(0, limitNum) // Already sorted by match score
-                : trackIds.sort(() => Math.random() - 0.5).slice(0, limitNum);
+                : shuffle(trackIds).slice(0, limitNum);
 
         if (finalIds.length === 0) {
             return res.json({ tracks: [] });
@@ -6018,7 +6020,7 @@ router.get("/radio", async (req, res) => {
         const finalTracks =
             type === "vibe"
                 ? transformedTracks
-                : transformedTracks.sort(() => Math.random() - 0.5);
+                : shuffle(transformedTracks);
 
         // Include source features if this was a vibe request
         const response: any = { tracks: finalTracks };

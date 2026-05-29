@@ -10,6 +10,7 @@
 
 import { Router, Request, Response } from "express";
 import path from "path";
+import { shuffle } from "../utils/shuffle";
 import fs from "fs";
 import axios from "axios";
 import sharp from "sharp";
@@ -924,7 +925,7 @@ const albumListHandler = async (req: Request, res: Response) => {
 
         // Handle random sorting
         if (type === "random") {
-            albums = albums.sort(() => Math.random() - 0.5).slice(0, limit);
+            albums = shuffle(albums).slice(0, limit);
         }
 
         // Get play data for albums
@@ -1016,7 +1017,7 @@ router.get("/getRandomSongs.view", async (req: Request, res: Response) => {
             take: limit * 5,
         });
 
-        const shuffled = tracks.sort(() => Math.random() - 0.5).slice(0, limit);
+        const shuffled = shuffle(tracks).slice(0, limit);
 
         // Get play data for shuffled tracks
         const trackIds = shuffled.filter(t => t.album).map(t => t.id);
@@ -3211,7 +3212,7 @@ router.get("/getTopSongs.view", async (req: Request, res: Response) => {
         });
 
         // Shuffle and take requested count
-        const shuffled = tracks.sort(() => Math.random() - 0.5).slice(0, limit);
+        const shuffled = shuffle(tracks).slice(0, limit);
 
         // Get play data for shuffled tracks
         const trackIds = shuffled.filter(t => t.album).map(t => t.id);

@@ -7,6 +7,7 @@
  */
 
 import { prisma } from "../utils/db";
+import { shuffle } from "../utils/shuffle";
 
 // Mood configuration with scoring rules
 // Primary = uses ML mood predictions (enhanced mode)
@@ -454,7 +455,7 @@ export class MoodBucketService {
         });
 
         // Apply artist diversity: max 2 tracks per artist, then take limit
-        const shuffled = [...tracks].sort(() => Math.random() - 0.5);
+        const shuffled = shuffle(tracks);
         const artistCounts = new Map<string, number>();
         const diverseTracks: typeof tracks = [];
 

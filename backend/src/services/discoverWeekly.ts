@@ -18,6 +18,7 @@ import { musicBrainzService } from "./musicbrainz";
 import { simpleDownloadManager } from "./simpleDownloadManager";
 import { lidarrService } from "./lidarr";
 import { scanQueue } from "../workers/queues";
+import { shuffle } from "../utils/shuffle";
 import { startOfWeek, subWeeks } from "date-fns";
 import { getSystemSettings } from "../utils/systemSettings";
 import { discoveryLogger } from "./discoveryLogger";
@@ -1122,7 +1123,7 @@ export class DiscoverWeeklyService {
         );
 
         // Shuffle the unique album tracks
-        const shuffled = onePerAlbum.sort(() => Math.random() - 0.5);
+        const shuffled = shuffle(onePerAlbum);
 
         // Step 1: Get ALL discovery tracks (1 per album) - no limit!
         let discoverySelected = [...shuffled];
@@ -1280,7 +1281,7 @@ export class DiscoverWeeklyService {
         let selected = [...discoverySelected, ...libraryAnchors];
 
         // Shuffle the final selection to mix anchors with discovery
-        selected = selected.sort(() => Math.random() - 0.5);
+        selected = shuffle(selected);
 
         await this.addBatchLog(
             batchId,
@@ -2900,9 +2901,7 @@ export class DiscoverWeeklyService {
             );
         }
 
-        // Shuffle each tier for variety week-to-week
-        const shuffle = <T>(arr: T[]): T[] =>
-            [...arr].sort(() => Math.random() - 0.5);
+        // Shuffle each tier for variety week-to-week (uses shared shuffle util)
         byTier.high = shuffle(byTier.high);
         byTier.medium = shuffle(byTier.medium);
         byTier.explore = shuffle(byTier.explore);
