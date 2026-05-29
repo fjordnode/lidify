@@ -828,6 +828,57 @@ router.get("/discover/:nameOrMbid", async (req, res) => {
             });
         }
 
+        // Attach Last.fm per-album popularity so the "Last.fm plays" sort works
+        // for unowned artists too (mirrors the owned-artist path in library.ts).
+        // Without this, discovery albums carry no playCount/listeners and the
+        // frontend grays out the sort option until an album is downloaded.
+        if (albums.length > 0) {
+            try {
+                const normalizeAlbumTitle = (title: string): string =>
+                    title
+                        .toLowerCase()
+                        .replace(/[^a-z0-9]+/g, " ")
+                        .trim();
+                const validMbid =
+                    mbid && !mbid.startsWith("temp-") ? mbid : "";
+                const topAlbums = await lastFmService.getArtistTopAlbums(
+                    validMbid,
+                    artistName,
+                    100
+                );
+                const popularityByTitle = new Map<
+                    string,
+                    { playCount: number; listeners: number; rank: number }
+                >();
+                topAlbums.forEach((topAlbum: any, index: number) => {
+                    const title = topAlbum.name || topAlbum.title;
+                    if (!title) return;
+                    popularityByTitle.set(normalizeAlbumTitle(title), {
+                        playCount: parseInt(topAlbum.playcount || "0", 10) || 0,
+                        listeners: parseInt(topAlbum.listeners || "0", 10) || 0,
+                        rank: index + 1,
+                    });
+                });
+                albums = albums.map((album: any) => {
+                    const popularity = popularityByTitle.get(
+                        normalizeAlbumTitle(album.title)
+                    );
+                    if (!popularity) return album;
+                    return {
+                        ...album,
+                        playCount: popularity.playCount,
+                        listeners: popularity.listeners,
+                        popularityRank: popularity.rank,
+                    };
+                });
+            } catch (error) {
+                console.error(
+                    `[Discover] Failed to attach Last.fm album popularity:`,
+                    error
+                );
+            }
+        }
+
         // Get similar artists from Last.fm and fetch images
         const similarArtistsRaw = lastFmInfo?.similar?.artist || [];
         const similarArtists = await Promise.all(
