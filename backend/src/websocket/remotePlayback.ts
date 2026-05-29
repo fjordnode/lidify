@@ -223,6 +223,20 @@ export function initializeWebSocket(httpServer: HTTPServer): SocketIOServer {
             }
             const data = parseResult.data;
 
+            // Prevent cross-user registry hijack: deviceId is client-supplied and
+            // unvalidated. If it is already registered to a DIFFERENT user, refuse —
+            // an unconditional overwrite would evict that user's device entry (and the
+            // socketId mapping that authorizes their playback:state updates). A device
+            // re-registering for the SAME user (reconnect/rename) is allowed through.
+            const existing = activeDevices.get(data.deviceId);
+            if (existing && existing.userId !== user.id) {
+                console.warn(
+                    `[WebSocket] Rejecting device:register for ${data.deviceId} — already owned by another user`
+                );
+                socket.emit("playback:error", { message: "Device ID already in use" });
+                return;
+            }
+
             const device: PlaybackDevice = {
                 socketId: socket.id,
                 deviceId: data.deviceId,

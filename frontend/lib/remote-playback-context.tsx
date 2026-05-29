@@ -15,6 +15,21 @@ import { api } from "./api";
 import { Track } from "./audio-state-context";
 import { getCurrentDeviceId, normalizeActivePlayerId } from "./device-identity";
 
+// Gate verbose remote-playback logging (and the expensive `new Error().stack`
+// captures) behind a flag. These sit on hot paths — every remote command and
+// every state broadcast — so they must stay quiet in production. Enable at
+// runtime with: localStorage.setItem("lidify_remote_debug", "1") then reload.
+const REMOTE_DEBUG =
+    process.env.NODE_ENV !== "production" ||
+    (typeof window !== "undefined" &&
+        (() => {
+            try {
+                return window.localStorage.getItem("lidify_remote_debug") === "1";
+            } catch {
+                return false;
+            }
+        })());
+
 // Types
 export interface RemoteDevice {
     deviceId: string;
@@ -253,6 +268,10 @@ export function RemotePlaybackProvider({ children }: { children: ReactNode }) {
     const activePlayerIdRef = useRef<string | null>(activePlayerId);
     // Ref for currentDeviceId as well
     const currentDeviceIdRef = useRef<string | null>(currentDeviceId);
+    // Ref for currentDeviceName so the connect effect can read the latest name
+    // WITHOUT taking currentDeviceName as a dependency (which would tear down and
+    // recreate the socket on every rename, churning active-player election).
+    const currentDeviceNameRef = useRef<string>(currentDeviceName);
     // Refs for control mode
     const controlModeRef = useRef<ControlMode>(controlMode);
     const controlTargetIdRef = useRef<string | null>(controlTargetId);
@@ -262,6 +281,7 @@ export function RemotePlaybackProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         activePlayerIdRef.current = activePlayerId;
         currentDeviceIdRef.current = currentDeviceId;
+        currentDeviceNameRef.current = currentDeviceName;
         controlModeRef.current = controlMode;
         controlTargetIdRef.current = controlTargetId;
     });
@@ -281,9 +301,11 @@ export function RemotePlaybackProvider({ children }: { children: ReactNode }) {
     // ENHANCED LOGGING: Track all changes with previous value and call source
     const setActivePlayerId = useCallback((id: string | null) => {
         const previousId = activePlayerIdRef.current;
-        const stack = new Error().stack?.split('\n').slice(2, 5).join('\n') || 'unknown';
-        console.log(`[RemotePlayback] Setting activePlayerId: ${previousId} -> ${id}`);
-        console.log(`[RemotePlayback] Call stack:\n${stack}`);
+        if (REMOTE_DEBUG) {
+            const stack = new Error().stack?.split('\n').slice(2, 5).join('\n') || 'unknown';
+            console.log(`[RemotePlayback] Setting activePlayerId: ${previousId} -> ${id}`);
+            console.log(`[RemotePlayback] Call stack:\n${stack}`);
+        }
 
         if (id === null && previousId !== null) {
             console.warn(`[RemotePlayback] WARNING: activePlayerId being reset to null from ${previousId}`);
@@ -378,10 +400,11 @@ export function RemotePlaybackProvider({ children }: { children: ReactNode }) {
             console.log("[RemotePlayback] Connected to WebSocket");
             setIsConnected(true);
 
-            // Register this device
+            // Register this device. Read the name from a ref so renames do not
+            // force a socket reconnect (see currentDeviceNameRef above).
             socket.emit("device:register", {
                 deviceId: currentDeviceId,
-                deviceName: currentDeviceName,
+                deviceName: currentDeviceNameRef.current,
             });
 
             // Request device list
@@ -430,18 +453,20 @@ export function RemotePlaybackProvider({ children }: { children: ReactNode }) {
 
         // Handle remote commands
         socket.on("playback:remoteCommand", (command: RemoteCommand) => {
-            const myControlMode = controlModeRef.current;
-            const myActivePlayerId = activePlayerIdRef.current;
-            const myDeviceId = currentDeviceIdRef.current;
-            console.log("[RemotePlayback] Received remote command:", command.command, {
-                fromDeviceId: command.fromDeviceId,
-                myDeviceId,
-                myControlMode,
-                myActivePlayerId,
-                isActivePlayer: myActivePlayerId === null || myActivePlayerId === myDeviceId,
-                payloadKeys: command.payload ? Object.keys(command.payload) : [],
-            });
-            console.log("[RemotePlayback] remoteCommand STACK:", new Error().stack?.split('\n').slice(1, 5).join('\n'));
+            if (REMOTE_DEBUG) {
+                const myControlMode = controlModeRef.current;
+                const myActivePlayerId = activePlayerIdRef.current;
+                const myDeviceId = currentDeviceIdRef.current;
+                console.log("[RemotePlayback] Received remote command:", command.command, {
+                    fromDeviceId: command.fromDeviceId,
+                    myDeviceId,
+                    myControlMode,
+                    myActivePlayerId,
+                    isActivePlayer: myActivePlayerId === null || myActivePlayerId === myDeviceId,
+                    payloadKeys: command.payload ? Object.keys(command.payload) : [],
+                });
+                console.log("[RemotePlayback] remoteCommand STACK:", new Error().stack?.split('\n').slice(1, 5).join('\n'));
+            }
             if (onRemoteCommandRef.current) {
                 onRemoteCommandRef.current(command);
                 return;
@@ -455,16 +480,16 @@ export function RemotePlaybackProvider({ children }: { children: ReactNode }) {
 
         // Handle state update broadcasts from other devices
         socket.on("playback:stateUpdate", (state: RemoteDevice) => {
-            const myDeviceId = currentDeviceIdRef.current;
-            const myControlMode = controlModeRef.current;
-            console.log("[RemotePlayback] playback:stateUpdate received:", {
-                fromDeviceId: state.deviceId,
-                myDeviceId,
-                myControlMode,
-                isPlaying: state.isPlaying,
-                trackTitle: state.currentTrack?.title,
-                currentTime: state.currentTime?.toFixed(1),
-            });
+            if (REMOTE_DEBUG) {
+                console.log("[RemotePlayback] playback:stateUpdate received:", {
+                    fromDeviceId: state.deviceId,
+                    myDeviceId: currentDeviceIdRef.current,
+                    myControlMode: controlModeRef.current,
+                    isPlaying: state.isPlaying,
+                    trackTitle: state.currentTrack?.title,
+                    currentTime: state.currentTime?.toFixed(1),
+                });
+            }
             // Update the device in our list
             // NOTE: This only updates the devices list for UI display
             // It does NOT trigger any playback actions - that's intentional
@@ -544,7 +569,10 @@ export function RemotePlaybackProvider({ children }: { children: ReactNode }) {
             socket.disconnect();
             socketRef.current = null;
         };
-    }, [isAuthenticated, user, currentDeviceId, currentDeviceName, setActivePlayerId, setControlMode]);
+        // NOTE: currentDeviceName is intentionally NOT a dependency. It is read via
+        // currentDeviceNameRef so renaming the device re-registers on the existing
+        // socket (see setDeviceName) instead of tearing down and recreating it.
+    }, [isAuthenticated, user, currentDeviceId, setActivePlayerId, setControlMode]);
 
     // Send a command to another device
     const sendCommand = useCallback(
